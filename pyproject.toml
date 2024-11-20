@@ -26,6 +26,9 @@ dependencies = [
 	"intspan",
 	"orjsonl",
 	"tqdm",
+  "bs4",
+  "ftfy",
+  "lxml",
 ]
 
 [project.optional-dependencies]
