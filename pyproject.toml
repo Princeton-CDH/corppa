@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 readme = "README.md"
 # license TBD
 #license.file = "LICENSE"
-#license = {text = "Apache-2"} 
+#license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -18,7 +18,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Information Analysis",
-    "Topic :: Text Processing",    
+    "Topic :: Text Processing",
     "Topic :: Utilities",
 ]
 dynamic = ["version"]
@@ -39,8 +39,11 @@ test = [
   "corppa[poem_id]"
 ]
 ocr = ["google-cloud-vision"]
+
 poem_id = ["pyarrow", "polars", "unidecode", "rapidfuzz"]
 dev = ["pre-commit", "ruff", "corppa[type-checking]", "corppa[test]", "corppa[ocr]", "corppa[poem_id]"]
+passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
+dev = ["pre-commit", "ruff", "corppa[type-checking]", "corppa[test]", "corppa[ocr]", "corppa[passim]", "corppa[poem_id]"]
 
 [project.scripts]
 corppa-filter = "corppa.utils.filter:main"
@@ -53,3 +56,7 @@ path = "src/corppa/__init__.py"
 [tool.ruff]
 # configure src path so ruff import fixes can identify local imports
 src = ["src"]
+
+[tool.hatch.metadata]
+# so passim can be installed from GitHub (i.e., direct reference)
+allow-direct-references = true
