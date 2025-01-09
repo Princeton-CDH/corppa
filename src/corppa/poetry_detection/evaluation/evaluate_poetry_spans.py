@@ -2,6 +2,12 @@
 Evaluate the poetry spans detected by a system against a provided reference set.
 """
 
+import csv
+from collections.abc import Generator
+from pathlib import Path
+
+import orjsonl
+
 
 class Span:
     """
@@ -126,6 +132,7 @@ class PageSystemSpans:
         """
         spans = []
         if page_json["n_spans"] > 0:
+            # TODO: Revisit the format for the system results jsonl
             for span in page_json["poem_spans"]:
                 spans.append(Span(span["page_start"], span["page_end"], span["ref_id"]))
         # Sort spans by primarily by start index and secondarily by end index
@@ -160,6 +167,7 @@ class PageEvaluation:
     Page-level span evaluation.
     """
 
+    page_id: str
     ignore_label: bool  # Flag for ignoring span labels in evaluation
     ref_spans: list[Span]  # Reference spans
     sys_spans: list[Span]  # System spans
@@ -178,6 +186,7 @@ class PageEvaluation:
                 "Reference and system spans must correspond to the same page"
             )
         # Save working input
+        self.page_id = page_ref_spans.page_id
         self.ignore_label = ignore_label
         self.ref_spans = page_ref_spans.spans
         if self.ignore_label:
@@ -330,13 +339,74 @@ class PageEvaluation:
         return relevance_score / n_relevant
 
 
-def get_page_span_evaluation():
-    raise NotImplementedError
+def get_page_eval(ref_json, sys_json, ignore_label: bool = False) -> PageEvaluation:
+    """
+    Returns the PageEvaluation object for a given page's reference
+    and system annotation json objects.
+    """
+    page_ref = PageReferenceSpans(ref_json)
+    page_sys = PageSystemSpans(sys_json)
+    return PageEvaluation(page_ref, page_sys, ignore_label=ignore_label)
 
 
-def get_page_evals(ref_file, sys_file):
-    raise NotImplementedError
+def get_page_evals(
+    ref_file: Path,
+    sys_file: Path,
+    ignore_label: bool = False,
+) -> Generator[PageEvaluation]:
+    """
+    Yields page-level evaluation objects for each page in reference annotation file.
+    """
+    # Read in system page jsons
+    system_pages = {}
+    for sys_page in orjsonl.stream(sys_file):
+        page_id = sys_page["page_id"]
+        system_pages[page_id] = sys_page
+
+    # Then for each page in reference, get page-level evaluations
+    for ref_page in orjsonl.stream(ref_file):
+        page_id = ref_page["page_id"]
+        sys_page = system_pages[page_id]
+        yield get_page_eval(ref_page, sys_page, ignore_label=ignore_label)
 
 
-def write_page_evals(ref_file, sys_file, out_file):
-    raise NotImplementedError
+def write_page_evals(
+    ref_file: Path,
+    sys_file: Path,
+    out_csv: Path,
+    ignore_label: bool = False,
+    partial_match_weight: float = 1,
+) -> None:
+    """
+    Writes the page-level span evaluations to a CSV file.
+    """
+    # For reporting average results
+    cumulative_precision = 0.0
+    cumulative_recall = 0.0
+    page_count = 0
+
+    field_names = ["page_id", "precision", "recall"]
+    with open(out_csv, mode="w", newline="") as file_handler:
+        writer = csv.DictWriter(file_handler, fieldnames=field_names)
+        writer.writeheader()
+        for page_eval in get_page_evals(ref_file, sys_file, ignore_label=ignore_label):
+            page_precision = page_eval.precision(
+                partial_match_weight=partial_match_weight
+            )
+            page_recall = page_eval.recall(partial_match_weight=partial_match_weight)
+            row = {
+                "page_id": page_eval.page_id,
+                "precision": page_precision,
+                "recall": page_recall,
+            }
+            writer.writerow(row)
+            # Update reporting variables
+            cumulative_precision += page_precision
+            cumulative_recall += page_recall
+            page_count += 1
+
+    avg_precision = cumulative_precision / page_count
+    avg_recall = cumulative_recall / page_count
+    print(
+        f"Overall: {page_count} Pages | Precision = {avg_precision:.4g} | Recall = {avg_recall:.4g}"
+    )

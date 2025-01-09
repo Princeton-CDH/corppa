@@ -1,4 +1,3 @@
-import sys
 from unittest.mock import NonCallableMock, call, patch
 
 import pytest
@@ -8,6 +7,9 @@ from corppa.poetry_detection.evaluation.evaluate_poetry_spans import (
     PageReferenceSpans,
     PageSystemSpans,
     Span,
+    get_page_eval,
+    get_page_evals,
+    write_page_evals,
 )
 
 
@@ -277,7 +279,8 @@ class TestPageEvaluation:
         )
         mock_get_span_pairs.return_value = "span pairs"
         result = PageEvaluation(page_ref_spans, page_sys_spans)
-        assert result.ignore_label == False
+        assert result.page_id == "id"
+        assert not result.ignore_label
         assert result.ref_spans == "spans"
         assert result.sys_spans == "labeled spans"
         assert result.ref_to_sys == "ref span --> sys span"
@@ -290,7 +293,8 @@ class TestPageEvaluation:
         mock_get_span_mappings.reset_mock()
         mock_get_span_pairs.reset_mock()
         result = PageEvaluation(page_ref_spans, page_sys_spans, ignore_label=True)
-        assert result.ignore_label == True
+        assert result.page_id == "id"
+        assert result.ignore_label
         assert result.ref_spans == "spans"
         assert result.sys_spans == "unlabeled spans"
         assert result.ref_to_sys == "ref span --> sys span"
@@ -487,3 +491,80 @@ class TestPageEvaluation:
         )
         assert page_eval.recall(partial_match_weight="weight") == 2.1 / 3
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
+
+
+@patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.PageEvaluation")
+@patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.PageSystemSpans")
+@patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.PageReferenceSpans")
+def test_get_page_eval(mock_ref_spans, mock_sys_spans, mock_page_eval):
+    mock_ref_spans.return_value = "ref_spans"
+    mock_sys_spans.return_value = "sys_spans"
+
+    mock_page_eval.return_value = "page_eval"
+
+    result = get_page_eval("ref_json", "sys_json", "ignore_label")
+    assert result == "page_eval"
+    mock_ref_spans.assert_called_once_with("ref_json")
+    mock_sys_spans.assert_called_once_with("sys_json")
+    mock_page_eval.assert_called_once_with(
+        "ref_spans", "sys_spans", ignore_label="ignore_label"
+    )
+
+
+@patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.get_page_eval")
+def test_get_page_evals(mock_get_page_eval, tmp_path):
+    ref_jsonl = '{"page_id":"a", "excerpts":[]}\n{"page_id":"b", "excerpts":[]}\n'
+    ref_file = tmp_path / "ref.jsonl"
+    ref_file.write_text(ref_jsonl)
+    sys_jsonl = '{"page_id":"b", "poem_spans":[]}\n{"page_id":"a", "poem_spans":[]}\n'
+    sys_file = tmp_path / "sys.jsonl"
+    sys_file.write_text(sys_jsonl)
+    mock_get_page_eval.side_effect = ["A", "B"]
+
+    results = list(get_page_evals(ref_file, sys_file, ignore_label="flag"))
+    assert results == ["A", "B"]
+    assert mock_get_page_eval.call_count == 2
+    expected_calls = [
+        call(
+            {"page_id": "a", "excerpts": []},
+            {"page_id": "a", "poem_spans": []},
+            ignore_label="flag",
+        ),
+        call(
+            {"page_id": "b", "excerpts": []},
+            {"page_id": "b", "poem_spans": []},
+            ignore_label="flag",
+        ),
+    ]
+    mock_get_page_eval.assert_has_calls(expected_calls)
+
+
+@patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.get_page_evals")
+def test_write_page_evals(mock_get_page_evals, tmp_path):
+    out_csv = tmp_path / "result.csv"
+    page_eval_a = NonCallableMock(page_id="a")
+    page_eval_a.precision.return_value = 0.75
+    page_eval_a.recall.return_value = 0.5
+    page_eval_b = NonCallableMock(page_id="b")
+    page_eval_b.precision.return_value = 1
+    page_eval_b.recall.return_value = 1
+    mock_get_page_evals.return_value = [page_eval_a, page_eval_b]
+
+    write_page_evals(
+        "ref_file",
+        "sys_file",
+        out_csv,
+        ignore_label="bool",
+        partial_match_weight="weight",
+    )
+    mock_get_page_evals.assert_called_once_with(
+        "ref_file", "sys_file", ignore_label="bool"
+    )
+    page_eval_a.precision.assert_called_once_with(partial_match_weight="weight")
+    page_eval_a.recall.assert_called_once_with(partial_match_weight="weight")
+    page_eval_b.precision.assert_called_once_with(partial_match_weight="weight")
+    page_eval_b.recall.assert_called_once_with(partial_match_weight="weight")
+
+    # Validate output file contents
+    expected_text = "page_id,precision,recall\na,0.75,0.5\nb,1,1\n"
+    assert out_csv.read_text() == expected_text
