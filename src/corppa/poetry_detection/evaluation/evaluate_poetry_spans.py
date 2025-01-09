@@ -2,11 +2,15 @@
 Evaluate the poetry spans detected by a system against a provided reference set.
 """
 
+import argparse
 import csv
+import sys
 from collections.abc import Generator
 from pathlib import Path
 
 import orjsonl
+from tqdm import tqdm
+from xopen import xopen
 
 
 class Span:
@@ -353,6 +357,7 @@ def get_page_evals(
     ref_file: Path,
     sys_file: Path,
     ignore_label: bool = False,
+    disable_progress: bool = False,
 ) -> Generator[PageEvaluation]:
     """
     Yields page-level evaluation objects for each page in reference annotation file.
@@ -364,7 +369,13 @@ def get_page_evals(
         system_pages[page_id] = sys_page
 
     # Then for each page in reference, get page-level evaluations
-    for ref_page in orjsonl.stream(ref_file):
+    n_lines = sum(1 for line in xopen(ref_file, mode="rb"))
+    progress_pages = tqdm(
+        orjsonl.stream(ref_file),
+        total=n_lines,
+        disable=disable_progress,
+    )
+    for ref_page in progress_pages:
         page_id = ref_page["page_id"]
         sys_page = system_pages[page_id]
         yield get_page_eval(ref_page, sys_page, ignore_label=ignore_label)
@@ -376,6 +387,7 @@ def write_page_evals(
     out_csv: Path,
     ignore_label: bool = False,
     partial_match_weight: float = 1,
+    disable_progress: bool = False,
 ) -> None:
     """
     Writes the page-level span evaluations to a CSV file.
@@ -389,7 +401,12 @@ def write_page_evals(
     with open(out_csv, mode="w", newline="") as file_handler:
         writer = csv.DictWriter(file_handler, fieldnames=field_names)
         writer.writeheader()
-        for page_eval in get_page_evals(ref_file, sys_file, ignore_label=ignore_label):
+        for page_eval in get_page_evals(
+            ref_file,
+            sys_file,
+            ignore_label=ignore_label,
+            disable_progress=disable_progress,
+        ):
             page_precision = page_eval.precision(
                 partial_match_weight=partial_match_weight
             )
@@ -410,3 +427,87 @@ def write_page_evals(
     print(
         f"Overall: {page_count} Pages | Precision = {avg_precision:.4g} | Recall = {avg_recall:.4g}"
     )
+
+
+def main():
+    """
+    Calculates page-level span evaluations given some reference (i.e, adjudicated
+    annotations) and system annotations (e.g. passim results) JSONL files. These
+    results are written to a CSV file. Optionally, the evaluation can ignore span
+    labels (i.e. poem ids) and downweight (i.e. penalize) partial span matches.
+    """
+    parser = argparse.ArgumentParser(
+        description="Calculates page-level span evaluations"
+    )
+    parser.add_argument(
+        "reference_jsonl",
+        help="Path to reference poetry span annotations (JSONL file)",
+        type=Path,
+    )
+    parser.add_argument(
+        "system_jsonl",
+        help="Path to system span annotations to be evaluated (JSONL file)",
+        type=Path,
+    )
+    parser.add_argument(
+        "output_file",
+        help="Filename where results should be written (CSV file)",
+        type=Path,
+    )
+    parser.add_argument(
+        "--ignore-label",
+        help="Ignore span labels for span evaluations",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument(
+        "--partial-match-weight",
+        help="Downweight for partial matches for span evaluations (default: 1.0)",
+        type=float,
+        default=1,
+    )
+    parser.add_argument(
+        "--progress",
+        help="Show progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+
+    args = parser.parse_args()
+    disable_progress = not args.progress
+
+    # Check that input files exist
+    if not args.reference_jsonl.is_file():
+        print(
+            f"Error: reference JSONL file {args.reference_jsonl} does not exist",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not args.system_jsonl.is_file():
+        print(
+            f"Error: system JSONL file {args.system_jsonl} does not exist",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Check that output file does not exist
+    if args.output_file.exists():
+        print(
+            f"Error: output file {args.output_file} already exists, not overwriting",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    write_page_evals(
+        args.reference_jsonl,
+        args.system_jsonl,
+        args.output_file,
+        ignore_label=args.ignore_label,
+        partial_match_weight=args.partial_match_weight,
+        disable_progress=disable_progress,
+    )
+
+
+if __name__ == "__main__":
+    main()

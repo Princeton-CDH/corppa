@@ -521,7 +521,9 @@ def test_get_page_evals(mock_get_page_eval, tmp_path):
     sys_file.write_text(sys_jsonl)
     mock_get_page_eval.side_effect = ["A", "B"]
 
-    results = list(get_page_evals(ref_file, sys_file, ignore_label="flag"))
+    results = list(
+        get_page_evals(ref_file, sys_file, ignore_label="flag", disable_progress=True)
+    )
     assert results == ["A", "B"]
     assert mock_get_page_eval.call_count == 2
     expected_calls = [
@@ -556,9 +558,10 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
         out_csv,
         ignore_label="bool",
         partial_match_weight="weight",
+        disable_progress="bool",
     )
     mock_get_page_evals.assert_called_once_with(
-        "ref_file", "sys_file", ignore_label="bool"
+        "ref_file", "sys_file", ignore_label="bool", disable_progress="bool"
     )
     page_eval_a.precision.assert_called_once_with(partial_match_weight="weight")
     page_eval_a.recall.assert_called_once_with(partial_match_weight="weight")
