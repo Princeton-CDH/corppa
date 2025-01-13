@@ -39,9 +39,15 @@ test = [
   "corppa[poem_id]"
 ]
 ocr = ["google-cloud-vision"]
-
 poem_id = ["pyarrow", "polars", "unidecode", "rapidfuzz"]
-dev = ["pre-commit", "ruff", "corppa[type-checking]", "corppa[test]", "corppa[ocr]", "corppa[poem_id]"]
+poem_id = [
+  "pyarrow",
+  "polars",
+  "unidecode",
+  "rapidfuzz",
+  # Conditional
+  'more-itertools; python_version < "3.12"',
+]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 dev = ["pre-commit", "ruff", "corppa[type-checking]", "corppa[test]", "corppa[ocr]", "corppa[passim]", "corppa[poem_id]"]
 

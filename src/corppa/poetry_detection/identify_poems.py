@@ -18,7 +18,12 @@ import csv
 import logging
 import pathlib
 from glob import iglob
-from itertools import batched
+
+try:
+    from itertools import batched
+except ImportError:
+    from more_itertools import batched
+
 from time import perf_counter
 
 import polars as pl
