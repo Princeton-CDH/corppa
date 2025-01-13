@@ -238,7 +238,7 @@ def multiple_matches(df, search_field):
     match_count = int(df.height)
 
     #  check if both author and title match (ignoring punctuation and case)
-    # TODO: use rapidfuzz here to check author & title are sufficiently similar
+    # TODO: could use rapidfuzz here to check author & title are sufficiently similar
     # e.g. these should be treated as matches but are not currently:
     #    Walter Scott      ┆ Coronach
     #    Walter, Sir Scott ┆ CCLXXVIII CORONACH
@@ -359,9 +359,12 @@ def find_reference_poem(ref_df, input_row, meta_df):
                 match_poem["match_count"] = num_matches
                 return match_poem
 
+    # NOTE: could make configurable to skip fuzzy searches,
+    # or maybe truncate large excepts before running fuzzy search
+
     # if no matches were found yet, try a fuzzy search on the full text
     search_text = unidecode(input_row["search_text"])
-    # TODO: may want to require some minimum length or uniqueness on the search text
+    # NOTE: might want some minimum length or uniqueness on the search text
     logger.info(f"Trying fuzzy match on: {search_text}")
     start_time = perf_counter()
     result = ref_df.with_columns(
@@ -516,7 +519,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "input",
-        # TODO: determine minimum required fields; maybe just text?
+        # TODO: determine & document minimum required fields; maybe just text?
         help="csv or tsv file with poem excerpts",
         type=pathlib.Path,
     )
