@@ -31,7 +31,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "pytest",
-  "pytest-cov"
+  "pytest-cov",
+  "corppa[poem_id]"
 ]
 ocr = ["google-cloud-vision"]
 poem_id = ["pyarrow", "polars", "unidecode", "rapidfuzz"]
