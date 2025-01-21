@@ -408,13 +408,11 @@ class TestPageEvaluation:
 
     @patch.object(PageEvaluation, "_relevance_score")
     @patch.object(PageEvaluation, "_retrieved_count")
-    @patch.object(PageEvaluation, "_get_span_pairs")
-    @patch.object(PageEvaluation, "_get_span_mappings")
+    @patch.object(PageEvaluation, "_get_span_pairs", return_value="span_pairs")
+    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("r2s", "s2rs"))
     def test_precision(
-        self, mock_span_mappings, mock_span_pairs, mock_retrieved_count, mock_relevance
+        self, mock_span_maps, mock_span_pairs, mock_retrieved_count, mock_relevance
     ):
-        mock_span_mappings.return_value = "", "sys_to_refs"
-        mock_span_pairs.return_value = "span_pairs"
         # Edge case: No system spans
         page_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
         ## With reference spans
@@ -438,7 +436,7 @@ class TestPageEvaluation:
             page_ref_spans, page_sys_spans, ignore_label="ignore_label"
         )
         assert page_eval.precision(partial_match_weight="weight") == 0.5 / 2
-        mock_retrieved_count.assert_called_once_with("sys_to_refs")
+        mock_retrieved_count.assert_called_once_with("s2rs")
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
 
         mock_retrieved_count.reset_mock()
@@ -450,17 +448,13 @@ class TestPageEvaluation:
             page_ref_spans, page_sys_spans, ignore_label="ignore_label"
         )
         assert page_eval.precision(partial_match_weight="weight") == 4.5 / 7
-        mock_retrieved_count.assert_called_once_with("sys_to_refs")
+        mock_retrieved_count.assert_called_once_with("s2rs")
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
 
     @patch.object(PageEvaluation, "_relevance_score")
-    @patch.object(PageEvaluation, "_get_span_pairs")
-    @patch.object(PageEvaluation, "_get_span_mappings")
-    def test_recall(self, mock_span_mappings, mock_span_pairs, mock_relevance):
-        # Mocking needed for PageEvaluation initialization
-        mock_span_mappings.return_value = "", ""
-        mock_span_pairs.return_value = "span_pairs"
-
+    @patch.object(PageEvaluation, "_get_span_pairs", return_value="span_pairs")
+    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("", ""))
+    def test_recall(self, mock_span_maps, mock_span_pairs, mock_relevance):
         # Edge case: No reference spans
         page_ref_spans = NonCallableMock(page_id="id", spans=[])
         ## With system spans
@@ -491,6 +485,62 @@ class TestPageEvaluation:
         )
         assert page_eval.recall(partial_match_weight="weight") == 2.1 / 3
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
+
+    def test_match_counts(self):
+        # Empty case
+        results = PageEvaluation._match_counts([])
+        assert results == (0, 0)
+        # Typical cases
+        results = PageEvaluation._match_counts([1, 3, None, 2])
+        assert results == (3, 1)
+        results = PageEvaluation._match_counts([None, None, None, 0])
+        assert results == (1, 3)
+
+    def test_spurious_count(self):
+        # Empty case
+        assert PageEvaluation._spurious_count([]) == 0
+        # Typical cases
+        assert PageEvaluation._spurious_count([[1], [], [2]]) == 1
+        assert PageEvaluation._spurious_count([[0], [1], [2]]) == 0
+        assert PageEvaluation._spurious_count([[0, 2], [], [4], []]) == 2
+
+    @patch.object(PageEvaluation, "recall", return_value="recall_score")
+    @patch.object(PageEvaluation, "precision", return_value="precision_score")
+    @patch.object(PageEvaluation, "_spurious_count", return_value="spurious")
+    @patch.object(PageEvaluation, "_match_counts", return_value=("match", "mismatch"))
+    @patch.object(PageEvaluation, "_get_span_pairs")
+    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("r2s", "s2rs"))
+    def test_evaluate(
+        self,
+        mock_span_maps,
+        mock_span_pairs,
+        mock_matches,
+        mock_spurious,
+        mock_precision,
+        mock_recall,
+    ):
+        page_ref_spans = NonCallableMock(page_id="id", spans=[])
+        page_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
+        page_eval = PageEvaluation(
+            page_ref_spans, page_sys_spans, ignore_label="ignore_label"
+        )
+
+        result = page_eval.evaluate(partial_match_weight="partial_match_weight")
+        expected_result = {
+            "page_id": "id",
+            "precision": "precision_score",
+            "recall": "recall_score",
+            "n_matches": "match",
+            "n_misses": "mismatch",
+            "n_spurious": "spurious",
+        }
+        assert result == expected_result
+        mock_matches.assert_called_once_with("r2s")
+        mock_spurious.assert_called_once_with("s2rs")
+        mock_precision.assert_called_once_with(
+            partial_match_weight="partial_match_weight"
+        )
+        mock_recall.assert_called_once_with(partial_match_weight="partial_match_weight")
 
 
 @patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.PageEvaluation")
@@ -544,12 +594,25 @@ def test_get_page_evals(mock_get_page_eval, tmp_path):
 @patch("corppa.poetry_detection.evaluation.evaluate_poetry_spans.get_page_evals")
 def test_write_page_evals(mock_get_page_evals, tmp_path):
     out_csv = tmp_path / "result.csv"
-    page_eval_a = NonCallableMock(page_id="a")
-    page_eval_a.precision.return_value = 0.75
-    page_eval_a.recall.return_value = 0.5
-    page_eval_b = NonCallableMock(page_id="b")
-    page_eval_b.precision.return_value = 1
-    page_eval_b.recall.return_value = 1
+    page_eval_a = NonCallableMock()
+    page_eval_a.evaluate.return_value = {
+        "page_id": "a",
+        "precision": 1,
+        "recall": 1,
+        "n_matches": 0,
+        "n_misses": 0,
+        "n_spurious": 0,
+    }
+    page_eval_b = NonCallableMock()
+    page_eval_b.evaluate.return_value = {
+        "page_id": "b",
+        "precision": 2 / 3,
+        "recall": 1 / 3,
+        "n_matches": 2,
+        "n_misses": 1,
+        "n_spurious": 3,
+    }
+
     mock_get_page_evals.return_value = [page_eval_a, page_eval_b]
 
     write_page_evals(
@@ -563,11 +626,14 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
     mock_get_page_evals.assert_called_once_with(
         "ref_file", "sys_file", ignore_label="bool", disable_progress="bool"
     )
-    page_eval_a.precision.assert_called_once_with(partial_match_weight="weight")
-    page_eval_a.recall.assert_called_once_with(partial_match_weight="weight")
-    page_eval_b.precision.assert_called_once_with(partial_match_weight="weight")
-    page_eval_b.recall.assert_called_once_with(partial_match_weight="weight")
+    page_eval_a.evaluate.assert_called_once_with(partial_match_weight="weight")
+    page_eval_b.evaluate.assert_called_once_with(partial_match_weight="weight")
 
     # Validate output file contents
-    expected_text = "page_id,precision,recall\na,0.75,0.5\nb,1,1\n"
+    expected_lines = [
+        "page_id,precision,recall,n_matches,n_misses,n_spurious\n",
+        "a,1,1,0,0,0\n",
+        f"b,{2/3},{1/3},2,1,3\n",
+    ]
+    expected_text = "".join(expected_lines)
     assert out_csv.read_text() == expected_text

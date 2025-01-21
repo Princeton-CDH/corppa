@@ -7,6 +7,7 @@ import csv
 import sys
 from collections.abc import Generator
 from pathlib import Path
+from typing import TypedDict
 
 import orjsonl
 from tqdm import tqdm
@@ -166,6 +167,19 @@ class PageSystemSpans:
         return spans
 
 
+class EvaluationResult(TypedDict):
+    """
+    Simple evaluation result construct for typing hints.
+    """
+
+    page_id: str
+    precision: float
+    recall: float
+    n_matches: int
+    n_misses: int
+    n_spurious: int
+
+
 class PageEvaluation:
     """
     Page-level span evaluation.
@@ -305,7 +319,6 @@ class PageEvaluation:
         n_retrieved = 0
         for ref_ids in sys_to_refs:
             if ref_ids:
-                print(ref_ids)
                 n_retrieved += len(ref_ids)
             else:
                 # Include spurious/incorrect spans
@@ -341,6 +354,60 @@ class PageEvaluation:
             self.span_pairs, self.ignore_label, partial_match_weight
         )
         return relevance_score / n_relevant
+
+    @staticmethod
+    def _match_counts(ref_to_sys: list[int | None]) -> tuple[int, int]:
+        """
+        Returns the number of (partial) match and miss counts w.r.t.
+        reference spans.
+        """
+        n_matches = 0
+        n_misses = 0
+        for sys_idx in ref_to_sys:
+            if sys_idx is None:
+                n_misses += 1
+            else:
+                n_matches += 1
+        return n_matches, n_misses
+
+    @staticmethod
+    def _spurious_count(sys_to_refs: list[list[int]]) -> int:
+        """
+        Returns the number of spurious spans identified by the system.
+        """
+        # Spurious spans are the ones mapped to no reference spans
+        return sum(1 for refs in sys_to_refs if not refs)
+
+    def evaluate(self, partial_match_weight: float = 1) -> EvaluationResult:
+        """
+        Perform page-level evaluation and return results as a struct with the
+        following fields:
+            * page_id: page id
+            * precision: precision score
+            * recall: recalls score
+            * n_matches: number of (partial) matches reference spans
+            * n_misses: number of misses wrt reference spans
+            * n_spurious: number of spurious system spans
+        """
+        # Determine number of (partial) matches & misses wrt reference spans
+        n_matches, n_misses = self._match_counts(self.ref_to_sys)
+
+        # Determine number of spurious system spans
+        n_spurious = self._spurious_count(self.sys_to_refs)
+
+        # Calculate precision and recall
+        precision = self.precision(partial_match_weight=partial_match_weight)
+        recall = self.recall(partial_match_weight=partial_match_weight)
+
+        result: EvaluationResult = {
+            "page_id": self.page_id,
+            "precision": precision,
+            "recall": recall,
+            "n_matches": n_matches,
+            "n_misses": n_misses,
+            "n_spurious": n_spurious,
+        }
+        return result
 
 
 def get_page_eval(ref_json, sys_json, ignore_label: bool = False) -> PageEvaluation:
@@ -397,7 +464,14 @@ def write_page_evals(
     cumulative_recall = 0.0
     page_count = 0
 
-    field_names = ["page_id", "precision", "recall"]
+    field_names = [
+        "page_id",
+        "precision",
+        "recall",
+        "n_matches",
+        "n_misses",
+        "n_spurious",
+    ]
     with open(out_csv, mode="w", newline="") as file_handler:
         writer = csv.DictWriter(file_handler, fieldnames=field_names)
         writer.writeheader()
@@ -407,19 +481,11 @@ def write_page_evals(
             ignore_label=ignore_label,
             disable_progress=disable_progress,
         ):
-            page_precision = page_eval.precision(
-                partial_match_weight=partial_match_weight
-            )
-            page_recall = page_eval.recall(partial_match_weight=partial_match_weight)
-            row = {
-                "page_id": page_eval.page_id,
-                "precision": page_precision,
-                "recall": page_recall,
-            }
-            writer.writerow(row)
+            page_results = page_eval.evaluate(partial_match_weight=partial_match_weight)
+            writer.writerow(page_results)
             # Update reporting variables
-            cumulative_precision += page_precision
-            cumulative_recall += page_recall
+            cumulative_precision += page_results["precision"]
+            cumulative_recall += page_results["recall"]
             page_count += 1
 
     avg_precision = cumulative_precision / page_count
