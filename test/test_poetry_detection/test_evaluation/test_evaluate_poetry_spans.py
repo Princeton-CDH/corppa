@@ -486,28 +486,80 @@ class TestPageEvaluation:
         assert page_eval.recall(partial_match_weight="weight") == 2.1 / 3
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
 
-    def test_match_counts(self):
+    def test_get_match_counts(self):
+        expected_results = {
+            "n_span_matches": 0,
+            "n_span_misses": 0,
+            "n_poem_matches": 0,
+            "n_poem_misses": 0,
+        }
         # Empty case
-        results = PageEvaluation._match_counts([])
-        assert results == (0, 0)
-        # Typical cases
-        results = PageEvaluation._match_counts([1, 3, None, 2])
-        assert results == (3, 1)
-        results = PageEvaluation._match_counts([None, None, None, 0])
-        assert results == (1, 3)
+        results = PageEvaluation._get_match_counts([], [])
+        assert results == expected_results
 
-    def test_spurious_count(self):
-        # Empty case
-        assert PageEvaluation._spurious_count([]) == 0
         # Typical cases
-        assert PageEvaluation._spurious_count([[1], [], [2]]) == 1
-        assert PageEvaluation._spurious_count([[0], [1], [2]]) == 0
-        assert PageEvaluation._spurious_count([[0, 2], [], [4], []]) == 2
+        spans = [Span(0, 1, "a"), Span(0, 1, "a"), Span(0, 1, "b"), Span(0, 1, "c")]
+        expected_results["n_span_matches"] = 3
+        expected_results["n_span_misses"] = 1
+        expected_results["n_poem_matches"] = 2
+        expected_results["n_poem_misses"] = 1
+        results = PageEvaluation._get_match_counts(spans, [1, 3, None, 2])
+        assert results == expected_results
+
+        results = PageEvaluation._get_match_counts(spans, [None, None, None, 0])
+        expected_results["n_span_matches"] = 1
+        expected_results["n_span_misses"] = 3
+        expected_results["n_poem_matches"] = 1
+        expected_results["n_poem_misses"] = 2
+        assert results == expected_results
+
+    def test_get_spurious_counts(self):
+        expected_results = {
+            "n_span_spurious": 0,
+            "n_poem_spurious": 0,
+        }
+        # Empty case
+        results = PageEvaluation._get_spurious_counts([], [], [])
+        assert results == expected_results
+
+        # Simple no spurious
+        ref_spans = [Span(0, 1, "a"), Span(0, 1, "b"), Span(0, 1, "c")]
+        sys_spans = [Span(0, 1, "a"), Span(0, 1, "b"), Span(0, 1, "c")]
+        sys_to_refs = [[0], [1], [2]]
+        results = PageEvaluation._get_spurious_counts(ref_spans, sys_spans, sys_to_refs)
+        assert results == expected_results
+
+        # Single Spurious span
+        ## ...but not poem
+        sys_spans = [Span(0, 1, "a"), Span(0, 1, "a"), Span(0, 1, "c")]
+        sys_to_refs = [[0], [], [2]]
+        expected_results["n_span_spurious"] = 1
+        results = PageEvaluation._get_spurious_counts(ref_spans, sys_spans, sys_to_refs)
+        assert results == expected_results
+        # ...and poem
+        sys_spans = [Span(0, 1, "a"), Span(0, 1, "d"), Span(0, 1, "c")]
+        expected_results["n_poem_spurious"] = 1
+        results = PageEvaluation._get_spurious_counts(ref_spans, sys_spans, sys_to_refs)
+        assert results == expected_results
+
+        # More complex example
+        sys_spans = [
+            Span(0, 1, "a"),
+            Span(0, 1, "d"),
+            Span(0, 1, "c"),
+            Span(0, 1, "d"),
+            Span(0, 1, "b"),
+        ]
+        sys_to_refs = [[0, 1], [], [2], [], []]
+        results = PageEvaluation._get_spurious_counts(ref_spans, sys_spans, sys_to_refs)
+        expected_results["n_span_spurious"] = 3
+        expected_results["n_poem_spurious"] = 1
+        assert results == expected_results
 
     @patch.object(PageEvaluation, "recall", return_value="recall_score")
     @patch.object(PageEvaluation, "precision", return_value="precision_score")
-    @patch.object(PageEvaluation, "_spurious_count", return_value="spurious")
-    @patch.object(PageEvaluation, "_match_counts", return_value=("match", "mismatch"))
+    @patch.object(PageEvaluation, "_get_spurious_counts")
+    @patch.object(PageEvaluation, "_get_match_counts")
     @patch.object(PageEvaluation, "_get_span_pairs")
     @patch.object(PageEvaluation, "_get_span_mappings", return_value=("r2s", "s2rs"))
     def test_evaluate(
@@ -519,24 +571,37 @@ class TestPageEvaluation:
         mock_precision,
         mock_recall,
     ):
-        page_ref_spans = NonCallableMock(page_id="id", spans=[])
-        page_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
-        page_eval = PageEvaluation(
-            page_ref_spans, page_sys_spans, ignore_label="ignore_label"
-        )
+        # Set mock count values
+        mock_matches.return_value = {
+            "n_span_matches": "a",
+            "n_span_misses": "b",
+            "n_poem_matches": "c",
+            "n_poem_misses": "d",
+        }
+        mock_spurious.return_value = {
+            "n_span_spurious": "A",
+            "n_poem_spurious": "B",
+        }
+        # Setup PageEvaluation object
+        page_ref_spans = NonCallableMock(page_id="id", spans="ref_spans")
+        page_sys_spans = NonCallableMock(page_id="id", labeled_spans="sys_spans")
+        page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
 
         result = page_eval.evaluate(partial_match_weight="partial_match_weight")
         expected_result = {
             "page_id": "id",
             "precision": "precision_score",
             "recall": "recall_score",
-            "n_matches": "match",
-            "n_misses": "mismatch",
-            "n_spurious": "spurious",
+            "n_span_matches": "a",
+            "n_span_misses": "b",
+            "n_span_spurious": "A",
+            "n_poem_matches": "c",
+            "n_poem_misses": "d",
+            "n_poem_spurious": "B",
         }
         assert result == expected_result
-        mock_matches.assert_called_once_with("r2s")
-        mock_spurious.assert_called_once_with("s2rs")
+        mock_matches.assert_called_once_with("ref_spans", "r2s")
+        mock_spurious.assert_called_once_with("ref_spans", "sys_spans", "s2rs")
         mock_precision.assert_called_once_with(
             partial_match_weight="partial_match_weight"
         )
@@ -599,18 +664,24 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
         "page_id": "a",
         "precision": 1,
         "recall": 1,
-        "n_matches": 0,
-        "n_misses": 0,
-        "n_spurious": 0,
+        "n_span_matches": 0,
+        "n_span_misses": 0,
+        "n_span_spurious": 0,
+        "n_poem_matches": 0,
+        "n_poem_misses": 0,
+        "n_poem_spurious": 0,
     }
     page_eval_b = NonCallableMock()
     page_eval_b.evaluate.return_value = {
         "page_id": "b",
         "precision": 2 / 3,
         "recall": 1 / 3,
-        "n_matches": 2,
-        "n_misses": 1,
-        "n_spurious": 3,
+        "n_span_matches": 2,
+        "n_span_misses": 1,
+        "n_span_spurious": 3,
+        "n_poem_matches": 1,
+        "n_poem_misses": 0,
+        "n_poem_spurious": 1,
     }
 
     mock_get_page_evals.return_value = [page_eval_a, page_eval_b]
@@ -629,11 +700,22 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
     page_eval_a.evaluate.assert_called_once_with(partial_match_weight="weight")
     page_eval_b.evaluate.assert_called_once_with(partial_match_weight="weight")
 
+    fieldnames = [
+        "page_id",
+        "precision",
+        "recall",
+        "n_span_matches",
+        "n_span_misses",
+        "n_span_spurious",
+        "n_poem_matches",
+        "n_poem_misses",
+        "n_poem_spurious",
+    ]
     # Validate output file contents
     expected_lines = [
-        "page_id,precision,recall,n_matches,n_misses,n_spurious\n",
-        "a,1,1,0,0,0\n",
-        f"b,{2/3},{1/3},2,1,3\n",
+        ",".join(fieldnames) + "\n",
+        "a,1,1,0,0,0,0,0,0\n",
+        f"b,{2/3},{1/3},2,1,3,1,0,1\n",
     ]
     expected_text = "".join(expected_lines)
     assert out_csv.read_text() == expected_text

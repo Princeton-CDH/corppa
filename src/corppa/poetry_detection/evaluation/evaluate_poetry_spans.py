@@ -5,9 +5,9 @@ Evaluate the poetry spans detected by a system against a provided reference set.
 import argparse
 import csv
 import sys
+import typing
 from collections.abc import Generator
 from pathlib import Path
-from typing import TypedDict
 
 import orjsonl
 from tqdm import tqdm
@@ -165,19 +165,6 @@ class PageSystemSpans:
                 else:
                     spans.append(unlabeled_span)
         return spans
-
-
-class EvaluationResult(TypedDict):
-    """
-    Simple evaluation result construct for typing hints.
-    """
-
-    page_id: str
-    precision: float
-    recall: float
-    n_matches: int
-    n_misses: int
-    n_spurious: int
 
 
 class PageEvaluation:
@@ -356,57 +343,98 @@ class PageEvaluation:
         return relevance_score / n_relevant
 
     @staticmethod
-    def _match_counts(ref_to_sys: list[int | None]) -> tuple[int, int]:
+    def _get_match_counts(
+        ref_spans: list[Span], ref_to_sys: list[int | None]
+    ) -> dict[str, int]:
         """
-        Returns the number of (partial) match and miss counts w.r.t.
-        reference spans.
+        Calculates partial match and miss counts at the span and poem level
+        w.r.t reference spans. Returns results as a struct with the following
+        fields:
+            * n_span_matches: Number of reference spans with (partial) matches
+            * n_span_misses: Number of reference spans with not match
+            * n_poem_matches: Number of poems with at least one (partial) span match
+            * n_poem_misses: Number of poems with no span match
         """
-        n_matches = 0
-        n_misses = 0
-        for sys_idx in ref_to_sys:
+        n_span_matches = 0
+        n_span_misses = 0
+        poem_matches = set()
+        poem_misses = set()
+        for ref_idx, sys_idx in enumerate(ref_to_sys):
             if sys_idx is None:
-                n_misses += 1
+                n_span_misses += 1
+                poem_misses.add(ref_spans[ref_idx].label)
             else:
-                n_matches += 1
-        return n_matches, n_misses
+                n_span_matches += 1
+                poem_matches.add(ref_spans[ref_idx].label)
+        result = {
+            "n_span_matches": n_span_matches,
+            "n_span_misses": n_span_misses,
+            "n_poem_matches": len(poem_matches),
+            "n_poem_misses": len(poem_misses),
+        }
+        return result
 
     @staticmethod
-    def _spurious_count(sys_to_refs: list[list[int]]) -> int:
+    def _get_spurious_counts(
+        ref_spans: list[Span], sys_spans: list[Span], sys_to_refs: list[list[int]]
+    ) -> dict[str, int]:
         """
-        Returns the number of spurious spans identified by the system.
+        Determines the number of spurious spans and poems identified by the system.
+        Returns results as a struct with the following fields:
+            * n_span_spurious: Number of spurious systems spans
+            * n_poem_spurious: Number of spuriously identified poems
         """
-        # Spurious spans are the ones mapped to no reference spans
-        return sum(1 for refs in sys_to_refs if not refs)
+        # Get set of reference poems
+        ref_poems = {ref.label for ref in ref_spans}
+        n_span_spurious = 0
+        poem_spurious = set()
+        for sys_idx, refs in enumerate(sys_to_refs):
+            # Spurious spans are the ones mapped to no reference spans
+            if not refs:
+                n_span_spurious += 1
+                poem_id = sys_spans[sys_idx].label
+                # Spurious poems are one's not in the reference set
+                if poem_id not in ref_poems:
+                    poem_spurious.add(poem_id)
+        result = {
+            "n_span_spurious": n_span_spurious,
+            "n_poem_spurious": len(poem_spurious),
+        }
+        return result
 
-    def evaluate(self, partial_match_weight: float = 1) -> EvaluationResult:
+    def evaluate(self, partial_match_weight: float = 1) -> dict[str, str | float | int]:
         """
         Perform page-level evaluation and return results as a struct with the
         following fields:
             * page_id: page id
             * precision: precision score
             * recall: recalls score
-            * n_matches: number of (partial) matches reference spans
-            * n_misses: number of misses wrt reference spans
-            * n_spurious: number of spurious system spans
+            * n_span_matches: number of (partial) span matches
+            * n_span_misses: number of span misses
+            * n_span_spurious: number of spurious system spans
+            * n_poem_matches: number of correctly identified poems
+            * n_poem_misses: number of missed poems
+            * n_poem_spurious: number of spuriously identified poems
         """
-        # Determine number of (partial) matches & misses wrt reference spans
-        n_matches, n_misses = self._match_counts(self.ref_to_sys)
+        # Determine span-level and poem-level (partial) match & miss counts
+        match_results = self._get_match_counts(self.ref_spans, self.ref_to_sys)
 
-        # Determine number of spurious system spans
-        n_spurious = self._spurious_count(self.sys_to_refs)
+        # Determine number of spurious spans and poems
+        spurious_results = self._get_spurious_counts(
+            self.ref_spans, self.sys_spans, self.sys_to_refs
+        )
 
         # Calculate precision and recall
         precision = self.precision(partial_match_weight=partial_match_weight)
         recall = self.recall(partial_match_weight=partial_match_weight)
 
-        result: EvaluationResult = {
+        result: dict[str, str | int | float] = {
             "page_id": self.page_id,
             "precision": precision,
             "recall": recall,
-            "n_matches": n_matches,
-            "n_misses": n_misses,
-            "n_spurious": n_spurious,
         }
+        result.update(match_results)
+        result.update(spurious_results)
         return result
 
 
@@ -420,6 +448,7 @@ def get_page_eval(ref_json, sys_json, ignore_label: bool = False) -> PageEvaluat
     return PageEvaluation(page_ref, page_sys, ignore_label=ignore_label)
 
 
+@typing.no_type_check
 def get_page_evals(
     ref_file: Path,
     sys_file: Path,
@@ -468,9 +497,12 @@ def write_page_evals(
         "page_id",
         "precision",
         "recall",
-        "n_matches",
-        "n_misses",
-        "n_spurious",
+        "n_span_matches",
+        "n_span_misses",
+        "n_span_spurious",
+        "n_poem_matches",
+        "n_poem_misses",
+        "n_poem_spurious",
     ]
     with open(out_csv, mode="w", newline="") as file_handler:
         writer = csv.DictWriter(file_handler, fieldnames=field_names)
