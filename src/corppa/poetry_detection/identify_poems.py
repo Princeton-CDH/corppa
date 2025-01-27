@@ -14,6 +14,7 @@ to recompile, rename or remove the parquet files.
 """
 
 import argparse
+import codecs
 import csv
 import logging
 import pathlib
@@ -214,6 +215,7 @@ def _text_for_search(expr):
         # normalize whitespace
         .str.replace_all("[\t\n\v\f\r ]+", " ")  # could also use [[:space:]]
         # replace curly quotes with straight (both single and double)
+        # NOTE: if we revisit, use ftfy for cleanup instead
         .str.replace_all("[”“]", '"')
         .str.replace_all("[‘’]", "'")
         .str.replace_all("ſ", "s")  # handle long s (also handled by unidecode)
@@ -489,8 +491,11 @@ def main(input_file):
     ]
 
     with output_file.open("w", encoding="utf-8") as outfile:
-        # TODO: add byte-order-mark to indicate unicode ?
-        csvwriter = csv.DictWriter(outfile, fieldnames=fieldnames)
+        # add byte-order-mark to indicate unicode
+        outfile.write(codecs.BOM_UTF8)
+        csvwriter = csv.DictWriter(
+            outfile, fieldnames=fieldnames, extrasaction="ignore"
+        )
         csvwriter.writeheader()
 
         for row in input_df.iter_rows(named=True):
@@ -510,7 +515,7 @@ def main(input_file):
                 row["match_count"] = 0
             # write row out with input and any match information found;
             # filter out any fields not in the list of csv field names
-            csvwriter.writerow({k: v for k, v in row.items() if k in fieldnames})
+            csvwriter.writerow(row)
 
     print(f"Poems with match information saved to {output_file}")
     print(

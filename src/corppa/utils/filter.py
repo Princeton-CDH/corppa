@@ -354,3 +354,7 @@ def main():
         # otherwise just report
         else:
             print(f"No pages were selected, output file {output_filepath} is empty")
+
+
+if __name__ == "__main__":
+    main()
