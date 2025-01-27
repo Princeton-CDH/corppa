@@ -292,7 +292,7 @@ def multiple_matches(df, search_field):
 
 
 def fuzzy_partial_ratio(series, search_text):
-    """Calculate rapidfuzz partial_ratio score across for a single input
+    """Calculate rapidfuzz partial_ratio score for a single input
     search text across a whole series of potentially matching texts.
     Returns a list of scores."""
     scores = rapidfuzz.process.cdist(
