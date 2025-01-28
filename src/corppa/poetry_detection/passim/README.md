@@ -46,7 +46,7 @@ python run_passim.py --ppa-corpus passim-ppa.jsonl --ref-corpus passim-ref.jsonl
 env PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH" python run_passim.py --ppa-corpus ppa.jsonl --ref-corpus refa.jsonl --ref-corpus refb.jsonl --output-dir passim-output
 ```
 
-#### Optional parameters
+#### Optional `passim` parameters
 This script can also take several optional arguments that can be passed along to passim.
 They are:
 - `--max-df`: The upper limit on document frequency for ngrams
