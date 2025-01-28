@@ -180,7 +180,7 @@ def main():
     )
     parser.add_argument(
         "--min-align",
-        help="Passim paramaeter (min-align): minimumn length of alignment",
+        help="Passim paramaeter (min-align): minimum length of alignment",
         type=int,
         default=50,
     )
