@@ -2,7 +2,13 @@
 Script for running passim. Requires Java 8*/11/17 because of Spark dependency.
 
 Examples:
-    TODO
+```
+python run_passim.py --ppa-corpus ppa_passim.jsonl --ref-corpus internet-poems_passim.jsonl \
+        --ref-corpus chadwyck-healey_passim.jsonl --output passim_results
+
+python run_passim.py --ppa-corpus ppa_passim.jsonl --ref-corpus ref-poems_passim.jsonl \
+        --output passim_results --ngram-size 10 -min-align 25
+```
 """
 
 import argparse
