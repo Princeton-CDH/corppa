@@ -29,24 +29,32 @@ python create_passim_corpus.py ppa_pages.jsonl ppa-pages-passim.jsonl ppa
 python create_passim_corpus.py poems.jsonl ref-poems.jsonl ref-poems
 ```
 
-### 2. Run `passim` using its default settings
-Then, we can run `passim` using the `run_passim.sh` script. Note that passim requires
-Java 8\*/11/17. This script has two input arguments:
-1. Input paths that, following Spark conventions, can be a single file, directory,
-or `*` wildcard expression. Multiple paths can be provided by enclosing the
-comma-separated list of paths in curly braces (e.g. `"{path1,path2}"`)
-2. A directory path in which `passim`'s output will be written. If the directory does
-not exist, it will be created.
+### 2. Run `passim`
+Then, we can run `passim` using the `run_passim.py` script. Note that passim requires
+Java 8\*/11/17. The script has the following required arguments:
+- `--ppa-corpus`: A PPA corpus file (JSONL) produced in step 1
+- `--ref-corpus`: A reference corpus (JSONL) produced in step 1; can be repeated to
+                  specify multiple
+- `--output-dir`: Pathname to the top-level output directory for passim results
 
 Note that this will compare PPA texts (`corpus = "ppa"`) with texts from other sources
 (`corpus != "ppa"`)
 
 Example usage:
 ```
-./run_passim.sh passim-input.jsonl passim-output
-env PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH" ./run_passim.sh "input/*.jsonl" passim-output
-./run_passim.sh "{input/ppa_text.jsonl,input/ref_text.jsonl}" passim-output
+python run_passim.py --ppa-corpus passim-ppa.jsonl --ref-corpus passim-ref.jsonl --output-dir passim-output
+env PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH" python run_passim.py --ppa-corpus ppa.jsonl --ref-corpus refa.jsonl --ref-corpus refb.jsonl --output-dir passim-output
 ```
+
+#### Optional `passim` parameters
+This script can also take several optional arguments that can be passed along to passim.
+They are:
+- `--max-df`: The upper limit on document frequency for ngrams
+- `--min-match`: The minimum number of n-gram matches between documents
+- `--ngram-size`: The size of n-gram to use
+- `--floating-ngrams`: Allow n-grams to float from word boundaries
+- `--gap`: The minimum gap size that separates passages
+- `--min-align`: The minimum length of alignment
 
 ### 3. Build page-level results from `passim` output
 After running `passim`, we can use the `get_passim_page_results.py` script to build
