@@ -64,9 +64,9 @@ def test_get_java_version(mock_run):
     err_msg = f"Java {java_version} is unsupported. Only versions 8u371 and higher are supported."
     with pytest.raises(RuntimeError, match=err_msg):
         get_java_version()
-        mock_run.assert_called_once_with(
-            "java -version", shell=True, capture_output=True, text=True
-        )
+    mock_run.assert_called_once_with(
+        "java -version", shell=True, capture_output=True, text=True
+    )
 
     # Error: Java 23
     java_version = "23.X.X"
@@ -75,9 +75,9 @@ def test_get_java_version(mock_run):
     err_msg = r"Java 23.X.X is unsupported. Spark requires Java 8\*/11/17."
     with pytest.raises(RuntimeError, match=err_msg):
         get_java_version()
-        mock_run.assert_called_once_with(
-            "java -version", shell=True, capture_output=True, text=True
-        )
+    mock_run.assert_called_once_with(
+        "java -version", shell=True, capture_output=True, text=True
+    )
 
 
 def test_build_input_string():
