@@ -223,13 +223,12 @@ def main():
     )
     end = timer()
 
-    # Optionaly, report success/failure & time elapsed
-    if args.verbose:
-        time_elapsed = end - start
-        if success:
-            print(f"Passim run completed successfully in {time_elapsed:.1f}s")
-        else:
-            print(f"Passim run failed in {time_elapsed: .1f}s")
+    # Report success/failure & time elapsed
+    time_elapsed = end - start
+    if success:
+        print(f"Passim run completed successfully in {time_elapsed:.1f}s")
+    else:
+        print(f"Passim run failed in {time_elapsed: .1f}s")
 
 
 if __name__ == "__main__":
