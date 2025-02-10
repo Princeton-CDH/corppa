@@ -14,7 +14,7 @@ class PoemExcerpt:
     """
 
     # PPA page related
-    page_id: str
+    ppa_page_id: str
     ppa_span_start: int
     ppa_span_end: int
     ppa_span_text: str
