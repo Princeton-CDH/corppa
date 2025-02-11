@@ -23,12 +23,10 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+  "ftfy",
 	"intspan",
 	"orjsonl",
 	"tqdm",
-  "bs4",
-  "ftfy",
-  "lxml",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +49,17 @@ poem_id = [
   'more-itertools; python_version < "3.12"',
 ]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
-dev = ["pre-commit", "ruff", "corppa[type-checking]", "corppa[test]", "corppa[ocr]", "corppa[passim]", "corppa[poem_id]"]
+chadwyck_healey = ["bs4", "lxml"]
+dev = [
+  "pre-commit",
+  "ruff",
+  "corppa[type-checking]",
+  "corppa[test]",
+  "corppa[ocr]",
+  "corppa[poem_id]",
+  "corppa[passim]",
+  "corppa[chadwyck_healey]",
+]
 
 [project.scripts]
 corppa-filter = "corppa.utils.filter:main"
