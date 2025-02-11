@@ -59,6 +59,9 @@ collate-txt = "corppa.ocr.collate_txt:main"
 [tool.hatch.version]
 path = "src/corppa/__init__.py"
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
 [tool.ruff]
 # configure src path so ruff import fixes can identify local imports
 src = ["src"]
