@@ -29,6 +29,7 @@ class PoemExcerpt:
     identification_methods: set[str]
     notes: Optional[str] = None
 
+
     def __post_init__(self):
         # Check PPA span indices
         if self.ppa_span_end <= self.ppa_span_start:
