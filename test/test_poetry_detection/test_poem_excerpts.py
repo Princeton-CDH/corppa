@@ -4,6 +4,7 @@ from corppa.poetry_detection.poem_excerpts import PoemExcerpt
 
 
 class TestPoemExcerpt:
+
     def test_init(self):
         # Invalid PPA span indices
         error_message = "PPA span's start index 0 must be less than its end index 0"
