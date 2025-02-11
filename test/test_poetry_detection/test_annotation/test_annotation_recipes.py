@@ -277,8 +277,8 @@ class TestReviewStream:
             match="Cannot create review example without one or more annotated versions",
         ):
             ReviewStream.create_review_example([])
-            mock_get_session_name.assert_not_called()
-            mock_add_session_prefix.assert_not_called()
+        mock_get_session_name.assert_not_called()
+        mock_add_session_prefix.assert_not_called()
 
         # Single, minimal example
         mock_get_session_name.return_value = "session_name"
