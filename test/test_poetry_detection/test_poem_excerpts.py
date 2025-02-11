@@ -9,7 +9,7 @@ class TestPoemExcerpt:
         # Invalid PPA span indices
         error_message = "PPA span's start index 0 must be less than its end index 0"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=0,
@@ -19,9 +19,10 @@ class TestPoemExcerpt:
                 detection_methods={"detect"},
                 identification_methods={"id"},
             )
+
         error_message = "PPA span's start index 1 must be less than its end index 0"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=1,
                 ppa_span_end=0,
@@ -34,7 +35,7 @@ class TestPoemExcerpt:
         # Partially unset reference span indices
         error_message = "Reference span's start and end index must both be set"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -46,7 +47,7 @@ class TestPoemExcerpt:
                 ref_span_start=0,
             )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -62,7 +63,7 @@ class TestPoemExcerpt:
             "Reference span's start index 0 must be less than its end index 0"
         )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -78,7 +79,7 @@ class TestPoemExcerpt:
             "Reference span's start index 1 must be less than its end index 0"
         )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            PoemExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
