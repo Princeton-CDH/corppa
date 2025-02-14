@@ -34,11 +34,6 @@ type-checking = [
   "mypy",
   "types-tqdm",
 ]
-test = [
-  "pytest",
-  "pytest-cov",
-  "corppa[poem_id]"
-]
 ocr = ["google-cloud-vision"]
 poem_id = [
   "pyarrow",
@@ -59,6 +54,12 @@ dev = [
   "corppa[poem_id]",
   "corppa[passim]",
   "corppa[chadwyck_healey]",
+]
+test = [
+  "pytest",
+  "pytest-cov",
+  "corppa[poem_id]"
+  "corppa[chadwyck_healey]"
 ]
 
 [project.scripts]
