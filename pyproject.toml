@@ -58,8 +58,8 @@ dev = [
 test = [
   "pytest",
   "pytest-cov",
-  "corppa[poem_id]"
-  "corppa[chadwyck_healey]"
+  "corppa[poem_id]",
+  "corppa[chadwyck_healey]",
 ]
 
 [project.scripts]
