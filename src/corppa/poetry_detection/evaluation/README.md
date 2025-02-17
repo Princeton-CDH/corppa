@@ -20,7 +20,7 @@ constructed a `.JSONL` file containing these annotations to use for evaluation.
 ## Page-level Span Evaluation Method
 We compare the poetry span annotations produced at the page level calculating page-level
 precision and recall scores. Our approach builds off existing methods for evaluation span
-annotations, but makes design choices suitable to our task.
+annotations but makes design choices suitable to our task.
 
 ### Assumptions
 **Spans.** In this setting a span to have the following three components:
@@ -39,13 +39,13 @@ if poem labels are taken into account.
 happen in the case of passim where overlapping passages can be identified for different lines of
 the same reference poem.
 
-## Span Overlap Factor
+### Span Overlap Factor
 Taking inspiration from Stanislav Olenchenko's [blog post](https://blog.p1k.org/yet-another-way-of-ner-systems-evaluation/),
 we define the overlap factor between two spans $a$ and $b$ *with the same poem label* to be equal to
 the proportion of the overlap of their intervals with respect to the larger span.
 
 $$
-\text{overlap-factor}(a, b) = \frac{\min(a_{end}, b_{end}) - \max(a_{start}, b_{start})}{\max(a_{end}-a_{start}, b_{end}-b_{start})}
+overlap\textunderscore factor(a, b) = \frac{\min(a_{end}, b_{end}) - \max(a_{start}, b_{start})}{\max(a_{end}-a_{start}, b_{end}-b_{start})}
 $$
 
 ### Step 1. Map reference spans to viable system spans
@@ -75,8 +75,80 @@ $$
 \left(r_{k_{start}}, s_{end} \right)
 $$
 
+**Example.**
+If we have the following four reference spans $(394, 512), (516, 557), (563, 633), (637, 675)$ mapped
+to the system span $(389, 678)$, this will result in the following working reference-system span pairs:
+
+| Reference | System |
+| --- | --- |
+| (394, 512) | (389, 516) |
+| (516, 557) | (516, 563) |
+| (563, 633) | (563, 637) |
+| (637, 675) | (637, 678) |
 
 ### Step 3. Calculating Precision and Recall
+To calculate the precision and recall for each page, we first must determine the effective number of
+relevant items retrieved by the system. If a system span is split into subspans in the previous step,
+each of these subspans is considered a separate item. Like in Stanislav Olenchenko's [blog post](https://blog.p1k.org/yet-another-way-of-ner-systems-evaluation/),
+our relevance score is the sum of the relevance score for each reference-system span pair in our working
+set. If the pair is an exact match, its relevance score is 1; if it is a partial match, it is equivalent
+to its overlap factor. Optionally, the contributions of partial matches can be further penalized with
+a penalty weight $w$. By default, we do not penalize partial matches (i.e., $w=1$)
 
+$$ relevance\textunderscore score = n\textunderscore exact + w\cdot\sum_{partial} overlap\textunderscore factor(r_i, s_i)$$
+
+**Precision.**
+The precision for a page is simply the page's relevance score divided by the effective number of
+system spans. The effective number of system spans incorporates the number of paired system (sub)spans
+as well as any unpaired system spans.
+
+$$ Precision = \frac{relevance\textunderscore score}{\text{\\# working system spans}} $$
+
+**Recall.**
+The relevance for a page is simply the page's relevance score divided by the numer of reference spans
+(i.e. the number of relevant items).
+
+$$ Recall = \frac{relevance\textunderscore score}{\text{\\# reference spans}} $$
+
+**Edge Cases.**
+If a page has no relevant items (i.e. the page contains no poem excerpts), precision is equal to 1
+if there are no system spans for the page, otherwise 0. Likewise, if a system produces no system
+spans for a page (i.e., the system identifies no poem excerpts within the page), recall is equal to 1
+if the page has no poem excerpts (i.e., there are no reference spans for this page), and 0 otherwise.
+
+## Ignoring Poem Labels
+Optionally, poem labels can be ignored. This turns the task from identifying particular poems instead to
+identifying poetry excerpts more generally. In this setting, it makes little sense for our systems span
+sets to contain overlapping spans. So, as a prestep in this case, overlapping system spans are combined
+into one contiguous span. Then, our evaluation method proceeds as normal.
 
 ## Script Details
+The script `evaluate_poetry_spans` generates page-level evaluation scores for input reference and system
+span annotation (`.JSONL`) files. Results are written to an output `.CSV` file.
+
+**Required parameters.**
+- `reference_jsonl`: Path to reference poetry span annotations (JSONL file)
+- `system_jsonl`: Path to system span annotations to be evaluated (JSONL file)
+- `output_file`: Filename where results should be written (CSV file)
+
+**Optional parameters.**
+- `ignore-label`: Ignore span labels for span evaluations
+- `partial-match-weight`: Downweight for partial matches for span evaluations (default: 1.0)
+
+**Output.**
+Currently, the output `.CSV` file includes the following fields with each row corresponding to a page:
+- page_id: PPA page ID
+- precision: precision score
+- recall: recall score
+- n_span_matches: number of (partial and exact) span matches
+- n_span_misses: number of span misses
+- n_span_spurious: number of spurious system spans
+- n_poem_matches: number of correctly identified poems
+- n_poem_misses: number of missed poems
+- n_poem_spurious: number of spuriously identified poems
+
+**Examples.**
+```
+python evaluate_poetry_spans.py ref_spans.jsonl system_spans.jsonl eval_results.csv
+python evaluate_poetry_spans.py adjudicated_spans.jsonl passim_spans.jsonl eval_results.csv
+```
