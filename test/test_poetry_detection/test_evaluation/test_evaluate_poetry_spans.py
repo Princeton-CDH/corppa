@@ -120,8 +120,8 @@ class TestPageEvaluation:
             match="Reference and system spans must correspond to the same page",
         ):
             PageEvaluation(page_ref_spans, page_sys_spans)
-            mock_get_span_mappings.assert_not_called()
-            mock_get_span_pairs.assert_not_called()
+        mock_get_span_mappings.assert_not_called()
+        mock_get_span_pairs.assert_not_called()
 
         # Setup for non-error cases
         page_ref_spans = NonCallableMock(page_id="id", spans="spans")
