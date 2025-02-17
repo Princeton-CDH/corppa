@@ -48,6 +48,25 @@ $$
 overlap\textunderscore factor(a, b) = \frac{\min(a_{end}, b_{end}) - \max(a_{start}, b_{start})}{\max(a_{end}-a_{start}, b_{end}-b_{start})}
 $$
 
+
+For example, if we have **span a** with length 5 and **span b** with length 7 and a and b have an overlap 4, the overlap factor for a and b would be $\frac{4}{7}$, since span b is the longer of the two spans.
+
+```mermaid
+block-beta
+columns 9
+a["Span a"]:5
+space:3
+space:2
+b["Span b"]:7
+space:2
+overlap:4
+
+style a fill:green
+style b fill:blue
+style overlap fill:purple
+```
+
+
 ### Step 1. Map reference spans to viable system spans
 In this first step, we take inspiration from ACE NER evaluation metrics (see Hal Daume's [blog post comment](https://nlpers.blogspot.com/2006/08/doing-named-entity-recognition-dont.html?showComment=1156981200000#c115698122985619877)). We effectively build a bipartite graph linking
 each reference span to the "best" matching system span. Currently, we determine the best matching
