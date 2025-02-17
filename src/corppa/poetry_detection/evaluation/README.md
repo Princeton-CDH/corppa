@@ -75,7 +75,26 @@ $$
 \left(r_{k_{start}}, s_{end} \right)
 $$
 
+
+```mermaid
+block-beta
+columns 12
+space:1
+Sys["System Span"]:9
+space:2
+Ref1["Ref Span 1"]:3
+space:1
+Ref2["Ref Span 2"]:3
+Ref3["Ref Span 3"]:4
+space:2
+SysSub1["System Sub 1"]:3
+SysSub2["System Sub 2"]:3
+SysSub3["System Sub 3"]:3
+```
+
 **Example.**
+
+
 If we have the following four reference spans $(394, 512), (516, 557), (563, 633), (637, 675)$ mapped
 to the system span $(389, 678)$, this will result in the following working reference-system span pairs:
 
