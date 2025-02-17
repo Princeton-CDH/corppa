@@ -66,11 +66,8 @@ class Span:
         So, the overlap factor has a range between 0 and 1 with higher values
         corresponding to a higher degree of overlap.
         """
-        if not self.has_overlap(other, ignore_label=ignore_label):
-            return 0
-        else:
-            overlap = self.overlap_length(other, ignore_label=ignore_label)
-            return overlap / max(len(self), len(other))
+        overlap = self.overlap_length(other, ignore_label=ignore_label)
+        return overlap / max(len(self), len(other))
 
 
 @dataclass(kw_only=True)
