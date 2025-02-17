@@ -79,17 +79,24 @@ $$
 ```mermaid
 block-beta
 columns 12
-space:1
-Sys["System Span"]:9
-space:2
 Ref1["Ref Span 1"]:3
 space:1
 Ref2["Ref Span 2"]:3
-Ref3["Ref Span 3"]:4
+Ref3["Ref Span 3"]:3
 space:2
+space:1
+Sys["System Span"]:10 
+space:1
+space:1
 SysSub1["System Sub 1"]:3
 SysSub2["System Sub 2"]:3
-SysSub3["System Sub 3"]:3
+SysSub3["System Sub 3"]:4
+
+style Sys fill:#484
+style SysSub1 fill:#484
+style SysSub2 fill:#484
+style SysSub3 fill:#484
+
 ```
 
 **Example.**
