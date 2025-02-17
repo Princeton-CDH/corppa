@@ -2,7 +2,11 @@ from unittest.mock import patch
 
 import pytest
 
-from corppa.poetry_detection.core import PoemExcerpt, Span
+from corppa.poetry_detection.core import (
+    Excerpt,
+    LabeledExcerpt,
+    Span,
+)
 
 
 class TestSpan:
@@ -98,70 +102,102 @@ class TestSpan:
         span_b = Span(2, 8, "label")
         assert span_a.overlap_length(span_b) == 3
 
-    @patch.object(Span, "has_overlap")
     @patch.object(Span, "overlap_length")
-    def test_overlap_factor(self, mock_overlap_length, mock_has_overlap):
+    def test_overlap_factor(self, mock_overlap_length):
         span_a = Span(3, 6, "label")
 
         # no overlap
-        mock_has_overlap.return_value = False
+        mock_overlap_length.return_value = 0
         assert span_a.overlap_factor("other span", ignore_label="bool") == 0
-        mock_has_overlap.assert_called_once_with("other span", ignore_label="bool")
-        mock_overlap_length.assert_not_called()
+        mock_overlap_length.assert_called_once_with("other span", ignore_label="bool")
 
         # has overlap
-        mock_has_overlap.reset_mock()
-        mock_has_overlap.return_value = True
+        mock_overlap_length.reset_mock()
         mock_overlap_length.return_value = 3
         ## exact overlap
         span_b = Span(3, 6, "label")
         assert span_a.overlap_factor(span_b, ignore_label="bool") == 1
-        mock_has_overlap.assert_called_once_with(span_b, ignore_label="bool")
         mock_overlap_length.assert_called_once_with(span_b, ignore_label="bool")
         ## partial overlap
-        mock_has_overlap.reset_mock()
         mock_overlap_length.reset_mock()
         mock_overlap_length.return_value = 2
         span_b = Span(3, 5, "label")
         assert span_a.overlap_factor(span_b) == 2 / 3
-        mock_has_overlap.assert_called_once_with(span_b, ignore_label=False)
         mock_overlap_length.assert_called_once_with(span_b, ignore_label=False)
         span_b = Span(2, 8, "label")
         mock_overlap_length.return_value = 3
         assert span_a.overlap_factor(span_b) == 3 / 6
 
 
-class TestPoemExcerpt:
+class TestExcerpt:
     def test_init(self):
         # Invalid PPA span indices
         error_message = "PPA span's start index 0 must be less than its end index 0"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = Excerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=0,
                 ppa_span_text="page_text",
-                poem_id="poem_id",
-                ref_corpus="corpus_id",
                 detection_methods={"detect"},
-                identification_methods={"id"},
             )
         error_message = "PPA span's start index 1 must be less than its end index 0"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = Excerpt(
                 page_id="page_id",
                 ppa_span_start=1,
                 ppa_span_end=0,
                 ppa_span_text="page_text",
-                poem_id="poem_id",
-                ref_corpus="corpus_id",
                 detection_methods={"detect"},
-                identification_methods={"id"},
             )
+        # Empty detection method set
+        error_message = "Must specify at least one detection method"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=0,
+                ppa_span_text="page_text",
+                detection_methods={},
+            )
+
+    def test_to_dict(self):
+        # No optional fields
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"detect"},
+        )
+        expected_result = {
+            "page_id": "page_id",
+            "ppa_span_start": 0,
+            "ppa_span_end": 1,
+            "ppa_span_text": "page_text",
+            "detection_methods": ["detect"],
+        }
+
+        result = excerpt.to_dict()
+        assert result == expected_result
+
+        # With optional fields
+        excerpt.notes = "notes"
+
+        expected_result |= {
+            "notes": "notes",
+        }
+
+        result = excerpt.to_dict()
+        assert result == expected_result
+
+
+class TestLabeledExcerpt:
+    def test_init(self):
         # Partially unset reference span indices
         error_message = "Reference span's start and end index must both be set"
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -173,7 +209,7 @@ class TestPoemExcerpt:
                 ref_span_start=0,
             )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -189,7 +225,7 @@ class TestPoemExcerpt:
             "Reference span's start index 0 must be less than its end index 0"
         )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -205,7 +241,7 @@ class TestPoemExcerpt:
             "Reference span's start index 1 must be less than its end index 0"
         )
         with pytest.raises(ValueError, match=error_message):
-            poem_excerpt = PoemExcerpt(
+            excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
                 ppa_span_end=1,
@@ -218,9 +254,23 @@ class TestPoemExcerpt:
                 ref_span_end=0,
             )
 
+        # Empty identification method set
+        error_message = "Must specify at least one identification method"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = LabeledExcerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=0,
+                ppa_span_text="page_text",
+                poem_id="poem_id",
+                ref_corpus="corpus_id",
+                detection_methods={"detect"},
+                identification_methods={},
+            )
+
     def test_to_dict(self):
         # No optional fields
-        poem_excerpt = PoemExcerpt(
+        excerpt = LabeledExcerpt(
             page_id="page_id",
             ppa_span_start=0,
             ppa_span_end=1,
@@ -241,14 +291,14 @@ class TestPoemExcerpt:
             "identification_methods": ["id"],
         }
 
-        result = poem_excerpt.to_dict()
+        result = excerpt.to_dict()
         assert result == expected_result
 
         # With optional fields
-        poem_excerpt.ref_span_start = 2
-        poem_excerpt.ref_span_end = 3
-        poem_excerpt.ref_span_text = "ref_text"
-        poem_excerpt.notes = "notes"
+        excerpt.ref_span_start = 2
+        excerpt.ref_span_end = 3
+        excerpt.ref_span_text = "ref_text"
+        excerpt.notes = "notes"
 
         expected_result |= {
             "ref_span_start": 2,
@@ -257,5 +307,5 @@ class TestPoemExcerpt:
             "notes": "notes",
         }
 
-        result = poem_excerpt.to_dict()
+        result = excerpt.to_dict()
         assert result == expected_result
