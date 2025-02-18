@@ -61,9 +61,9 @@ b["Span b"]:7
 space:2
 overlap:4
 
-style a fill:green
-style b fill:blue
-style overlap fill:purple
+style a fill:#147416
+style b fill:#11149C
+style overlap fill:#481E66
 ```
 
 
@@ -98,23 +98,23 @@ $$
 ```mermaid
 block-beta
 columns 12
-Ref1["Ref Span 1"]:3
+Ref0["Ref Span 0"]:3
 space:1
+Ref1["Ref Span 1"]:3
 Ref2["Ref Span 2"]:3
-Ref3["Ref Span 3"]:3
 space:2
 space:1
 Sys["System Span"]:10 
 space:1
 space:1
+SysSub0["System Sub 0"]:3
 SysSub1["System Sub 1"]:3
-SysSub2["System Sub 2"]:3
-SysSub3["System Sub 3"]:4
+SysSub2["System Sub 2"]:4
 
-style Sys fill:#484
-style SysSub1 fill:#484
-style SysSub2 fill:#484
-style SysSub3 fill:#484
+style Sys fill:#147416
+style SysSub0 fill:#147416
+style SysSub1 fill:#147416
+style SysSub2 fill:#147416
 
 ```
 
