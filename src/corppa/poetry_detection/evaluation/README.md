@@ -61,9 +61,9 @@ b["Span b"]:7
 space:2
 overlap:4
 
-style a fill:#147416
-style b fill:#11149C
-style overlap fill:#481E66
+style a fill:#147416,color:#fff
+style b fill:#11149C,color:#fff
+style overlap fill:#481E66,color:#fff
 ```
 
 
@@ -111,12 +111,14 @@ SysSub0["System Sub 0"]:3
 SysSub1["System Sub 1"]:3
 SysSub2["System Sub 2"]:4
 
-style Sys fill:#147416
-style SysSub0 fill:#147416
-style SysSub1 fill:#147416
-style SysSub2 fill:#147416
+style Sys fill:#147416,color:#fff
+style SysSub0 fill:#147416,color:#fff
+style SysSub1 fill:#147416,color:#fff
+style SysSub2 fill:#147416,color:#fff
 
 ```
+The full system span is sliced up into subspans and paired with the closest reference span; all portions of the system span are used across the subspans. (Gaps between subspans in the chart are not meant to indicate gaps in content.)
+
 
 **Example.**
 
