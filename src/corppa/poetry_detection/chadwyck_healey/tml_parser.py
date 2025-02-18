@@ -694,6 +694,7 @@ class TMLPoetryParser:
             metadata = self.extract_metadata(soup)
             metadata["filename"] = file_path.name
 
+            # in metadata-only mode, bail out before text extraction logic, returning None for poetry_text
             if self.metadata_only:
                 return metadata, None
 
