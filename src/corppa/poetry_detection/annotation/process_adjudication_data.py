@@ -32,6 +32,24 @@ from tqdm import tqdm
 from xopen import xopen
 
 
+def clean_excerpt(span: dict[str, int | str]):
+    """
+    Clean excerpt so that all leading and trailing whitespace is removed.
+    """
+    updated_span = span.copy()
+    # Remove any leading whitespace
+    ldiff = len(span["text"]) - len(span["text"].lstrip())
+    if ldiff:
+        updated_span["start"] = span["start"] + ldiff
+        updated_span["text"] = updated_span["text"][ldiff:]
+    # Remove any trailing whitespace
+    rdiff = len(span["text"]) - len(span["text"].rstrip())
+    if rdiff:
+        updated_span["end"] = span["end"] - rdiff
+        updated_span["text"] = updated_span["text"][:-rdiff]
+    return updated_span
+
+
 def get_excerpts(page_annotation: dict[str, Any]) -> list[dict[str, int | str]]:
     """
     Extract excerpts from page-level annotation. Excerpts have the following
@@ -54,7 +72,7 @@ def get_excerpts(page_annotation: dict[str, Any]) -> list[dict[str, int | str]]:
             "end": span["end"],
             "text": page_text[span["start"] : span["end"]],
         }
-        excerpts.append(excerpt)
+        excerpts.append(clean_excerpt(excerpt))
     return excerpts
 
 
