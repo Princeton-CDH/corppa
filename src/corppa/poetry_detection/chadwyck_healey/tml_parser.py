@@ -324,12 +324,16 @@ class TMLPoetryParser:
         input_dir: Path,
         output_dir: Path,
         output_csv: Path,
+        check_encodings: bool = False,
+        metadata_only: bool = False,
         show_progress: bool = True,
         verbose: bool = False,
     ):
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.metadata_file = output_csv
+        self.check_encodings = check_encodings
+        self.metadata_only = metadata_only
         self.show_progress = show_progress
         self.verbose = verbose
 
@@ -666,13 +670,15 @@ class TMLPoetryParser:
             if self.verbose:
                 print(f"\nProcessing: {file_path}")
 
-            # reading with different encodings
             try:
-                content, used_encoding = self.try_read_file(file_path)
-                if used_encoding != "utf-8" and self.verbose:
-                    print(
-                        f"Note: File {file_path.name} was read using {used_encoding} encoding"
-                    )
+                if self.check_encodings:
+                    content, used_encoding = self.try_read_file(file_path)
+                    if used_encoding != "utf-8" and self.verbose:
+                        print(
+                            f"Note: File {file_path.name} was read using {used_encoding} encoding"
+                        )
+                else:
+                    content = file_path.read_text(encoding="latin1")
             except ValueError as e:
                 print(
                     f"Error: Could not read {file_path.name} with any supported encoding",
@@ -682,13 +688,16 @@ class TMLPoetryParser:
                 return None, None
 
             # parse with BeautifulSoup
-            # TODO: This is definitely not the right parser to use!
-            soup = BeautifulSoup(content, "html.parser")
+            soup = BeautifulSoup(content, "lxml")
+
             # extract metadata from the header section
             metadata = self.extract_metadata(soup)
             metadata["filename"] = file_path.name
+
+            if self.metadata_only:
+                return metadata, None
+
             # extract the poetry text from the body
-            soup = BeautifulSoup(content, "lxml")
             poetry_text = self.extract_poetry_text(soup)
 
             # debug info for files with missing content
@@ -759,18 +768,28 @@ class TMLPoetryParser:
                     break
 
                 metadata, poetry_text = self.process_file(file_path)
-                if metadata and poetry_text:
-                    # write metadata to CSV
-                    writer.writerow(metadata)
-
-                    # write poetry to text file
-                    output_file = self.output_dir / f"{file_path.stem}.txt"
-                    with open(output_file, "w", encoding="utf-8") as f:
-                        f.write(poetry_text)
-                    n_processed += 1
+                if self.metadata_only:
+                    # Only an attempt at extracting metadata is made
+                    if metadata:
+                        writer.writerow(metadata)
+                        n_processed += 1
+                    else:
+                        failed_files.append(file_path.name)
                 else:
-                    failed_files.append(file_path.name)
+                    # Both metadata and poetry must be extracted
+                    if metadata and poetry_text:
+                        # write metadata to CSV
+                        writer.writerow(metadata)
+
+                        # write poetry to text file
+                        output_file = self.output_dir / f"{file_path.stem}.txt"
+                        with open(output_file, "w", encoding="utf-8") as f:
+                            f.write(poetry_text)
+                        n_processed += 1
+                    else:
+                        failed_files.append(file_path.name)
                 n_attempted += 1
+
         print(
             f"\nProcessing complete!\nSuccessfully processed {n_processed} "
             + f"out of {n_attempted} files"
@@ -937,6 +956,16 @@ def main():
         help="Number of files to process. If not provided, process all files.",
     )
     parser_arg.add_argument(
+        "--check-encodings",
+        help="Run logic to determine each .TML's text encoding instead of assuming Latin-1",
+        action="store_true",
+    )
+    parser_arg.add_argument(
+        "--metadata-only",
+        help="Only extract metadata, and thus only output metadata file (.CSV)",
+        action="store_true",
+    )
+    parser_arg.add_argument(
         "--progress",
         help="Show progress",
         action=argparse.BooleanOptionalAction,
@@ -959,6 +988,8 @@ def main():
         input_dir=args.input_dir,
         output_dir=args.output_dir,
         output_csv=args.output_csv,
+        check_encodings=args.check_encodings,
+        metadata_only=args.metadata_only,
         show_progress=args.progress,
         verbose=args.verbose,
     )
