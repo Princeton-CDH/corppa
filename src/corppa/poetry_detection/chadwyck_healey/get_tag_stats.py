@@ -6,31 +6,19 @@ them to a .jsonl file
 import argparse
 import csv
 import pathlib
-import re
 import sys
 
 import bs4
-import ftfy
-from build_poem_corpus import get_poem_subdir
 from tqdm import tqdm
 
 
 def poem_path_generator(in_dir, poem_id_set=None):
-    if poem_id_set is None:
-        # Gather all poem records
-        for poem_path in in_dir.rglob("*.tml"):
-            # Skip nameless file
-            if poem_path.name == ".tml":
-                continue
-            yield poem_path
-    else:
-        # Gather selected poem records
-        for poem_id in poem_id_set:
-            poem_dir = in_dir.joinpath(get_poem_subdir(poem_id))
-            poem_path = poem_dir.joinpath(f"{poem_id}.tml")
-            if not poem_path.is_file():
-                print(f"Warning: poem file {poem_path} does not exist")
-                continue
+    # Gather all poem records
+    for poem_path in in_dir.rglob("*.tml"):
+        # Skip nameless file
+        if poem_path.name == ".tml":
+            continue
+        if poem_id_set is None or poem_path.stem in poem_id_set:
             yield poem_path
 
 
