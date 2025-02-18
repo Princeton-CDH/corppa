@@ -737,7 +737,7 @@ class TMLPoetryParser:
         tml_gen = self.input_dir.glob("*.tml")
         if num_files:
             file_progress = tqdm(
-                tml_gen, desc=desc, total=ocr_limit, disable=not self.show_progress
+                tml_gen, desc=desc, total=num_files, disable=not self.show_progress
             )
         else:
             bar_format = (
