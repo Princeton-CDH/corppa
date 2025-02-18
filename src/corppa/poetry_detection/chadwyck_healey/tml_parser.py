@@ -763,33 +763,34 @@ class TMLPoetryParser:
             writer = csv.DictWriter(csvfile, fieldnames=self.metadata_fields)
             writer.writeheader()
 
+            processed = False
             for i, file_path in enumerate(file_progress):
                 if num_files and i == num_files:
                     # Exit early if limit reached
                     break
 
                 metadata, poetry_text = self.process_file(file_path)
-                if self.metadata_only:
-                    # Only an attempt at extracting metadata is made
-                    if metadata:
-                        writer.writerow(metadata)
-                        n_processed += 1
-                    else:
-                        failed_files.append(file_path.name)
-                else:
-                    # Both metadata and poetry must be extracted
-                    if metadata and poetry_text:
-                        # write metadata to CSV
-                        writer.writerow(metadata)
+                # Always export metadata if we have it
+                if metadata:
+                    writer.writerow(metadata)
+                    # Set flag if we're in metadata only mode
+                    processed = self.metadata_only
 
-                        # write poetry to text file
-                        output_file = self.output_dir / f"{file_path.stem}.txt"
-                        with open(output_file, "w", encoding="utf-8") as f:
-                            f.write(poetry_text)
-                        n_processed += 1
-                    else:
-                        failed_files.append(file_path.name)
+                # If we're expecting text (i.e., not running in metadata only mode) and have successfully extract it
+                if not self.metadata_only and poetry_text:
+                    # write poetry to text file
+                    output_file = self.output_dir / f"{file_path.stem}.txt"
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        f.write(poetry_text)
+                    processed = True
+
+                # Upkeep
                 n_attempted += 1
+                if processed:
+                    n_processed += 1
+                else:
+                    # If we don't have data for the mode we expect, consider it failed
+                    failed_files.append(file_path.name)
 
         print(
             f"\nProcessing complete!\nSuccessfully processed {n_processed} "
@@ -951,7 +952,7 @@ def main():
         help="Filename of output metadata file (.CSV)",
     )
     parser_arg.add_argument(
-        "--num_files",
+        "--num-files",
         type=int,
         default=None,
         help="Number of files to process. If not provided, process all files.",
