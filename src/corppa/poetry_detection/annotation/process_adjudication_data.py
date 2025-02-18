@@ -44,7 +44,7 @@ class Excerpt(TypedDict):
 
 def clean_excerpt(span: Excerpt) -> Excerpt:
     """
-    Clean excerpt so that all leading and trailing whitespace is removed. This involves
+    Clean excerpt so that any leading and trailing whitespace is removed. This involves
     updating the excerpt text itself as well as its start and end indices.
     """
     updated_span = span.copy()
