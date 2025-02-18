@@ -25,14 +25,43 @@ import csv
 import pathlib
 import sys
 from collections.abc import Generator
-from typing import Any
+from typing import Any, TypedDict
 
 import orjsonl
 from tqdm import tqdm
 from xopen import xopen
 
 
-def get_excerpts(page_annotation: dict[str, Any]) -> list[dict[str, int | str]]:
+class Excerpt(TypedDict):
+    """
+    Basic excerpt object, primarily used for type checking
+    """
+
+    start: int
+    end: int
+    text: str
+
+
+def clean_excerpt(span: Excerpt) -> Excerpt:
+    """
+    Clean excerpt so that any leading and trailing whitespace is removed. This involves
+    updating the excerpt text itself as well as its start and end indices.
+    """
+    updated_span = span.copy()
+    # Remove any leading whitespace
+    ldiff = len(span["text"]) - len(span["text"].lstrip())
+    if ldiff:
+        updated_span["start"] = span["start"] + ldiff
+        updated_span["text"] = updated_span["text"][ldiff:]
+    # Remove any trailing whitespace
+    rdiff = len(span["text"]) - len(span["text"].rstrip())
+    if rdiff:
+        updated_span["end"] = span["end"] - rdiff
+        updated_span["text"] = updated_span["text"][:-rdiff]
+    return updated_span
+
+
+def get_excerpts(page_annotation: dict[str, Any]) -> list[Excerpt]:
     """
     Extract excerpts from page-level annotation. Excerpts have the following
     fields:
@@ -49,12 +78,12 @@ def get_excerpts(page_annotation: dict[str, Any]) -> list[dict[str, int | str]]:
     if "spans" not in page_annotation:
         raise ValueError("Page annotation missing 'spans' field")
     for span in page_annotation["spans"]:
-        excerpt = {
+        excerpt: Excerpt = {
             "start": span["start"],
             "end": span["end"],
             "text": page_text[span["start"] : span["end"]],
         }
-        excerpts.append(excerpt)
+        excerpts.append(clean_excerpt(excerpt))
     return excerpts
 
 

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from corppa.poetry_detection.annotation.process_adjudication_data import (
+    clean_excerpt,
     get_excerpt_entries,
     get_excerpts,
     process_adjudication_data,
@@ -12,7 +13,33 @@ from corppa.poetry_detection.annotation.process_adjudication_data import (
 )
 
 
-def test_get_excerpts():
+def test_clean_excerpt():
+    # No leading or trailing whitespace
+    span = {"start": 1, "end": 12, "text": "hello world"}
+    assert clean_excerpt(span) == span
+
+    # Leading whitespace
+    span = {"start": 0, "end": 13, "text": "\r\nhello world"}
+    expected_result = {"start": 2, "end": 13, "text": "hello world"}
+    assert clean_excerpt(span) == expected_result
+
+    # Trailing whitespace
+    span = {"start": 0, "end": 13, "text": "hello world\t "}
+    expected_result = {"start": 0, "end": 11, "text": "hello world"}
+    assert clean_excerpt(span) == expected_result
+
+    # Leading and trailing whitespace
+    span = {
+        "start": 0,
+        "end": 13,
+        "text": " hello world\n",
+    }
+    expected_result = {"start": 1, "end": 12, "text": "hello world"}
+    assert clean_excerpt(span) == expected_result
+
+
+@patch("corppa.poetry_detection.annotation.process_adjudication_data.clean_excerpt")
+def test_get_excerpts(mock_clean_excerpt):
     page_annotation = {"text": "some page text"}
 
     # Missing spans field
@@ -22,13 +49,22 @@ def test_get_excerpts():
     # Empty spans field
     page_annotation["spans"] = []
     assert get_excerpts(page_annotation) == []
+    mock_clean_excerpt.assert_not_called()
 
     # Regular case (i.e. non-empty spans field)
+    mock_clean_excerpt.side_effect = lambda x: x
     page_annotation["spans"].append({"start": 0, "end": 4})
     page_annotation["spans"].append({"start": 10, "end": 14})
     results = get_excerpts(page_annotation)
     assert results[0] == {"start": 0, "end": 4, "text": "some"}
     assert results[1] == {"start": 10, "end": 14, "text": "text"}
+    assert mock_clean_excerpt.call_count == 2
+    mock_clean_excerpt.assert_has_calls(
+        [
+            call({"start": 0, "end": 4, "text": "some"}),
+            call({"start": 10, "end": 14, "text": "text"}),
+        ]
+    )
 
     # Missing text field
     blank_page = {"spans": []}
