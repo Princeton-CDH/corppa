@@ -161,6 +161,33 @@ class TestExcerpt:
                 detection_methods={},
             )
 
+    def test_excerpt_id(self):
+        # Typical case
+        for detection_method in ["adjudication", "manual", "passim", "xml"]:
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={detection_method},
+            )
+            expected_result = f"{detection_method[0]}@0:1"
+            assert excerpt.excerpt_id == expected_result
+
+        # Raises error for multiple excerpts
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"adjudication", "passim"},
+        )
+        error_message = (
+            "IDs for excerpts with multiple detection methods are currently undefined"
+        )
+        with pytest.raises(NotImplementedError, match=error_message):
+            excerpt.excerpt_id
+
     def test_to_dict(self):
         # No optional fields
         excerpt = Excerpt(

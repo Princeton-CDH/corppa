@@ -3,7 +3,16 @@ Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
 from dataclasses import asdict, dataclass
+from functools import cached_property
 from typing import Any, Optional
+
+# Would upper casing be better?
+DETECTION_PFX_TABLE = {
+    "adjudication": "a",
+    "manual": "m",
+    "passim": "p",
+    "xml": "x",
+}
 
 
 @dataclass
@@ -95,6 +104,20 @@ class Excerpt:
             raise ValueError(
                 f"PPA span's start index {self.ppa_span_start} must be less than its end index {self.ppa_span_end}"
             )
+
+    @cached_property
+    def excerpt_id(self):
+        if len(self.detection_methods) > 1:
+            raise NotImplementedError(
+                "IDs for excerpts with multiple detection methods are currently undefined"
+            )
+        else:
+            [detect_name] = self.detection_methods
+            # Should this validation occur instead within post_init?
+            if detect_name not in DETECTION_PFX_TABLE:
+                raise ValueError(f"Unsupported detection method '{detect_name}'")
+            detect_pfx = DETECTION_PFX_TABLE[detect_name]
+            return f"{detect_pfx}@{self.ppa_span_start}:{self.ppa_span_end}"
 
     def to_dict(self) -> dict[str, Any]:
         """
