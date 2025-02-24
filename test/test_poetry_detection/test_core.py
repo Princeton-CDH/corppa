@@ -174,6 +174,18 @@ class TestExcerpt:
             expected_result = f"{detection_method[0]}@0:1"
             assert excerpt.excerpt_id == expected_result
 
+        # Raises error for unknown detection method
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"unknown"},
+        )
+        error_message = "Unsupported detection method 'unknown'"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt.excerpt_id
+
         # Raises error for multiple excerpts
         excerpt = Excerpt(
             page_id="page_id",
