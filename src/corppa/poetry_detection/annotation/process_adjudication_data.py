@@ -134,7 +134,6 @@ def process_adjudication_data(
             page_data = process_page_annotation(page_anno)
 
             # Write excerpt-level data
-            print(page_data)
             for excerpt in page_data["excerpts"]:
                 csv_writer.writerow(excerpt.to_csv())
 
