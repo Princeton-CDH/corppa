@@ -459,7 +459,14 @@ def process(input_file):
     # generate a simplified text field for searching
     df = generate_search_text(df)
 
-    input_df = pl.read_csv(input_file, columns=Excerpt.fieldnames())
+    # load csv with excerpt fieldnames
+    try:
+        input_df = pl.read_csv(input_file, columns=Excerpt.fieldnames())
+    except pl.exceptions.ColumnNotFoundError as err:
+        # if any excerpt fields are missing, report and exit
+        print(f"Input file does not have expected excerpt fields: {err}")
+        raise SystemExit(1)
+
     print(f"Input file has {input_df.height:,} excerpts")
     input_columns = input_df.columns  # store original columns for output
 
