@@ -431,7 +431,7 @@ def find_reference_poem(input_row, ref_df, meta_df):
     return None
 
 
-def main(input_file):
+def process(input_file):
     logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
     # if the parquet files aren't present, generate them
     # (could add an option to recompile in future)
@@ -531,7 +531,7 @@ def main(input_file):
     )
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         description="Attempt to identify poem excerpts by matching against reference set"
     )
@@ -542,4 +542,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.input)
+    process(args.input)
+
+
+if __name__ == "__main__":
+    main()
