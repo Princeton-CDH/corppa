@@ -373,6 +373,20 @@ class TestExcerpt:
         )
         assert excerpt.strip_whitespace() == expected_result
 
+    def test_fieldnames(self):
+        fieldnames = Excerpt.fieldnames()
+        # should match the names of the fields as declared
+        # and in the same order
+        assert fieldnames == [
+            "page_id",
+            "ppa_span_start",
+            "ppa_span_end",
+            "ppa_span_text",
+            "detection_methods",
+            "notes",
+            "excerpt_id",
+        ]
+
 
 class TestLabeledExcerpt:
     def test_init(self):
@@ -534,3 +548,16 @@ class TestLabeledExcerpt:
             error_message = f"Unexpected value type for {field}"
             with pytest.raises(ValueError, match=error_message):
                 LabeledExcerpt.from_dict(bad_dict)
+
+    def test_fieldnames(self):
+        fieldnames = LabeledExcerpt.fieldnames()
+        # should inherit from Excerpt but include
+        # additional fields
+        assert fieldnames == Excerpt.fieldnames() + [
+            "poem_id",
+            "ref_corpus",
+            "ref_span_start",
+            "ref_span_end",
+            "ref_span_text",
+            "identification_methods",
+        ]
