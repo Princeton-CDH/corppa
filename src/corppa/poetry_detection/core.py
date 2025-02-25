@@ -154,9 +154,8 @@ class Excerpt:
 
     def strip_whitespace(self) -> "Excerpt":
         """
-        Returns a copy of the excerpt such that leading and trailing whitespace
-        have been removed from the text. In addition to the text, the start
-        and end indices will also be updated.
+        Return a copy of this excerpt with any leading and trailing whitespace
+        removed from the text and start and end indices updated to match any changes.
         """
         ldiff = len(self.ppa_span_text) - len(self.ppa_span_text.lstrip())
         rdiff = len(self.ppa_span_text) - len(self.ppa_span_text.rstrip())
