@@ -2,7 +2,7 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Optional
 
 
@@ -111,6 +111,12 @@ class Excerpt:
                 else:
                     json_dict[key] = value
         return json_dict
+
+    @classmethod
+    def fieldnames(cls) -> list[str]:
+        """Return a list of names for the fields in this class,
+        in order."""
+        return [f.name for f in fields(cls)]
 
 
 @dataclass(kw_only=True)
