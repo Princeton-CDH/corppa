@@ -33,6 +33,8 @@ import pyarrow.parquet as pq
 import rapidfuzz
 from unidecode import unidecode
 
+from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
+
 logger = logging.getLogger(__name__)
 
 # for convenience, assume the poetry reference data directory is
@@ -230,12 +232,13 @@ def searchable_text(text):
     return unidecode(pl.select(_text_for_search(pl.lit(text))).item())
 
 
-def generate_search_text(df, field="text"):
+def generate_search_text(df, field="text", output_field=None):
     """Takes a Polars dataframe and generates a searchable text field
     based on the input column (by default, input column is "text" and
     output is "search_text").  Removes punctuation, normalizes whitespace,
     and strips trailing and leading whitespace, etc."""
-    output_field = f"search_{field}"
+    if output_field is None:
+        output_field = f"search_{field}"
     return df.with_columns(**{output_field: _text_for_search(pl.col(field))})
 
 
@@ -309,7 +312,7 @@ def fuzzy_partial_ratio(series, search_text):
     return scores[0]
 
 
-def find_reference_poem(ref_df, input_row, meta_df):
+def find_reference_poem(input_row, ref_df, meta_df):
     result = {"poem_id"}
     previously_searched = []
     for search_field in ["search_text", "search_first_line", "search_last_line"]:
@@ -456,16 +459,21 @@ def main(input_file):
     # generate a simplified text field for searching
     df = generate_search_text(df)
 
-    input_df = pl.read_csv(input_file)
-    print(f"Input file has {input_df.height:,} entries")
+    input_df = pl.read_csv(input_file, columns=Excerpt.fieldnames())
+    print(f"Input file has {input_df.height:,} excerpts")
     input_columns = input_df.columns  # store original columns for output
 
     # convert input text to search text using the same rules applied to reference df
-    input_df = generate_search_text(input_df)
+    input_df = generate_search_text(
+        input_df, field="ppa_span_text", output_field="search_text"
+    )
     # split out text to isolate first and last linesfind based on
     input_df = input_df.with_columns(
-        first_line=pl.col("text").str.strip_chars().str.split("\n").list.first(),
-        last_line=pl.col("text").str.strip_chars().str.split("\n").list.last(),
+        first_line=pl.col("ppa_span_text")
+        .str.strip_chars()
+        .str.split("\n")
+        .list.first(),
+        last_line=pl.col("ppa_span_text").str.strip_chars().str.split("\n").list.last(),
     )
     # generate searchable versions of first and last lines
     input_df = generate_search_text(input_df, "first_line")
@@ -481,41 +489,41 @@ def main(input_file):
     # progressively decrease the number of unmatched rows?
 
     output_file = input_file.with_name(f"{input_file.stem}_matched.csv")
-    # keep existing columns from input and add match fields
-    fieldnames = input_columns + [
-        "match_count",
-        "match_poem_id",
-        "match_author",
-        "match_title",
-        "match_notes",
-    ]
 
     with output_file.open("w", encoding="utf-8") as outfile:
         # add byte-order-mark to indicate unicode
-        outfile.write(codecs.BOM_UTF8)
+        outfile.write(codecs.BOM_UTF8.decode())
+        # output matched excerpts as labeled excerpts
         csvwriter = csv.DictWriter(
-            outfile, fieldnames=fieldnames, extrasaction="ignore"
+            outfile,
+            fieldnames=LabeledExcerpt.fieldnames(),
         )
         csvwriter.writeheader()
 
         for row in input_df.iter_rows(named=True):
-            match_poem = find_reference_poem(df, row, meta_df)
-            # combine row dict with match poem dict
-            if match_poem:
-                # rename match fields for output
-                match_poem["match_poem_id"] = match_poem.pop("id")
-                match_poem["match_author"] = match_poem.pop("author")
-                match_poem["match_title"] = match_poem.pop("title")
-                match_poem["match_notes"] = match_poem.pop("notes")
-                row.update(match_poem)
+            match_poem = find_reference_poem(row, df, meta_df)
 
-                # update the tally of rows we found matches for
+            # if a match was found, generate and output
+            # a LabeledExcerpt based on the original Excerpt
+            if match_poem:
+                # the dataframe row now includes search text fields;
+                # filter to just excerpt fields
+                excerpt_fields = {
+                    k: v for k, v in row.items() if k in Excerpt.fieldnames()
+                }
+                excerpt = LabeledExcerpt(
+                    # labeled excerpt fields - reference poem information
+                    poem_id=match_poem["id"],
+                    ref_corpus=match_poem["source"],
+                    # TODO
+                    # ref_span_start: Optional[int] = None
+                    # ref_span_end: Optional[int] = None
+                    # ref_span_text: Optional[str] = None
+                    identification_methods={"refmatch"},
+                    **excerpt_fields,
+                )
                 match_found += 1
-            else:
-                row["match_count"] = 0
-            # write row out with input and any match information found;
-            # filter out any fields not in the list of csv field names
-            csvwriter.writerow(row)
+                csvwriter.writerow(excerpt.to_dict())
 
     print(f"Poems with match information saved to {output_file}")
     print(
@@ -529,7 +537,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "input",
-        # TODO: determine & document minimum required fields; maybe just text?
         help="csv or tsv file with poem excerpts",
         type=pathlib.Path,
     )
