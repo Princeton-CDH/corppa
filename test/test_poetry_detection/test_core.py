@@ -226,6 +226,75 @@ class TestExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
+    def test_strip_whitespace(self):
+        # No leading or trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Leading whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text="\r\npage_text",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=2,
+            ppa_span_end=13,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text="page_text\t ",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=11,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Leading & trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text=" page_text\n",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
 
 class TestLabeledExcerpt:
     def test_init(self):

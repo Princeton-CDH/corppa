@@ -2,7 +2,7 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Optional
 
 # Would upper casing be better?
@@ -134,6 +134,21 @@ class Excerpt:
                 else:
                     json_dict[key] = value
         return json_dict
+
+    def strip_whitespace(self) -> "Excerpt":
+        """
+        Returns a copy of the excerpt such that leading and trailing whitespace
+        have been removed from the text. In addition to the text, the start
+        and end indices will also be updated.
+        """
+        ldiff = len(self.ppa_span_text) - len(self.ppa_span_text.lstrip())
+        rdiff = len(self.ppa_span_text) - len(self.ppa_span_text.rstrip())
+        return replace(
+            self,
+            ppa_span_start=self.ppa_span_start + ldiff,
+            ppa_span_end=self.ppa_span_end - rdiff,
+            ppa_span_text=self.ppa_span_text.strip(),
+        )
 
 
 @dataclass(kw_only=True)
