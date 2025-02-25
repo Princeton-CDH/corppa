@@ -2,8 +2,7 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
-from dataclasses import asdict, dataclass
-from functools import cached_property
+from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 # Would upper casing be better?
@@ -94,30 +93,31 @@ class Excerpt:
     detection_methods: set[str]
     # Optional notes field
     notes: Optional[str] = None
+    # Excerpt id, set in post initialization
+    excerpt_id: str = field(init=False)
 
     def __post_init__(self):
-        # Check that dectection method set is not empty
-        if not self.detection_methods:
-            raise ValueError("Must specify at least one detection method")
         # Check PPA span indices
         if self.ppa_span_end <= self.ppa_span_start:
             raise ValueError(
                 f"PPA span's start index {self.ppa_span_start} must be less than its end index {self.ppa_span_end}"
             )
+        # Check that dectection method set is not empty
+        if not self.detection_methods:
+            raise ValueError("Must specify at least one detection method")
 
-    @cached_property
-    def excerpt_id(self):
-        if len(self.detection_methods) > 1:
-            raise NotImplementedError(
-                "IDs for excerpts with multiple detection methods are currently undefined"
-            )
-        else:
+        # Set excerpt id
+        # TODO: Define behavior for multiple detection methods
+        if len(self.detection_methods) == 1:
             [detect_name] = self.detection_methods
-            # Should this validation occur instead within post_init?
             if detect_name not in DETECTION_PFX_TABLE:
                 raise ValueError(f"Unsupported detection method '{detect_name}'")
             detect_pfx = DETECTION_PFX_TABLE[detect_name]
-            return f"{detect_pfx}@{self.ppa_span_start}:{self.ppa_span_end}"
+            self.excerpt_id = f"{detect_pfx}@{self.ppa_span_start}:{self.ppa_span_end}"
+        else:
+            # TODO: Should all detection methods be validated?
+            # TODO: Is this the tag we want for multiple detection methods?
+            self.excerpt_id = f"mult@{self.ppa_span_start}:{self.ppa_span_end}"
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -152,7 +152,12 @@ class LabeledExcerpt(Excerpt):
     # Identification methods
     identification_methods: set[str]
 
+    # TODO: Should labeled excerpts have their own distinct IDs?
+    #       Right now, IDs are inherited from Excerpt class
+
     def __post_init__(self):
+        # Run Excerpt's post initialization
+        super().__post_init__()
         # Check that identification method set is not empty
         if not self.identification_methods:
             raise ValueError("Must specify at least one identification method")

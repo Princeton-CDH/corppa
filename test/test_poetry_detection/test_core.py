@@ -156,13 +156,24 @@ class TestExcerpt:
             excerpt = Excerpt(
                 page_id="page_id",
                 ppa_span_start=0,
-                ppa_span_end=0,
+                ppa_span_end=1,
                 ppa_span_text="page_text",
                 detection_methods={},
             )
 
+        # Invalid, single detect method
+        error_message = "Unsupported detection method 'unknown'"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={"unknown"},
+            )
+
     def test_excerpt_id(self):
-        # Typical case
+        # Single detection method
         for detection_method in ["adjudication", "manual", "passim", "xml"]:
             excerpt = Excerpt(
                 page_id="page_id",
@@ -174,19 +185,7 @@ class TestExcerpt:
             expected_result = f"{detection_method[0]}@0:1"
             assert excerpt.excerpt_id == expected_result
 
-        # Raises error for unknown detection method
-        excerpt = Excerpt(
-            page_id="page_id",
-            ppa_span_start=0,
-            ppa_span_end=1,
-            ppa_span_text="page_text",
-            detection_methods={"unknown"},
-        )
-        error_message = "Unsupported detection method 'unknown'"
-        with pytest.raises(ValueError, match=error_message):
-            excerpt.excerpt_id
-
-        # Raises error for multiple excerpts
+        # Multiple detection methods
         excerpt = Excerpt(
             page_id="page_id",
             ppa_span_start=0,
@@ -194,11 +193,7 @@ class TestExcerpt:
             ppa_span_text="page_text",
             detection_methods={"adjudication", "passim"},
         )
-        error_message = (
-            "IDs for excerpts with multiple detection methods are currently undefined"
-        )
-        with pytest.raises(NotImplementedError, match=error_message):
-            excerpt.excerpt_id
+        assert excerpt.excerpt_id == "mult@0:1"
 
     def test_to_dict(self):
         # No optional fields
@@ -207,14 +202,15 @@ class TestExcerpt:
             ppa_span_start=0,
             ppa_span_end=1,
             ppa_span_text="page_text",
-            detection_methods={"detect"},
+            detection_methods={"manual"},
         )
         expected_result = {
             "page_id": "page_id",
             "ppa_span_start": 0,
             "ppa_span_end": 1,
             "ppa_span_text": "page_text",
-            "detection_methods": ["detect"],
+            "detection_methods": ["manual"],
+            "excerpt_id": "m@0:1",
         }
 
         result = excerpt.to_dict()
@@ -243,7 +239,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=0,
             )
@@ -255,7 +251,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_end=1,
             )
@@ -271,7 +267,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=0,
                 ref_span_end=0,
@@ -287,7 +283,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=1,
                 ref_span_end=0,
@@ -299,11 +295,11 @@ class TestLabeledExcerpt:
             excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
-                ppa_span_end=0,
+                ppa_span_end=1,
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={},
             )
 
@@ -316,7 +312,7 @@ class TestLabeledExcerpt:
             ppa_span_text="page_text",
             poem_id="poem_id",
             ref_corpus="corpus_id",
-            detection_methods={"detect"},
+            detection_methods={"manual"},
             identification_methods={"id"},
         )
         expected_result = {
@@ -326,8 +322,9 @@ class TestLabeledExcerpt:
             "ppa_span_text": "page_text",
             "poem_id": "poem_id",
             "ref_corpus": "corpus_id",
-            "detection_methods": ["detect"],
+            "detection_methods": ["manual"],
             "identification_methods": ["id"],
+            "excerpt_id": "m@0:1",
         }
 
         result = excerpt.to_dict()
