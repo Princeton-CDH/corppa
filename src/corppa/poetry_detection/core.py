@@ -135,6 +135,23 @@ class Excerpt:
                     json_dict[key] = value
         return json_dict
 
+    def to_csv(self) -> dict[str, int | str]:
+        """
+        Returns a CSV-friendly dict of the poem excerpt. Unlike `to_dict`, unset optional
+        fields are included and set to empty strings.
+        """
+        csv_dict = {}
+        for key, value in asdict(self).items():
+            if value is None:
+                # Set unset fields as empty strings
+                csv_dict[key] = ""
+            elif type(value) is set:
+                # Convert sets to comma-separated lists
+                csv_dict[key] = ", ".join(value)
+            else:
+                csv_dict[key] = value
+        return csv_dict
+
     def strip_whitespace(self) -> "Excerpt":
         """
         Returns a copy of the excerpt such that leading and trailing whitespace

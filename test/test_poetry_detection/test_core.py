@@ -226,6 +226,35 @@ class TestExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
+    def test_to_csv(self):
+        # No optional fields
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        expected_result = {
+            "page_id": "page_id",
+            "ppa_span_start": 0,
+            "ppa_span_end": 1,
+            "ppa_span_text": "page_text",
+            "detection_methods": "manual",
+            "excerpt_id": "m@0:1",
+            "notes": "",
+        }
+
+        result = excerpt.to_csv()
+        assert result == expected_result
+
+        # With optional fields
+        excerpt.notes = "notes"
+        expected_result["notes"] = "notes"
+
+        result = excerpt.to_csv()
+        assert result == expected_result
+
     def test_strip_whitespace(self):
         # No leading or trailing whitespace
         excerpt = Excerpt(
