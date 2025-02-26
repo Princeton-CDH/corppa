@@ -2,11 +2,12 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Optional
 
-# Would upper casing be better?
-DETECTION_PFX_TABLE = {
+# Table of supported detection methods and their corresponding prefixes
+DETECTION_METHODS = {
     "adjudication": "a",
     "manual": "m",
     "passim": "p",
@@ -78,10 +79,10 @@ class Span:
         return overlap / max(len(self), len(other))
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class Excerpt:
     """
-    A detected excerpt of poetry within a PPA page text.
+    A detected excerpt of poetry within a PPA page text. Excerpt objects are immutable.
     """
 
     # PPA page related
@@ -90,10 +91,11 @@ class Excerpt:
     ppa_span_end: int
     ppa_span_text: str
     # Detection methods
-    detection_methods: set[str]
+    detection_methods: frozenset[str]
     # Optional notes field
     notes: Optional[str] = None
     # Excerpt id, set in post initialization
+    # Note: Cannot be passed in at initialization
     excerpt_id: str = field(init=False)
 
     def __post_init__(self):
@@ -106,18 +108,26 @@ class Excerpt:
         if not self.detection_methods:
             raise ValueError("Must specify at least one detection method")
 
+        # Validate detection methods
+        unsupported_methods = self.detection_methods - DETECTION_METHODS.keys()
+        if unsupported_methods:
+            error_message = "Unsupported detection method"
+            if len(unsupported_methods) == 1:
+                error_message += f": {next(iter(unsupported_methods))}"
+            else:
+                error_message += f"s: {', '.join(unsupported_methods)}"
+            raise ValueError(error_message)
+
         # Set excerpt id
-        # TODO: Define behavior for multiple detection methods
+        ## Get ID prefix
         if len(self.detection_methods) == 1:
             [detect_name] = self.detection_methods
-            if detect_name not in DETECTION_PFX_TABLE:
-                raise ValueError(f"Unsupported detection method '{detect_name}'")
-            detect_pfx = DETECTION_PFX_TABLE[detect_name]
-            self.excerpt_id = f"{detect_pfx}@{self.ppa_span_start}:{self.ppa_span_end}"
+            detect_pfx = DETECTION_METHODS[detect_name]
         else:
-            # TODO: Should all detection methods be validated?
-            # TODO: Is this the tag we want for multiple detection methods?
-            self.excerpt_id = f"mult@{self.ppa_span_start}:{self.ppa_span_end}"
+            # c for combination
+            detect_pfx = "c"
+        excerpt_id = f"{detect_pfx}@{self.ppa_span_start}:{self.ppa_span_end}"
+        object.__setattr__(self, "excerpt_id", excerpt_id)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -152,6 +162,28 @@ class Excerpt:
                 csv_dict[key] = value
         return csv_dict
 
+    @staticmethod
+    def from_dict(d: dict) -> "Excerpt":
+        """
+        Constructs a new Excerpt from a dictionary of the form produced by `to_dict`
+        or `to_json`.
+        """
+        input_args = deepcopy(d)
+        # Remove excerpt_id if present
+        input_args.pop("excerpt_id", None)
+        # Convert detection methods to frozenset
+        detection_methods = input_args["detection_methods"]
+        if type(detection_methods) is list:
+            ## `to_json` format
+            input_args["detection_methods"] = frozenset(detection_methods)
+        elif type(detection_methods) is str:
+            ## `to_csv` format
+            input_args["detection_methods"] = frozenset(detection_methods.split(", "))
+        else:
+            raise ValueError("Unexpected value type for detection_methods")
+        print(input_args)
+        return Excerpt(**input_args)
+
     def strip_whitespace(self) -> "Excerpt":
         """
         Return a copy of this excerpt with any leading and trailing whitespace
@@ -167,7 +199,7 @@ class Excerpt:
         )
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class LabeledExcerpt(Excerpt):
     """
     An identified excerpt of poetry within a PPA page text.
@@ -181,10 +213,7 @@ class LabeledExcerpt(Excerpt):
     ref_span_text: Optional[str] = None
 
     # Identification methods
-    identification_methods: set[str]
-
-    # TODO: Should labeled excerpts have their own distinct IDs?
-    #       Right now, IDs are inherited from Excerpt class
+    identification_methods: frozenset[str]
 
     def __post_init__(self):
         # Run Excerpt's post initialization
@@ -200,3 +229,25 @@ class LabeledExcerpt(Excerpt):
             raise ValueError(
                 f"Reference span's start index {self.ref_span_start} must be less than its end index {self.ref_span_end}"
             )
+
+    @staticmethod
+    def from_dict(d: dict) -> "LabeledExcerpt":
+        """
+        Constructs a new LabeledExcerpt from a dictionary of the form produced by `to_dict`
+        or `to_json`.
+        """
+        input_args = deepcopy(d)
+        # Remove excerpt_id if present
+        input_args.pop("excerpt_id", None)
+        # Convert detection & identification methods to frozenset
+        for fieldname in ["detection_methods", "identification_methods"]:
+            value = input_args[fieldname]
+            if type(value) is list:
+                ## `to_json` format
+                input_args[fieldname] = frozenset(value)
+            elif type(value) is str:
+                ## `to_csv` format
+                input_args[fieldname] = frozenset(value.split(", "))
+            else:
+                raise ValueError(f"Unexpected value type for {fieldname}")
+            return Excerpt(**input_args)

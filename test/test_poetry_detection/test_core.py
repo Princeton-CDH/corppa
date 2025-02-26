@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -161,8 +162,8 @@ class TestExcerpt:
                 detection_methods={},
             )
 
-        # Invalid, single detect method
-        error_message = "Unsupported detection method 'unknown'"
+        # Single unsupported detection method
+        error_message = "Unsupported detection method: unknown"
         with pytest.raises(ValueError, match=error_message):
             excerpt = Excerpt(
                 page_id="page_id",
@@ -170,6 +171,17 @@ class TestExcerpt:
                 ppa_span_end=1,
                 ppa_span_text="page_text",
                 detection_methods={"unknown"},
+            )
+
+        # Multiple unsupported detection methods
+        error_message = r"Unsupported detection methods: (u1, u2)|(u2, u1)"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={"u1", "u2", "manual"},
             )
 
     def test_excerpt_id(self):
@@ -193,7 +205,7 @@ class TestExcerpt:
             ppa_span_text="page_text",
             detection_methods={"adjudication", "passim"},
         )
-        assert excerpt.excerpt_id == "mult@0:1"
+        assert excerpt.excerpt_id == "c@0:1"
 
     def test_to_dict(self):
         # No optional fields
@@ -217,11 +229,8 @@ class TestExcerpt:
         assert result == expected_result
 
         # With optional fields
-        excerpt.notes = "notes"
-
-        expected_result |= {
-            "notes": "notes",
-        }
+        excerpt = replace(excerpt, notes="notes")
+        expected_result["notes"] = "notes"
 
         result = excerpt.to_dict()
         assert result == expected_result
@@ -249,11 +258,33 @@ class TestExcerpt:
         assert result == expected_result
 
         # With optional fields
-        excerpt.notes = "notes"
+        excerpt = replace(excerpt, notes="notes")
         expected_result["notes"] = "notes"
 
         result = excerpt.to_csv()
         assert result == expected_result
+
+    def test_from_dict(self):
+        # JSONL-friendly dict
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual", "xml"},
+        )
+        jsonl_dict = excerpt.to_dict()
+        assert Excerpt.from_dict(jsonl_dict) == excerpt
+
+        # CSV-friendly dict
+        csv_dict = excerpt.to_dict()
+        assert Excerpt.from_dict(csv_dict) == excerpt
+
+        # Error if detection_methods field has bad type
+        bad_dict = csv_dict | {"detection_methods": 0}
+        error_message = "Unexpected value type for detection_methods"
+        with pytest.raises(ValueError, match=error_message):
+            Excerpt.from_dict(bad_dict)
 
     def test_strip_whitespace(self):
         # No leading or trailing whitespace
@@ -429,10 +460,13 @@ class TestLabeledExcerpt:
         assert result == expected_result
 
         # With optional fields
-        excerpt.ref_span_start = 2
-        excerpt.ref_span_end = 3
-        excerpt.ref_span_text = "ref_text"
-        excerpt.notes = "notes"
+        excerpt = replace(
+            excerpt,
+            ref_span_start=2,
+            ref_span_end=3,
+            ref_span_text="ref_text",
+            notes="notes",
+        )
 
         expected_result |= {
             "ref_span_start": 2,
@@ -443,3 +477,26 @@ class TestLabeledExcerpt:
 
         result = excerpt.to_dict()
         assert result == expected_result
+
+    def from_dict(self):
+        # JSONL-friendly dict
+        excerpt = LabeledExcerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual", "xml"},
+        )
+        jsonl_dict = excerpt.to_dict()
+        assert LabeledExcerpt.from_dict(jsonl_dict) == excerpt
+
+        # CSV-friendly dict
+        csv_dict = excerpt.to_dict()
+        assert LabeledExcerpt.from_dict(csv_dict) == excerpt
+
+        # Error if detection or identification methods fields have bad type
+        for field in ["detection_methods", "identification_methods"]:
+            bad_dict = csv_dict | {field: 0}
+            error_message = f"Unexpected value type for {field}"
+            with pytest.raises(ValueError, match=error_message):
+                LabeledExcerpt.from_dict(bad_dict)
