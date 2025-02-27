@@ -603,7 +603,7 @@ def process(input_file):
                 )
                 match_found += 1
                 # TODO: use new to_csv method
-                csvwriter.writerow(excerpt.to_dict())
+                csvwriter.writerow(excerpt.to_csv())
 
     print(f"Poems with match information saved to {output_file}")
     print(
