@@ -1,6 +1,6 @@
 import pytest
 
-from corppa.poetry_detection.identify_poems import searchable_text
+from corppa.poetry_detection.refmatcha import searchable_text
 
 search_texts = [
     # strip punctuation and remove accents
