@@ -585,7 +585,7 @@ def process(input_file):
                     k: v for k, v in row.items() if k in Excerpt.fieldnames()
                 }
                 notes = excerpt_fields.pop("notes") or ""
-                notes += f"refmatcha: {match_poem["notes"]}"
+                notes += f"refmatcha: {match_poem['notes']}"
 
                 # NOTE: if identification logic results in a bad span, this will
                 # raise a value error
