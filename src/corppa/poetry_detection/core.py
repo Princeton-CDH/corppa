@@ -150,7 +150,7 @@ class Excerpt:
         Returns a CSV-friendly dict of the poem excerpt. Unlike `to_dict`, unset optional
         fields are included and set to empty strings.
         """
-        csv_dict = {}
+        csv_dict: dict[str, int | str] = {}
         for key, value in asdict(self).items():
             if value is None:
                 # Set unset fields as empty strings
@@ -250,4 +250,4 @@ class LabeledExcerpt(Excerpt):
                 input_args[fieldname] = frozenset(value.split(", "))
             else:
                 raise ValueError(f"Unexpected value type for {fieldname}")
-            return Excerpt(**input_args)
+        return LabeledExcerpt(**input_args)

@@ -478,14 +478,17 @@ class TestLabeledExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
-    def from_dict(self):
+    def test_from_dict(self):
         # JSONL-friendly dict
         excerpt = LabeledExcerpt(
             page_id="page_id",
             ppa_span_start=0,
             ppa_span_end=1,
             ppa_span_text="page_text",
-            detection_methods={"manual", "xml"},
+            poem_id="poem_id",
+            ref_corpus="poems",
+            detection_methods={"adjudication", "manual"},
+            identification_methods={"manual", "matcha"},
         )
         jsonl_dict = excerpt.to_dict()
         assert LabeledExcerpt.from_dict(jsonl_dict) == excerpt
