@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 """
 
-Script to identify poem excerpts by matching against a local
-collection of reference poems.
+🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵
+
+refmatcha is a script to identify poem excerpts by matching against a local
+collection of reference poems.  It takes in a CSV of excerpts
+and outputs a CSV of labeled excerpts for those excerpts it is able to identify.
 
 Setup:
 
@@ -491,9 +494,15 @@ def process(input_file):
 
     # NOTE: this is slow... there is almost certainly a more polars-ish way to
     # approach it
-    # ... is there a way to treat the search as a joins?
-    # join on search text in reference text, first line in ref text
-    # progressively decrease the number of unmatched rows?
+    # probably best option is to use map_batches
+    # needs to return poem id, corpus id, span start/end, text
+    # - can we do in waves, simplest first?
+    #       figure out: full text match; how to get span in original from search text
+    #    - if a match is found, it's removed from the next batch
+    # ... how to get start/end/text?
+
+    # notes could include rapidfuzz partial_ratio_alignment score
+    # once we have the two sets
 
     output_file = input_file.with_name(f"{input_file.stem}_matched.csv")
 
@@ -547,6 +556,7 @@ def main():
         help="csv or tsv file with poem excerpts",
         type=pathlib.Path,
     )
+    # TODO: add arg for output file
     args = parser.parse_args()
 
     process(args.input)
