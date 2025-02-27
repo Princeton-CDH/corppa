@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -156,10 +157,55 @@ class TestExcerpt:
             excerpt = Excerpt(
                 page_id="page_id",
                 ppa_span_start=0,
-                ppa_span_end=0,
+                ppa_span_end=1,
                 ppa_span_text="page_text",
                 detection_methods={},
             )
+
+        # Single unsupported detection method
+        error_message = "Unsupported detection method: unknown"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={"unknown"},
+            )
+
+        # Multiple unsupported detection methods
+        error_message = r"Unsupported detection methods: (u1, u2)|(u2, u1)"
+        with pytest.raises(ValueError, match=error_message):
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={"u1", "u2", "manual"},
+            )
+
+    def test_excerpt_id(self):
+        # Single detection method
+        for detection_method in ["adjudication", "manual", "passim", "xml"]:
+            excerpt = Excerpt(
+                page_id="page_id",
+                ppa_span_start=0,
+                ppa_span_end=1,
+                ppa_span_text="page_text",
+                detection_methods={detection_method},
+            )
+            expected_result = f"{detection_method[0]}@0:1"
+            assert excerpt.excerpt_id == expected_result
+
+        # Multiple detection methods
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"adjudication", "passim"},
+        )
+        assert excerpt.excerpt_id == "c@0:1"
 
     def test_to_dict(self):
         # No optional fields
@@ -168,25 +214,23 @@ class TestExcerpt:
             ppa_span_start=0,
             ppa_span_end=1,
             ppa_span_text="page_text",
-            detection_methods={"detect"},
+            detection_methods={"manual"},
         )
         expected_result = {
             "page_id": "page_id",
             "ppa_span_start": 0,
             "ppa_span_end": 1,
             "ppa_span_text": "page_text",
-            "detection_methods": ["detect"],
+            "detection_methods": ["manual"],
+            "excerpt_id": "m@0:1",
         }
 
         result = excerpt.to_dict()
         assert result == expected_result
 
         # With optional fields
-        excerpt.notes = "notes"
-
-        expected_result |= {
-            "notes": "notes",
-        }
+        excerpt = replace(excerpt, notes="notes")
+        expected_result["notes"] = "notes"
 
         result = excerpt.to_dict()
         assert result == expected_result
@@ -202,7 +246,132 @@ class TestExcerpt:
             "ppa_span_text",
             "detection_methods",
             "notes",
+            "excerpt_id"
         ]
+
+    def test_to_csv(self):
+        # No optional fields
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        expected_result = {
+            "page_id": "page_id",
+            "ppa_span_start": 0,
+            "ppa_span_end": 1,
+            "ppa_span_text": "page_text",
+            "detection_methods": "manual",
+            "excerpt_id": "m@0:1",
+        }
+
+        result = excerpt.to_csv()
+        assert result == expected_result
+
+        # With optional fields
+        excerpt = replace(excerpt, notes="notes")
+        expected_result["notes"] = "notes"
+
+        result = excerpt.to_csv()
+        assert result == expected_result
+
+    def test_from_dict(self):
+        # JSONL-friendly dict
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual", "xml"},
+        )
+        jsonl_dict = excerpt.to_dict()
+        assert Excerpt.from_dict(jsonl_dict) == excerpt
+
+        # CSV-friendly dict
+        ## Multiple detection methods
+        csv_dict = excerpt.to_csv()
+        assert Excerpt.from_dict(csv_dict) == excerpt
+        ## Single detection methods
+        excerpt = replace(excerpt, detection_methods={"adjudication"})
+        csv_dict = excerpt.to_csv()
+        assert Excerpt.from_dict(csv_dict) == excerpt
+
+        # Error if detection_methods field has bad type
+        bad_dict = csv_dict | {"detection_methods": 0}
+        error_message = "Unexpected value type for detection_methods"
+        with pytest.raises(ValueError, match=error_message):
+            Excerpt.from_dict(bad_dict)
+
+    def test_strip_whitespace(self):
+        # No leading or trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Leading whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text="\r\npage_text",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=2,
+            ppa_span_end=13,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text="page_text\t ",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=11,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
+
+        # Leading & trailing whitespace
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=13,
+            ppa_span_text=" page_text\n",
+            detection_methods={"manual"},
+        )
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=1,
+            ppa_span_end=12,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        assert excerpt.strip_whitespace() == expected_result
 
 
 class TestLabeledExcerpt:
@@ -217,7 +386,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=0,
             )
@@ -229,7 +398,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_end=1,
             )
@@ -245,7 +414,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=0,
                 ref_span_end=0,
@@ -261,7 +430,7 @@ class TestLabeledExcerpt:
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={"id"},
                 ref_span_start=1,
                 ref_span_end=0,
@@ -273,11 +442,11 @@ class TestLabeledExcerpt:
             excerpt = LabeledExcerpt(
                 page_id="page_id",
                 ppa_span_start=0,
-                ppa_span_end=0,
+                ppa_span_end=1,
                 ppa_span_text="page_text",
                 poem_id="poem_id",
                 ref_corpus="corpus_id",
-                detection_methods={"detect"},
+                detection_methods={"manual"},
                 identification_methods={},
             )
 
@@ -290,7 +459,7 @@ class TestLabeledExcerpt:
             ppa_span_text="page_text",
             poem_id="poem_id",
             ref_corpus="corpus_id",
-            detection_methods={"detect"},
+            detection_methods={"manual"},
             identification_methods={"id"},
         )
         expected_result = {
@@ -300,18 +469,22 @@ class TestLabeledExcerpt:
             "ppa_span_text": "page_text",
             "poem_id": "poem_id",
             "ref_corpus": "corpus_id",
-            "detection_methods": ["detect"],
+            "detection_methods": ["manual"],
             "identification_methods": ["id"],
+            "excerpt_id": "m@0:1",
         }
 
         result = excerpt.to_dict()
         assert result == expected_result
 
         # With optional fields
-        excerpt.ref_span_start = 2
-        excerpt.ref_span_end = 3
-        excerpt.ref_span_text = "ref_text"
-        excerpt.notes = "notes"
+        excerpt = replace(
+            excerpt,
+            ref_span_start=2,
+            ref_span_end=3,
+            ref_span_text="ref_text",
+            notes="notes",
+        )
 
         expected_result |= {
             "ref_span_start": 2,
@@ -335,3 +508,29 @@ class TestLabeledExcerpt:
             "ref_span_text",
             "identification_methods",
         ]
+
+    def test_from_dict(self):
+        # JSONL-friendly dict
+        excerpt = LabeledExcerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            poem_id="poem_id",
+            ref_corpus="poems",
+            detection_methods={"adjudication", "manual"},
+            identification_methods={"manual", "matcha"},
+        )
+        jsonl_dict = excerpt.to_dict()
+        assert LabeledExcerpt.from_dict(jsonl_dict) == excerpt
+
+        # CSV-friendly dict
+        csv_dict = excerpt.to_csv()
+        assert LabeledExcerpt.from_dict(csv_dict) == excerpt
+
+        # Error if detection or identification methods fields have bad type
+        for field in ["detection_methods", "identification_methods"]:
+            bad_dict = csv_dict | {field: 0}
+            error_message = f"Unexpected value type for {field}"
+            with pytest.raises(ValueError, match=error_message):
+                LabeledExcerpt.from_dict(bad_dict)

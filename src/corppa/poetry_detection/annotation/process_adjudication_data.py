@@ -24,52 +24,24 @@ import argparse
 import csv
 import pathlib
 import sys
-from collections.abc import Generator
-from typing import Any, TypedDict
+from collections.abc import Iterable
+from typing import Any
 
 import orjsonl
 from tqdm import tqdm
 from xopen import xopen
 
-
-class Excerpt(TypedDict):
-    """
-    Basic excerpt object, primarily used for type checking
-    """
-
-    start: int
-    end: int
-    text: str
-
-
-def clean_excerpt(span: Excerpt) -> Excerpt:
-    """
-    Clean excerpt so that any leading and trailing whitespace is removed. This involves
-    updating the excerpt text itself as well as its start and end indices.
-    """
-    updated_span = span.copy()
-    # Remove any leading whitespace
-    ldiff = len(span["text"]) - len(span["text"].lstrip())
-    if ldiff:
-        updated_span["start"] = span["start"] + ldiff
-        updated_span["text"] = updated_span["text"][ldiff:]
-    # Remove any trailing whitespace
-    rdiff = len(span["text"]) - len(span["text"].rstrip())
-    if rdiff:
-        updated_span["end"] = span["end"] - rdiff
-        updated_span["text"] = updated_span["text"][:-rdiff]
-    return updated_span
+from corppa.poetry_detection.core import Excerpt
 
 
 def get_excerpts(page_annotation: dict[str, Any]) -> list[Excerpt]:
     """
     Extract excerpts from page-level annotation. Excerpts have the following
-    fields:
         * start: character-level starting index
         * end: character-level end index (Pythonic, exclusive)
         * text: text of page excerpt
 
-    Note: Currently ignoring span labels, since there's only one for the
+    Note: This ignores span labels since there's only one for the
           poetry detection task.
     """
     excerpts = []
@@ -78,12 +50,14 @@ def get_excerpts(page_annotation: dict[str, Any]) -> list[Excerpt]:
     if "spans" not in page_annotation:
         raise ValueError("Page annotation missing 'spans' field")
     for span in page_annotation["spans"]:
-        excerpt: Excerpt = {
-            "start": span["start"],
-            "end": span["end"],
-            "text": page_text[span["start"] : span["end"]],
-        }
-        excerpts.append(clean_excerpt(excerpt))
+        excerpt = Excerpt(
+            page_id=page_annotation["id"],
+            ppa_span_start=span["start"],
+            ppa_span_end=span["end"],
+            ppa_span_text=page_text[span["start"] : span["end"]],
+            detection_methods={"adjudication"},
+        )
+        excerpts.append(excerpt.strip_whitespace())
     return excerpts
 
 
@@ -110,23 +84,22 @@ def process_page_annotation(page_annotation) -> dict[str, Any]:
     return page_data
 
 
-def get_excerpt_entries(page_data: dict[str, Any]) -> Generator[dict[str, Any]]:
+def simplify_excerpts(excerpts: Iterable[Excerpt]) -> list[dict[str, Any]]:
     """
-    Generate excerpt entries data from the processed page produced by
-    `process_page_annotation`.
+    Converts excerpts into a simplified form with the following fields:
+        * start = starting index of PPA span
+        * end = ending index of PPA span
+        * text = text of PPA span
     """
-    for excerpt in page_data["excerpts"]:
-        entry = {
-            "page_id": page_data["page_id"],
-            "work_id": page_data["work_id"],
-            "work_title": page_data["work_title"],
-            "work_author": page_data["work_author"],
-            "work_year": page_data["work_year"],
-            "start": excerpt["start"],
-            "end": excerpt["end"],
-            "text": excerpt["text"],
+    simplified_excerpts = []
+    for excerpt in excerpts:
+        simple_excerpt = {
+            "start": excerpt.ppa_span_start,
+            "end": excerpt.ppa_span_end,
+            "text": excerpt.ppa_span_text,
         }
-        yield entry
+        simplified_excerpts.append(simple_excerpt)
+    return simplified_excerpts
 
 
 def process_adjudication_data(
@@ -147,24 +120,28 @@ def process_adjudication_data(
     )
     csv_fieldnames = [
         "page_id",
-        "work_id",
-        "work_title",
-        "work_author",
-        "work_year",
-        "start",
-        "end",
-        "text",
+        "excerpt_id",
+        "ppa_span_start",
+        "ppa_span_end",
+        "ppa_span_text",
+        "detection_methods",
+        "notes",
     ]
     with open(output_excerpts, mode="w", newline="") as csvfile:
         csv_writer = csv.DictWriter(csvfile, fieldnames=csv_fieldnames)
         csv_writer.writeheader()
         for page_anno in progress_annos:
-            # Get & save page data
             page_data = process_page_annotation(page_anno)
-            orjsonl.append(output_pages, page_data)
 
-            for row in get_excerpt_entries(page_data):
-                csv_writer.writerow(row)
+            # Write excerpt-level data
+            for excerpt in page_data["excerpts"]:
+                csv_writer.writerow(excerpt.to_csv())
+
+            # Simplify excerpts
+            # TODO: This is needed for compatiblity with existing evaluation code
+            page_data["excerpts"] = simplify_excerpts(page_data["excerpts"])
+            # Write page-level data
+            orjsonl.append(output_pages, page_data)
 
 
 def main():

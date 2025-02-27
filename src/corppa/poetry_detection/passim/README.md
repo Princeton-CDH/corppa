@@ -94,9 +94,9 @@ python get_passim_page_results.py ppa_text.jsonl passim-output passim_page_resul
 ```
 
 ### 4. Build excerpt-level results
-Finally, an excerpt-level results file (TSV) can be built from the page-level results
+Finally, an excerpt-level results file (CSV) can be built from the page-level results
 *with excerpts* built in the previous step using `get_passim_excerpts.py`.
 
 ```
-python get_passim_excerpts.py passim_page_results.jsonl passim_excerpts.tsv
+python get_passim_excerpts.py passim_page_results.jsonl passim_excerpts.csv
 ```
