@@ -153,6 +153,7 @@ class Excerpt:
             raise ValueError(
                 f"PPA span's start index {self.ppa_span_start} must be less than its end index {self.ppa_span_end}"
             )
+
         # Check that dectection method set is not empty
         if not self.detection_methods:
             raise ValueError("Must specify at least one detection method")
