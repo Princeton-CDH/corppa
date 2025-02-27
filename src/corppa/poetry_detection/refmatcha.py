@@ -338,7 +338,7 @@ def find_reference_poem(input_row, ref_df, meta_df):
                 # filter to rows that match the regex search
                 ref_df.filter(pl.col("search_text").str.contains(re_search))
                 # for those that match, extract the search text AND
-                # the all the text that comes before it
+                # all of the text that comes before it
                 .with_columns(
                     captures=pl.col("search_text").str.extract_groups(re_extract)
                 )
