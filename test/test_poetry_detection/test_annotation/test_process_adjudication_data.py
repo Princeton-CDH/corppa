@@ -168,8 +168,13 @@ def test_process_adjudication_data(
     ]
     excerpts_csv_form = [e.to_csv() for e in excerpts]
     csv_text = ",".join(csv_fields) + "\n"
-    csv_text += ",".join([f"{excerpts_csv_form[0][f]}" for f in csv_fields]) + "\n"
-    csv_text += ",".join([f"{excerpts_csv_form[1][f]}" for f in csv_fields]) + "\n"
+    # Note: notes field is uninitialized
+    csv_text += (
+        ",".join([f"{excerpts_csv_form[0][f]}" for f in csv_fields[:-1]]) + ",\n"
+    )
+    csv_text += (
+        ",".join([f"{excerpts_csv_form[1][f]}" for f in csv_fields[:-1]]) + ",\n"
+    )
     assert out_csv.read_text(encoding="utf-8") == csv_text
 
     # Disable progress
