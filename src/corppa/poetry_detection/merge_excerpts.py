@@ -11,7 +11,7 @@ from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 EXCERPT_FIELDS = Excerpt.fieldnames()
 LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
 LABEL_ONLY_FIELDS = set(LABELED_EXCERPT_FIELDS) - set(EXCERPT_FIELDS)
-print(LABEL_ONLY_FIELDS)
+
 
 LABEL_ONLY_FIELD_TYPES = {
     "ref_span_end": int,
@@ -21,8 +21,6 @@ LABEL_ONLY_FIELD_TYPES = {
     "ref_span_start": int,
     "identification_methods": str,
 }
-# .cast(pl.Float64)
-# field_types =
 
 
 def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
@@ -52,16 +50,18 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
 
 
 def merge_excerpts(df, other_df):
-    print(f"merging excerpt dataframes: {len(df)} rows + {len(other_df)} rows")
-
-    # do a left (full?) join based on page_id + excerpt_id
-    other_df = other_df.drop(
+    # easiest option is to do a LEFT join on page id and excerpt id
+    join_fields = ["page_id", "excerpt_id"]
+    # before joining, drop redundant fields that will be the same
+    # on any excerpt with matching page & excerpt id
+    other_join = other_df.drop(
         "detection_methods", "ppa_span_start", "ppa_span_end", "ppa_span_text"
     )
-    merged = df.join(other_df, on=["page_id", "excerpt_id"], how="left")
-    # if notes_right is present, then notes need to be merged
+    merged = df.join(other_join, on=join_fields, how="left")
+    # if notes_right is present, then we have notes coming from both sides
+    # of the join; combine the notes into a single notes field
     if "notes_right" in merged.columns:
-        # create a new notes field combining left and right notes with a newline,
+        # update notes field by combining left and right notes with a newline,
         # and then strip any outer newlines
         merged = merged.with_columns(
             notes=pl.col("notes")
@@ -70,30 +70,17 @@ def merge_excerpts(df, other_df):
             .str.strip_chars("\n")
         ).drop("notes_right")
 
+    # the left join omits any excerpts in other_df that are not in the main df
+    # use an "anti" join starting with the other df to get all the rows
+    # in other_df that are not present in the first df
+    right_df = other_df.join(df, on=join_fields, how="anti")
+    if not right_df.is_empty():
+        # ensure field order is exactly the same, then extend/doncat
+        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(
+            right_df.select(LABELED_EXCERPT_FIELDS)
+        )
+
     return merged
-
-    print(f"merged dataframes: {len(merged)} rows")
-    print(merged.columns)
-    print(merged.head(10))
-
-    return
-    print("df columns:")
-    print(df.columns)
-    print("other columns:")
-    print(other_df.columns)
-
-    # extend one dataframe with the next
-    extended = df.extend(other_df)
-    print(f"extended dataframes: {len(extended)} rows")
-    grouped = extended.group_by(pl.col("page_id"), pl.col("excerpt_id")).all()
-    print(grouped)
-
-
-#     pl.col("poem_id"),
-#     pl.col("notes"),
-#     # [pl.col(field) for field in LABELED_EXCERPT_FIELDS]
-# )
-# print(grouped.head(10))
 
 
 def main():
