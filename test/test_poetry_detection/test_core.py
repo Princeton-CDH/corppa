@@ -251,7 +251,6 @@ class TestExcerpt:
             "ppa_span_text": "page_text",
             "detection_methods": "manual",
             "excerpt_id": "m@0:1",
-            "notes": "",
         }
 
         result = excerpt.to_csv()
@@ -277,7 +276,7 @@ class TestExcerpt:
         assert Excerpt.from_dict(jsonl_dict) == excerpt
 
         # CSV-friendly dict
-        csv_dict = excerpt.to_dict()
+        csv_dict = excerpt.to_csv()
         assert Excerpt.from_dict(csv_dict) == excerpt
 
         # Error if detection_methods field has bad type
@@ -494,7 +493,7 @@ class TestLabeledExcerpt:
         assert LabeledExcerpt.from_dict(jsonl_dict) == excerpt
 
         # CSV-friendly dict
-        csv_dict = excerpt.to_dict()
+        csv_dict = excerpt.to_csv()
         assert LabeledExcerpt.from_dict(csv_dict) == excerpt
 
         # Error if detection or identification methods fields have bad type

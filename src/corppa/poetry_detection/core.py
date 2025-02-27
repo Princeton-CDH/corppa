@@ -91,7 +91,7 @@ class Excerpt:
     ppa_span_end: int
     ppa_span_text: str
     # Detection methods
-    detection_methods: frozenset[str]
+    detection_methods: set[str]
     # Optional notes field
     notes: Optional[str] = None
     # Excerpt id, set in post initialization
@@ -147,19 +147,17 @@ class Excerpt:
 
     def to_csv(self) -> dict[str, int | str]:
         """
-        Returns a CSV-friendly dict of the poem excerpt. Unlike `to_dict`, unset optional
-        fields are included and set to empty strings.
+        Returns a CSV-friendly dict of the poem excerpt. Note that like `to_dict` unset
+        fields are not included.
         """
         csv_dict: dict[str, int | str] = {}
         for key, value in asdict(self).items():
-            if value is None:
-                # Set unset fields as empty strings
-                csv_dict[key] = ""
-            elif type(value) is set:
+            if value is not None:
                 # Convert sets to comma-separated lists
-                csv_dict[key] = ", ".join(value)
-            else:
-                csv_dict[key] = value
+                if type(value) is set:
+                    csv_dict[key] = ", ".join(value)
+                else:
+                    csv_dict[key] = value
         return csv_dict
 
     @staticmethod
@@ -171,17 +169,19 @@ class Excerpt:
         input_args = deepcopy(d)
         # Remove excerpt_id if present
         input_args.pop("excerpt_id", None)
-        # Convert detection methods to frozenset
+        # Convert detection methods to set
         detection_methods = input_args["detection_methods"]
         if type(detection_methods) is list:
             ## `to_json` format
-            input_args["detection_methods"] = frozenset(detection_methods)
+            input_args["detection_methods"] = set(detection_methods)
         elif type(detection_methods) is str:
             ## `to_csv` format
-            input_args["detection_methods"] = frozenset(detection_methods.split(", "))
+            if ", " in detection_methods:
+                input_args["detection_methods"] = set(detection_methods.split(", "))
+            else:
+                input_args["detection_methods"] = set(detection_methods)
         else:
             raise ValueError("Unexpected value type for detection_methods")
-        print(input_args)
         return Excerpt(**input_args)
 
     def strip_whitespace(self) -> "Excerpt":
@@ -213,7 +213,7 @@ class LabeledExcerpt(Excerpt):
     ref_span_text: Optional[str] = None
 
     # Identification methods
-    identification_methods: frozenset[str]
+    identification_methods: set[str]
 
     def __post_init__(self):
         # Run Excerpt's post initialization
@@ -239,15 +239,15 @@ class LabeledExcerpt(Excerpt):
         input_args = deepcopy(d)
         # Remove excerpt_id if present
         input_args.pop("excerpt_id", None)
-        # Convert detection & identification methods to frozenset
+        # Convert detection & identification methods to set
         for fieldname in ["detection_methods", "identification_methods"]:
             value = input_args[fieldname]
             if type(value) is list:
                 ## `to_json` format
-                input_args[fieldname] = frozenset(value)
+                input_args[fieldname] = set(value)
             elif type(value) is str:
                 ## `to_csv` format
-                input_args[fieldname] = frozenset(value.split(", "))
+                input_args[fieldname] = set(value.split(", "))
             else:
                 raise ValueError(f"Unexpected value type for {fieldname}")
         return LabeledExcerpt(**input_args)
