@@ -276,6 +276,11 @@ class TestExcerpt:
         assert Excerpt.from_dict(jsonl_dict) == excerpt
 
         # CSV-friendly dict
+        ## Multiple detection methods
+        csv_dict = excerpt.to_csv()
+        assert Excerpt.from_dict(csv_dict) == excerpt
+        ## Single detection methods
+        excerpt = replace(excerpt, detection_methods={"adjudication"})
         csv_dict = excerpt.to_csv()
         assert Excerpt.from_dict(csv_dict) == excerpt
 

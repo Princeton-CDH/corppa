@@ -179,7 +179,7 @@ class Excerpt:
             if ", " in detection_methods:
                 input_args["detection_methods"] = set(detection_methods.split(", "))
             else:
-                input_args["detection_methods"] = set(detection_methods)
+                input_args["detection_methods"] = {detection_methods}
         else:
             raise ValueError("Unexpected value type for detection_methods")
         return Excerpt(**input_args)
