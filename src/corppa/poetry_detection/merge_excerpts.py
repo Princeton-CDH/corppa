@@ -87,6 +87,10 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
         "detection_methods", "ppa_span_start", "ppa_span_end", "ppa_span_text"
     )
     merged = df.join(other_join, on=join_fields, how="left")
+
+    # NOTE: could also have right columns for poem_id_right, ref_corpus_right
+    # if they are the same, merge; otherwise... split into two rows
+
     # if notes_right is present, then we have notes coming from both sides
     # of the join; combine the notes into a single notes field
     if "notes_right" in merged.columns:
@@ -98,6 +102,22 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
             .add(pl.col("notes_right"))
             .str.strip_chars("\n")
         ).drop("notes_right")
+
+    if "identification_methods_right" in merged.columns:
+        merged = merged.with_columns(
+            identification_methods=pl.when(
+                pl.col("identification_methods_right").is_null()
+            )
+            .then(pl.col("identification_methods"))
+            .when(pl.col("identification_methods").is_null())
+            .then(pl.col("identification_methods_right"))
+            .otherwise(
+                pl.col("identification_methods")
+                .add(",")  # TODO: we should probably use a different delimiter...
+                .add(pl.col("identification_methods_right"))
+            )
+            .alias("val")
+        ).drop("identification_methods_right")
 
     # the left join omits any excerpts in other_df that are not in the main df
     # use an "anti" join starting with the other df to get all the rows
@@ -135,11 +155,12 @@ def merge_duplicate_ids(df):
             data.drop("identification_methods", "index").is_duplicated()
         )
 
-        # TODO: if id is same but ref start/span/text differs, do we merge?
-        # if so, how do we choose?
+        # TODO: if id is same but ref start/span/text differs, should we merge?
+        # (probably not in this round)
 
         if not repeats.is_empty():
             # convert list of id methods to string in each row, then combine all rows
+            # TODO: standardize on delimited string or list when loading/serializing
             repeats = (
                 repeats.with_columns(
                     # convert list of ids in each row to string
@@ -207,11 +228,21 @@ def main():
     excerpts = merge_duplicate_ids(excerpts)
     labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
 
+    # summary information about the content and what as done
     print(
         f"""Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files.
-{len(excerpts):,} total excerpts after merging; {len(labeled_excerpts):,} labeled excerpts.
- """
+{len(excerpts):,} total excerpts after merging; {len(labeled_excerpts):,} labeled excerpts. """
     )
+    detectmethod_counts = excerpts["detection_methods"].value_counts()
+    idmethod_counts = labeled_excerpts["identification_methods"].value_counts()
+    print("Total by detection method:")
+    for row in detectmethod_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{row[0]}: {row[1]:,}")
+    print("Total by identification method:")
+    for row in idmethod_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{row[0]}: {row[1]:,}")
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
