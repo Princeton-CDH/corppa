@@ -4,9 +4,8 @@ import polars as pl
 import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
-from corppa.poetry_detection.merge_excerpts import merge_excerpts
+from corppa.poetry_detection.merge_excerpts import combine_excerpts
 
-#
 excerpt1 = Excerpt(
     page_id="p.1",
     ppa_span_start=10,
@@ -55,11 +54,11 @@ excerpt2_label1 = LabeledExcerpt.from_excerpt(
 )
 
 
-def test_merge_excerpts_1ex_1label():
+def test_combine_excerpts_1ex_1label():
     # excerpt + labeled excerpt (same id)
     df = pl.from_dicts([excerpt1.to_dict()])
     other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = merge_excerpts(df, other_df)
+    merged = combine_excerpts(df, other_df)
     # expect one row
     assert len(merged) == 1
     # should have all columns for labeled excerpt (order-agnostic)
@@ -70,11 +69,11 @@ def test_merge_excerpts_1ex_1label():
     assert merged_excerpt == excerpt1_label1
 
 
-def test_merge_excerpts_1ex_2labels():
+def test_combine_excerpts_1ex_2labels():
     # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
     df = pl.from_dicts([excerpt1.to_dict()])
     other_df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label2.to_dict()])
-    merged = merge_excerpts(df, other_df)
+    merged = combine_excerpts(df, other_df)
     # expect two rows with  two different labels
     assert len(merged) == 2
     # polars preserves order, so we can check that they match what was sent in
@@ -83,12 +82,12 @@ def test_merge_excerpts_1ex_2labels():
     assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label2
 
 
-def test_merge_excerpts_1ex_note_1label():
+def test_combine_excerpts_1ex_note_1label():
     # excerpt with note + labeled excerpt (same id)
     ex1_notes = replace(excerpt1, notes="detection information")
     df = pl.from_dicts([ex1_notes.to_dict()])
     other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = merge_excerpts(df, other_df)
+    merged = combine_excerpts(df, other_df)
     # expect one row
     assert len(merged) == 1
     # should have all columns for labeled excerpt - no extra notes field
@@ -101,11 +100,11 @@ def test_merge_excerpts_1ex_note_1label():
     assert merged_excerpt == excerpt_with_notes
 
 
-def test_merge_excerpts_1ex_different_label():
+def test_combine_excerpts_1ex_different_label():
     # excerpt 2 + labeled excerpt 1 - should preserve both
     df = pl.from_dicts([excerpt2.to_dict()])
     other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = merge_excerpts(df, other_df)
+    merged = combine_excerpts(df, other_df)
     # expect two rows
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
@@ -121,11 +120,11 @@ def test_merge_excerpts_1ex_different_label():
     assert merged_excerpt1_label1 == excerpt1_label1
 
 
-def test_merge_excerpts_two_different_labels():
+def test_combine_excerpts_two_different_labels():
     assert excerpt1_label1.excerpt_id != excerpt2_label1.excerpt_id
     df = pl.from_dicts([excerpt1_label1.to_dict()])
     other_df = pl.from_dicts([excerpt2_label1.to_dict()])
-    merged = merge_excerpts(df, other_df)
+    merged = combine_excerpts(df, other_df)
     # expect two rows
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
@@ -135,21 +134,21 @@ def test_merge_excerpts_two_different_labels():
     assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt2_label1
 
 
-def test_merge_excerpts_1ex_2labels_diffmethod():
+def test_combine_excerpts_1ex_2labels_diffmethod():
     # excerpt + two matching labeled excerpts
     # - same excerpt id, two labels with same ref ids but different method
-    # - method should be combined
+    # combine method does not merge these
     df = pl.from_dicts([excerpt1.to_dict()])
+    # everything the same except for the method (unlikely!)
+    excerpt1_label1_method2 = replace(
+        excerpt1_label1, identification_methods={"refmatcha"}
+    )
+    other_df = pl.from_dicts(
+        [excerpt1_label1.to_dict(), excerpt1_label1_method2.to_dict()]
+    )
+    merged = combine_excerpts(df, other_df)
+    assert len(merged) == 2
 
-    # TODO: use excerpt1_label1 to set different id method
+    # TODO: need a way to combine duplicate ref ids from different methods
     # and tweak the ref fields but preserve poem id
-    # we want a single row with combined ids (and maybe notes?)
-
-    # other_df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label2.to_dict()])
-    # merged = merge_excerpts(df, other_df)
-    # # expect two rows with  two different labels
-    # assert len(merged) == 2
-    # # polars preserves order, so we can check that they match what was sent in
-    # # results should exactly match the labeled excerpts since all other fields are same
-    # assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label1
-    # assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label2
+    # we want a single row with combined ids and notes

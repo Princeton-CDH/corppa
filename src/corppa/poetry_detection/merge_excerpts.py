@@ -61,8 +61,8 @@ def fix_columns(df):
     return df.select(LABELED_EXCERPT_FIELDS)
 
 
-def merge_excerpts(df, other_df):
-    # easiest option is to do a LEFT join on page id and excerpt id
+def combine_excerpts(df, other_df):
+    # smplest option is to do a LEFT join on page id and excerpt id
     join_fields = ["page_id", "excerpt_id"]
     # before joining, drop redundant fields that will be the same
     # on any excerpt with matching page & excerpt id
@@ -128,7 +128,7 @@ def main():
     # starting with the second input file, merge into the main excerpt
     for input_file in args.input_files[1:]:
         merge_df = excerpts_df(input_file)
-        excerpts = merge_excerpts(excerpts, merge_df)
+        excerpts = combine_excerpts(excerpts, merge_df)
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
