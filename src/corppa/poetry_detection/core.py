@@ -187,7 +187,9 @@ class Excerpt:
             else:
                 input_args["detection_methods"] = {detection_methods}
         else:
-            raise ValueError("Unexpected value type for detection_methods")
+            raise ValueError(
+                f"Unexpected value type '{type(detection_methods).__name__}' for detection_methods"
+            )
         return Excerpt(**input_args)
 
     def strip_whitespace(self) -> "Excerpt":
@@ -255,5 +257,8 @@ class LabeledExcerpt(Excerpt):
                 ## `to_csv` format
                 input_args[fieldname] = set(value.split(", "))
             else:
-                raise ValueError(f"Unexpected value type for {fieldname}")
+                raise ValueError(
+                    f"Unexpected value type '{type(value).__name__}' for {fieldname}"
+                )
+
         return LabeledExcerpt(**input_args)

@@ -300,7 +300,7 @@ class TestExcerpt:
 
         # Error if detection_methods field has bad type
         bad_dict = csv_dict | {"detection_methods": 0}
-        error_message = "Unexpected value type for detection_methods"
+        error_message = "Unexpected value type 'int' for detection_methods"
         with pytest.raises(ValueError, match=error_message):
             Excerpt.from_dict(bad_dict)
 
@@ -545,7 +545,7 @@ class TestLabeledExcerpt:
         # Error if detection or identification methods fields have bad type
         for field in ["detection_methods", "identification_methods"]:
             bad_dict = csv_dict | {field: 0}
-            error_message = f"Unexpected value type for {field}"
+            error_message = f"Unexpected value type 'int' for {field}"
             with pytest.raises(ValueError, match=error_message):
                 LabeledExcerpt.from_dict(bad_dict)
 
