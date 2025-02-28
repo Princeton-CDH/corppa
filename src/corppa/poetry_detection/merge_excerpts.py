@@ -61,7 +61,18 @@ def fix_columns(df):
     return df.select(LABELED_EXCERPT_FIELDS)
 
 
-def combine_excerpts(df, other_df):
+def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
+    """Combine two Polars dataframes with excerpt or labeled excerpt data.
+    Excerpts are joined on the combination of page id and excerpt id.
+    All excerpts from both dataframes are included in the resulting dataframe.
+    Excerpts are combined as follows:
+    - an unlabeled excerpt and a labeled excerpt for the same excerpt
+      will be combined
+    - if combined excerpts both have content in the notes, the notes text
+      will be combined
+    - multiple labeled excerpts for the same excerpt id are NOT combined
+    """
+
     # smplest option is to do a LEFT join on page id and excerpt id
     join_fields = ["page_id", "excerpt_id"]
     # before joining, drop redundant fields that will be the same
