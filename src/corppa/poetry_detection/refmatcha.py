@@ -584,11 +584,16 @@ def process(input_file):
                 excerpt_fields = {
                     k: v for k, v in row.items() if k in Excerpt.fieldnames()
                 }
+                excerpt_fields.pop("excerpt_id")
+                excerpt_fields["detection_methods"] = [
+                    excerpt_fields["detection_methods"]
+                ]
                 notes = excerpt_fields.pop("notes") or ""
                 notes += f"refmatcha: {match_poem['notes']}"
 
                 # NOTE: if identification logic results in a bad span, this will
                 # raise a value error
+                # TODO: Use new from_excerpt method once we have it
                 excerpt = LabeledExcerpt(
                     # labeled excerpt fields - reference poem information
                     poem_id=match_poem["id"],
@@ -598,7 +603,6 @@ def process(input_file):
                     ref_span_text=match_poem["ref_span_text"],
                     identification_methods={"refmatcha"},
                     notes=notes,
-                    # TODO: use new from_dict method ?
                     **excerpt_fields,
                 )
                 match_found += 1

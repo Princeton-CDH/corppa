@@ -166,12 +166,6 @@ class Excerpt:
                     csv_dict[key] = value
         return csv_dict
 
-    @classmethod
-    def fieldnames(cls) -> list[str]:
-        """Return a list of names for the fields in this class,
-        in order."""
-        return [f.name for f in fields(cls)]
-
     @staticmethod
     def from_dict(d: dict) -> "Excerpt":
         """
