@@ -1,14 +1,32 @@
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from corppa.poetry_detection.core import LabeledExcerpt
 from corppa.poetry_detection.passim.get_passim_excerpts import (
+    get_page_texts,
     get_passim_excerpts,
     save_passim_excerpts,
 )
 
 
 @patch("corppa.poetry_detection.passim.get_passim_excerpts.orjsonl")
-def test_get_passim_exceprts(mock_orjsonl):
+def test_get_page_texts(mock_orjsonl):
+    # Setup corpus data
+    jsonl_data = [
+        {"id": "a", "text": "1"},
+        {"id": "b", "text": "2"},
+        {"id": "c", "text": "3"},
+    ]
+    mock_orjsonl.stream.return_value = jsonl_data
+
+    expected_results = {"a": "1", "c": "3"}
+    assert get_page_texts({"a", "c", "z"}, "input jsonl") == expected_results
+    mock_orjsonl.stream.assert_called_once_with("input jsonl")
+
+
+@patch.object(LabeledExcerpt, "correct_page_excerpt")
+@patch("corppa.poetry_detection.passim.get_passim_excerpts.get_page_texts")
+@patch("corppa.poetry_detection.passim.get_passim_excerpts.orjsonl")
+def test_get_passim_excerpts(mock_orjsonl, mock_get_page_texts, mock_correct_excerpt):
     test_page_data = [
         # A page with one poem excerpt
         {
@@ -57,6 +75,9 @@ def test_get_passim_exceprts(mock_orjsonl):
         # A page with no identified poem excerpts
         {"page_id": "page_c", "n_spans": 0, "poem_spans": []},
     ]
+
+    # Basic case: without correction
+    mock_orjsonl.stream.return_value = test_page_data
     expected_results = [
         LabeledExcerpt(
             page_id="page_a",
@@ -99,12 +120,24 @@ def test_get_passim_exceprts(mock_orjsonl):
         ),
     ]
 
-    mock_orjsonl.stream.return_value = iter(test_page_data)
     results = list(get_passim_excerpts("input"))
     mock_orjsonl.stream.assert_called_once_with("input")
-
-    # Verify output
+    mock_get_page_texts.assert_not_called()
+    mock_correct_excerpt.assert_not_called()
     assert results == expected_results
+
+    # With correction
+    mock_orjsonl.reset_mock()
+    mock_get_page_texts.return_value = {"page_b": "some", "page_c": "text"}
+    mock_correct_excerpt.side_effect = ["a", "b"]
+
+    results = list(get_passim_excerpts("input", ppa_text_corpus="corpus"))
+    assert mock_orjsonl.stream.call_count == 2
+    mock_orjsonl.stream.assert_has_calls([call("input"), call("input")])
+    assert results == [expected_results[0], "a", "b"]
+    mock_get_page_texts.assert_called_once_with({"page_a", "page_b"}, "corpus")
+    assert mock_correct_excerpt.call_count == 2
+    mock_correct_excerpt.assert_has_calls([call("some"), call("some")])
 
 
 @patch("corppa.poetry_detection.passim.get_passim_excerpts.get_passim_excerpts")
@@ -140,9 +173,9 @@ def test_save_passim_excerpts(mock_get_excerpts, tmpdir):
         ),
     ]
 
-    mock_get_excerpts.return_value = iter(test_excerpts)
+    mock_get_excerpts.return_value = test_excerpts
     save_passim_excerpts("input", out_csv)
-    mock_get_excerpts.assert_called_once_with("input")
+    mock_get_excerpts.assert_called_once_with("input", ppa_text_corpus=None)
 
     # Verify CSV output
     csv_fields = [
@@ -170,3 +203,8 @@ def test_save_passim_excerpts(mock_get_excerpts, tmpdir):
         ",".join([f"{excerpts_csv_form[1][f]}" for f in csv_fields[:-1]]) + ",\n"
     )
     assert out_csv.read_text(encoding="utf-8") == csv_text
+
+    # Verify that optional parameter works as expected
+    mock_get_excerpts.reset_mock()
+    save_passim_excerpts("input", out_csv, ppa_text_corpus="ppa_corpus")
+    mock_get_excerpts.assert_called_once_with("input", ppa_text_corpus="ppa_corpus")
