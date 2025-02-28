@@ -4,7 +4,7 @@ Custom data type for poetry excerpts identified with the text of PPA pages.
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import Any, Optional
+from typing import Any, Optional, Self
 
 from Bio.Align import PairwiseAligner
 
@@ -192,7 +192,7 @@ class Excerpt:
             raise ValueError("Unexpected value type for detection_methods")
         return Excerpt(**input_args)
 
-    def strip_whitespace(self) -> "Excerpt":
+    def strip_whitespace(self) -> Self:
         """
         Return a copy of this excerpt with any leading and trailing whitespace
         removed from the text and start and end indices updated to match any changes.
@@ -206,7 +206,7 @@ class Excerpt:
             ppa_span_text=self.ppa_span_text.strip(),
         )
 
-    def correct_page_excerpt(self, page_text: str) -> "Excerpt":
+    def correct_page_excerpt(self, page_text: str) -> Self:
         """
         For an excerpt that may have undergone textual transformations during
         the detection process, this method attemps to correct the excerpt such
