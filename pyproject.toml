@@ -27,6 +27,7 @@ dependencies = [
 	"intspan",
 	"orjsonl",
 	"tqdm",
+  "biopython"
 ]
 
 [project.optional-dependencies]
