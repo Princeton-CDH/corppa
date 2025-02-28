@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
-from corppa.poetry_detection.merge_excerpts import combine_excerpts
+from corppa.poetry_detection.merge_excerpts import combine_excerpts, merge_duplicate_ids
 
 excerpt1 = Excerpt(
     page_id="p.1",
@@ -149,6 +149,21 @@ def test_combine_excerpts_1ex_2labels_diffmethod():
     merged = combine_excerpts(df, other_df)
     assert len(merged) == 2
 
-    # TODO: need a way to combine duplicate ref ids from different methods
-    # and tweak the ref fields but preserve poem id
-    # we want a single row with combined ids and notes
+
+def test_merge_duplicate_ids():
+    # excerpt + two matching labeled excerpts
+    # - same excerpt id, two labels with same ref ids but different method
+
+    # everything the same except for the method (unlikely!)
+    excerpt1_label1_method2 = replace(
+        excerpt1_label1, identification_methods={"refmatcha"}
+    )
+    df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label1_method2.to_dict()])
+    merged = merge_duplicate_ids(df)
+    assert len(merged) == 1
+    # should have all columns for labeled excerpt (order-agnostic)
+    assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
+    excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    assert excerpt != excerpt1_label1
+    # should have both methods
+    assert excerpt.identification_methods == {"manual", "refmatcha"}

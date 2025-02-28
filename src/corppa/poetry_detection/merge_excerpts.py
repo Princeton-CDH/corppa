@@ -105,6 +105,46 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     return merged
 
 
+def merge_duplicate_ids(df):
+    # copy the df and add a row index for removal
+    updated_df = df.with_row_index()
+    # create a df with the same schema but no data to collect merged excerpts
+    merged_excerpts = updated_df.clear()
+
+    for group, data in updated_df.group_by(["page_id", "excerpt_id", "poem_id"]):
+        print(group)  # group is a tuple of page id, excerpt id, poem id
+        print(data)  # data is a df of matching rows
+        # if all labeled excerpt fields are same, consolidate
+        repeats = data.filter(
+            data.drop("identification_methods", "index").is_duplicated()
+        )
+
+        # convert list of id methods to string in each row, then combine all rows
+        repeats = (
+            repeats.with_columns(
+                # convert list of ids in each row to string
+                id_meth=pl.col("identification_methods").list.join(",")
+            )
+            # combine all the ids
+            .with_columns(combined_id_string=pl.col("id_meth").str.join(","))
+            # split again to convert to list format
+            .with_columns(
+                identification_methods=pl.col("combined_id_string").str.split(",")
+            )
+            # drop the interim fields
+            .drop("id_meth", "combined_id_string")
+        )
+        # remove the repeats from the main dataframe
+        updated_df = updated_df.filter(
+            ~pl.col("index").is_in(repeats.select(pl.col("index")))
+        )
+        # add the consolidated row to the merged df
+        merged_excerpts.extend(repeats[:1])
+
+    # combine and return
+    return updated_df.extend(merged_excerpts).drop("index")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Merge excerpts with identified excerpts or notes"
