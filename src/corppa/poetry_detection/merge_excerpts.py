@@ -133,6 +133,9 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
 
 
 def merge_duplicate_ids(df):
+    # look for multiple rows for the same excerpt id and poem id,
+    # try to merge them (only handles simple cases for now)
+
     # copy the df and add a row index for removal
     updated_df = df.with_row_index()
     # create a df with the same schema but no data to collect merged excerpts
