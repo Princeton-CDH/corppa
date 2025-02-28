@@ -1,6 +1,7 @@
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import Mock, NonCallableMock, patch
 
+import numpy as np
 import pytest
 
 from corppa.poetry_detection.core import (
@@ -358,6 +359,72 @@ class TestExcerpt:
             detection_methods={"manual"},
         )
         assert excerpt.strip_whitespace() == expected_result
+
+    @patch("corppa.poetry_detection.core.PairwiseAligner")
+    def test_page_excerpt(self, mock_pairwise_aligner):
+        # Setup mocks
+        ## Mock resulting alignment object
+        mock_alignment = NonCallableMock()
+        ### The start & end indices of aligned sequences;
+        mock_alignment.aligned = np.array(
+            [
+                # page sequence indices
+                [[10, 11], [12, 13], [14, 15]],
+                # excerpt sequnece indices
+                [[0, 2], [3, 4], [5, 8]],
+            ]
+        )
+        ## Mock aligner object
+        mock_aligner = NonCallableMock()
+        mock_aligner.align = Mock(return_value=[mock_alignment])
+        mock_pairwise_aligner.return_value = mock_aligner
+
+        page_text = "page_text hello"
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="excerpt_text",
+            detection_methods={"xml"},
+        )
+        result = excerpt.correct_page_excerpt(page_text)
+        mock_pairwise_aligner.assert_called_once_with(
+            mismatch_score=-0.5,
+            gap_score=-0.5,
+            query_left_gap_score=0,
+            query_right_gap_score=0,
+        )
+        mock_aligner.align.assert_called_once_with("page_text hello", "excerpt_text")
+        # Check result
+        expected_result = Excerpt(
+            page_id="page_id",
+            ppa_span_start=10,
+            ppa_span_end=15,
+            ppa_span_text="hello",
+            detection_methods={"xml"},
+        )
+        assert result == expected_result
+
+    def test_page_excerpt_example(self):
+        # Example page: CB0126086107.0218
+        ppa_text = "CHAP. XIII. ORATIONS AND HARANGUES.\n185\nSecure this, and you fecure every thing. Lofe this, and all\nis loft.\nPRICE.\nCHA P. XIII.\nTHE SPEECH OF BRUTUS ON THE DEATH\nR\nOF CÆSAR.\nOMANS, countrymen, and lovers! hear me for my\ncaufe; and be filent, that you may hear. Believe me\nfor mine honour, and have refpect to mine honour, that you\nmay believe. Cenfure me in your wifdom, and awake your\nfenfes, that you may the better judge.\nin\nIf there be any\nthis affembly, any dear friend of Cæfar's, to him I ſay, that\nBrutus's love to Cæfar was no leſs than his.\nit\nIf then that\nfriend demand, why Brutus rofe againſt Cæfar, this is my\nanfwer: Not that I loved Cæfar lefs, but that I loved Rome\nmore. Had you rather Cæfar were living, and die all flaves;\nthan that Cæfar were dead, to live all freemen? As Cæfar\nloved me, I weep for him; as he was fortunate, I rejoiceat\ni as he was valiant, I honour him; but as he was ambiti-\nI flew him. There are tears for his love, joy for his\nfortune, honour for his valour, and death for his ambition.\nWho's here fo bafe, that would be a bond-man? If any,\nfpeak; for him have I offended. Who's here fo rude, \"that\nwould not be a Roman? If any, ſpeak; for him have I of-\nfended. Who's here fo vile, that will not love his country?\nI paufe for a\nIf any, fpeak; for him have I offended.-\nous,\nreply.\nNONE ?\nthen none have I offended I have done no\nmore"
+        excerpt = Excerpt(
+            page_id="CB0126086107.0218",
+            ppa_span_start=430,
+            ppa_span_end=554,
+            ppa_span_text="If there be any\nthis affembly, any dear friend of Caefar's, to him I say, that\nBrutus's love to Caefar was no less than his.",
+            detection_methods={"passim"},
+        )
+
+        expected_result = Excerpt(
+            page_id="CB0126086107.0218",
+            ppa_span_start=429,
+            ppa_span_end=551,
+            ppa_span_text="If there be any\nthis affembly, any dear friend of Cæfar's, to him I ſay, that\nBrutus's love to Cæfar was no leſs than his.",
+            detection_methods={"passim"},
+        )
+        result = excerpt.correct_page_excerpt(ppa_text)
+        assert result == expected_result
 
 
 class TestLabeledExcerpt:

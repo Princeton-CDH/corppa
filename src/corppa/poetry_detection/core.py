@@ -6,6 +6,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Optional
 
+from Bio.Align import PairwiseAligner
+
 # Table of supported detection methods and their corresponding prefixes
 DETECTION_METHODS = {
     "adjudication": "a",
@@ -196,6 +198,33 @@ class Excerpt:
             ppa_span_start=self.ppa_span_start + ldiff,
             ppa_span_end=self.ppa_span_end - rdiff,
             ppa_span_text=self.ppa_span_text.strip(),
+        )
+
+    def correct_page_excerpt(self, page_text: str) -> "Excerpt":
+        """
+        For an excerpt that may have undergone textual transformations during
+        the detection process, this method attemps to correct the excerpt such
+        that the returned excerpt has the indicies and text correpsonding to
+        the original page text (rather than the transformed version). The
+        correspondence is determined using the Needleman-Wunsch algorithm.
+        """
+        aligner = PairwiseAligner(
+            mismatch_score=-0.5,
+            gap_score=-0.5,
+            query_left_gap_score=0,  # no penalty for gaps to the left of the excerpt
+            query_right_gap_score=0,  # no penlty for gaps to the right of the excerpt
+        )
+        results = aligner.align(page_text, self.ppa_span_text)
+        # Use first resulting alignment even if there are more than one
+        alignment = results[0]
+        ppa_aligned_seqs = alignment.aligned[0]
+        new_start = ppa_aligned_seqs[0][0]
+        new_end = ppa_aligned_seqs[-1][1]
+        return replace(
+            self,
+            ppa_span_start=new_start,
+            ppa_span_end=new_end,
+            ppa_span_text=page_text[new_start:new_end],
         )
 
 
