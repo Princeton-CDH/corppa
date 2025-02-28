@@ -13,7 +13,8 @@ LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
 LABEL_ONLY_FIELDS = set(LABELED_EXCERPT_FIELDS) - set(EXCERPT_FIELDS)
 
 
-LABEL_ONLY_FIELD_TYPES = {
+FIELD_TYPES = {
+    "notes": str,
     "ref_span_end": int,
     "poem_id": str,
     "ref_corpus": str,
@@ -33,20 +34,31 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
     try:
         return pl.read_csv(input_file, columns=LABELED_EXCERPT_FIELDS)
     except pl.exceptions.ColumnNotFoundError:
-        # for merging, we need the same columns everywhere
-        # add label-only excerpt fields with null values
-        # return pl.read_csv(input_file, columns=EXCERPT_FIELDS)
+        # if label fields are missing, load as unlabeled excerpts
+        return pl.read_csv(input_file, columns=EXCERPT_FIELDS)
 
-        return (
-            pl.read_csv(input_file, columns=EXCERPT_FIELDS)
-            .with_columns(
-                [
-                    pl.lit(None).alias(field).cast(LABEL_ONLY_FIELD_TYPES[field])
-                    for field in LABEL_ONLY_FIELDS
-                ]
-            )
-            .select(LABELED_EXCERPT_FIELDS)
+
+def fix_columns(df):
+    """Ensure a polars dataframe has all expected columns for
+    fields in :class:~`corppa.poetry_detection.core.LabeledExcerpt`,
+    in the expected order, so that dataframes can be combined consistently.
+    Any fields not present will be added as a series of null values
+    with the appropriate type.
+    """
+    df_columns = set(df.columns)
+    expected_columns = set(LABELED_EXCERPT_FIELDS)
+    missing_columns = expected_columns - df_columns
+    # if any columns are missing, add them with the appropriate type
+    if missing_columns:
+        df = df.with_columns(
+            [
+                pl.lit(None).alias(field).cast(FIELD_TYPES[field])
+                for field in missing_columns
+            ]
         )
+
+    # set consistent order
+    return df.select(LABELED_EXCERPT_FIELDS)
 
 
 def merge_excerpts(df, other_df):
@@ -75,10 +87,9 @@ def merge_excerpts(df, other_df):
     # in other_df that are not present in the first df
     right_df = other_df.join(df, on=join_fields, how="anti")
     if not right_df.is_empty():
-        # ensure field order is exactly the same, then extend/doncat
-        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(
-            right_df.select(LABELED_EXCERPT_FIELDS)
-        )
+        # ensure field order is exactly the same, then append the
+        # excerpts from the right dataframe to the end of the merged dataframe
+        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(fix_columns(right_df))
 
     return merged
 
@@ -102,7 +113,6 @@ def main():
     )
 
     args = parser.parse_args()
-    print(args)
     # output file should not exist
     if args.output.exists():
         print(f"Error: output file {args.output} already exists, not overwriting")
@@ -122,7 +132,7 @@ def main():
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
-    # excerpts.write_csv(args.output)
+    excerpts.write_csv(args.output)
 
 
 if __name__ == "__main__":

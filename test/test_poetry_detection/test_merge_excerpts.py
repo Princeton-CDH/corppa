@@ -44,6 +44,16 @@ excerpt1_label2 = LabeledExcerpt.from_excerpt(
     identification_methods={"refmatcha"},
 )
 
+excerpt2_label1 = LabeledExcerpt.from_excerpt(
+    excerpt2,
+    poem_id="poem-32",
+    ref_corpus="test",
+    ref_span_start=32,
+    ref_span_end=54,
+    ref_span_text="more text",
+    identification_methods={"test"},
+)
+
 
 def test_merge_excerpts_1ex_1label():
     # excerpt + labeled excerpt (same id)
@@ -109,3 +119,37 @@ def test_merge_excerpts_1ex_different_label():
     # second row should be our labeled excerpt
     merged_excerpt1_label1 = LabeledExcerpt.from_dict(merged.row(1, named=True))
     assert merged_excerpt1_label1 == excerpt1_label1
+
+
+def test_merge_excerpts_two_different_labels():
+    assert excerpt1_label1.excerpt_id != excerpt2_label1.excerpt_id
+    df = pl.from_dicts([excerpt1_label1.to_dict()])
+    other_df = pl.from_dicts([excerpt2_label1.to_dict()])
+    merged = merge_excerpts(df, other_df)
+    # expect two rows
+    assert len(merged) == 2
+    # should have all columns for labeled excerpt (order-agnostic)
+    assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
+    # order should match input labeled excerpts
+    assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label1
+    assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt2_label1
+
+
+def test_merge_excerpts_1ex_2labels_diffmethod():
+    # excerpt + two matching labeled excerpts
+    # - same excerpt id, two labels with same ref ids but different method
+    # - method should be combined
+    df = pl.from_dicts([excerpt1.to_dict()])
+
+    # TODO: use excerpt1_label1 to set different id method
+    # and tweak the ref fields but preserve poem id
+    # we want a single row with combined ids (and maybe notes?)
+
+    # other_df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label2.to_dict()])
+    # merged = merge_excerpts(df, other_df)
+    # # expect two rows with  two different labels
+    # assert len(merged) == 2
+    # # polars preserves order, so we can check that they match what was sent in
+    # # results should exactly match the labeled excerpts since all other fields are same
+    # assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label1
+    # assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label2
