@@ -164,6 +164,34 @@ def test_merge_duplicate_ids():
     # should have all columns for labeled excerpt (order-agnostic)
     assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
     excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
-    assert excerpt != excerpt1_label1
     # should have both methods
     assert excerpt.identification_methods == {"manual", "refmatcha"}
+
+    # more likely scenario: manual label with no ref span, system label with more details
+    excerpt1_label1_other = replace(
+        excerpt1_label1,
+        ref_span_start=None,
+        ref_span_end=None,
+        ref_span_text=None,
+        identification_methods={"other"},
+    )
+    df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label1_other.to_dict()])
+    merged = merge_duplicate_ids(df)
+    assert len(merged) == 1
+    # should have all columns for labeled excerpt (order-agnostic)
+    assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
+    # should have both methods
+    assert merged.row(0, named=True)["identification_methods"] == ["manual", "other"]
+    excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    assert excerpt.identification_methods == {"manual", "other"}
+
+    # order should not matter
+    df = pl.from_dicts([excerpt1_label1_other.to_dict(), excerpt1_label1.to_dict()])
+    merged = merge_duplicate_ids(df)
+    assert len(merged) == 1
+    excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    assert excerpt.identification_methods == {"manual", "other"}
+    # should have the non-null ref values
+    assert excerpt.ref_span_start == excerpt1_label1.ref_span_start
+    assert excerpt.ref_span_end == excerpt1_label1.ref_span_end
+    assert excerpt.ref_span_text == excerpt1_label1.ref_span_text

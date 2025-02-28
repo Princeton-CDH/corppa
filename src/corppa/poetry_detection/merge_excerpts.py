@@ -31,9 +31,15 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
     # load input file as a polars dataframe
     # excerpt fields are a subset of labeled excerpt, so load as labeled
     # for now assume csv; in future may add support for jsonl
+
+    # TODO: requiring all fields means adjudication data poem ids are ignored
+    # what is the minimum set we need to check for?
+    return pl.read_csv(input_file)  # , columns=LABELED_EXCERPT_FIELDS)
+
     try:
         return pl.read_csv(input_file, columns=LABELED_EXCERPT_FIELDS)
-    except pl.exceptions.ColumnNotFoundError:
+    except pl.exceptions.ColumnNotFoundError as err:
+        print(err)
         # if label fields are missing, load as unlabeled excerpts
         return pl.read_csv(input_file, columns=EXCERPT_FIELDS)
 
@@ -100,6 +106,7 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     if not right_df.is_empty():
         # ensure field order is exactly the same, then append the
         # excerpts from the right dataframe to the end of the merged dataframe
+        merged = fix_columns(merged)
         merged = merged.select(LABELED_EXCERPT_FIELDS).extend(fix_columns(right_df))
 
     return merged
@@ -111,35 +118,48 @@ def merge_duplicate_ids(df):
     # create a df with the same schema but no data to collect merged excerpts
     merged_excerpts = updated_df.clear()
 
+    # group by page id, excerpt id, and poem id to find repeated identificatins
     for group, data in updated_df.group_by(["page_id", "excerpt_id", "poem_id"]):
-        print(group)  # group is a tuple of page id, excerpt id, poem id
-        print(data)  # data is a df of matching rows
-        # if all labeled excerpt fields are same, consolidate
+        # group is a tuple of values for page id, excerpt id, poem id
+        # data is a df of the grouped rows for this set
+
+        # sort so any empty values for optional fields are last,
+        # then fill values forward - i.e., treat nulls as duplicates
+        data = data.sort(
+            "ref_span_start", "ref_span_end", "ref_span_text", nulls_last=True
+        ).select(pl.all().forward_fill())
+
+        # identify repeats where reference values all agree
+        # (either same values or don't conflict because unset)
         repeats = data.filter(
             data.drop("identification_methods", "index").is_duplicated()
         )
 
-        # convert list of id methods to string in each row, then combine all rows
-        repeats = (
-            repeats.with_columns(
-                # convert list of ids in each row to string
-                id_meth=pl.col("identification_methods").list.join(",")
+        # TODO: if id is same but ref start/span/text differs, do we merge?
+        # if so, how do we choose?
+
+        if not repeats.is_empty():
+            # convert list of id methods to string in each row, then combine all rows
+            repeats = (
+                repeats.with_columns(
+                    # convert list of ids in each row to string
+                    id_meth=pl.col("identification_methods").list.join(",")
+                )
+                # combine all the ids across row as a string
+                .with_columns(combined_id_string=pl.col("id_meth").str.join(","))
+                # split again to convert to list format
+                .with_columns(
+                    identification_methods=pl.col("combined_id_string").str.split(",")
+                )
+                # drop the interim fields
+                .drop("id_meth", "combined_id_string")
             )
-            # combine all the ids
-            .with_columns(combined_id_string=pl.col("id_meth").str.join(","))
-            # split again to convert to list format
-            .with_columns(
-                identification_methods=pl.col("combined_id_string").str.split(",")
+            # remove the repeats from the main dataframe
+            updated_df = updated_df.filter(
+                ~pl.col("index").is_in(repeats.select(pl.col("index")))
             )
-            # drop the interim fields
-            .drop("id_meth", "combined_id_string")
-        )
-        # remove the repeats from the main dataframe
-        updated_df = updated_df.filter(
-            ~pl.col("index").is_in(repeats.select(pl.col("index")))
-        )
-        # add the consolidated row to the merged df
-        merged_excerpts.extend(repeats[:1])
+            # add the consolidated row to the merged df
+            merged_excerpts.extend(repeats[:1])
 
     # combine and return
     return updated_df.extend(merged_excerpts).drop("index")
@@ -176,10 +196,22 @@ def main():
     # load the first input file into a polars dataframe
     # content is either excerpt or labeled excerpt
     excerpts = excerpts_df(args.input_files[0])
+    total_excerpts = len(excerpts)
+
     # starting with the second input file, merge into the main excerpt
     for input_file in args.input_files[1:]:
         merge_df = excerpts_df(input_file)
+        total_excerpts += len(merge_df)
         excerpts = combine_excerpts(excerpts, merge_df)
+
+    excerpts = merge_duplicate_ids(excerpts)
+    labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
+
+    print(
+        f"""Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files.
+{len(excerpts):,} total excerpts after merging; {len(labeled_excerpts):,} labeled excerpts.
+ """
+    )
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
