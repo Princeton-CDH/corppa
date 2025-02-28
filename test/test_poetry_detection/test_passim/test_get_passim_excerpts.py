@@ -178,30 +178,14 @@ def test_save_passim_excerpts(mock_get_excerpts, tmpdir):
     mock_get_excerpts.assert_called_once_with("input", ppa_text_corpus=None)
 
     # Verify CSV output
-    csv_fields = [
-        "page_id",
-        "excerpt_id",
-        "ppa_span_start",
-        "ppa_span_end",
-        "ppa_span_text",
-        "poem_id",
-        "ref_corpus",
-        "ref_span_start",
-        "ref_span_end",
-        "ref_span_text",
-        "detection_methods",
-        "identification_methods",
-        "notes",
-    ]
+    csv_fields = LabeledExcerpt.fieldnames()
     excerpts_csv_form = [e.to_csv() for e in test_excerpts]
     csv_text = ",".join(csv_fields) + "\n"
-    # Note: notes field is uninitialized
-    csv_text += (
-        ",".join([f"{excerpts_csv_form[0][f]}" for f in csv_fields[:-1]]) + ",\n"
-    )
-    csv_text += (
-        ",".join([f"{excerpts_csv_form[1][f]}" for f in csv_fields[:-1]]) + ",\n"
-    )
+    ## Get line text
+    ## Note: notes field is uninitialized
+    for csv_form in excerpts_csv_form:
+        line_values = [f"{csv_form[f]}" if f in csv_form else "" for f in csv_fields]
+        csv_text += ",".join(line_values) + "\n"
     assert out_csv.read_text(encoding="utf-8") == csv_text
 
     # Verify that optional parameter works as expected

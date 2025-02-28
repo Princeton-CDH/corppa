@@ -73,22 +73,7 @@ def save_passim_excerpts(
     input_file: Path, output_file: Path, ppa_text_corpus: None | Path = None
 ) -> None:
     with open(output_file, mode="w", newline="") as csvfile:
-        fieldnames = [
-            "page_id",
-            "excerpt_id",
-            "ppa_span_start",
-            "ppa_span_end",
-            "ppa_span_text",
-            "poem_id",
-            "ref_corpus",
-            "ref_span_start",
-            "ref_span_end",
-            "ref_span_text",
-            "detection_methods",
-            "identification_methods",
-            "notes",
-        ]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer = csv.DictWriter(csvfile, fieldnames=LabeledExcerpt.fieldnames())
         writer.writeheader()
         for excerpt in get_passim_excerpts(input_file, ppa_text_corpus=ppa_text_corpus):
             writer.writerow(excerpt.to_csv())
