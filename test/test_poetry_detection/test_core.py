@@ -305,6 +305,10 @@ class TestExcerpt:
         excerpt = replace(excerpt, detection_methods={"adjudication"})
         csv_dict = excerpt.to_csv()
         assert Excerpt.from_dict(csv_dict) == excerpt
+        # support string-conversion for integer fields
+        csv_dict["ppa_span_start"] = "0"
+        csv_dict["ppa_span_end"] = "1"
+        assert Excerpt.from_dict(csv_dict) == excerpt
 
         # Error if detection_methods field has bad type
         bad_dict = csv_dict | {"detection_methods": 0}
@@ -570,6 +574,10 @@ class TestLabeledExcerpt:
 
         # CSV-friendly dict
         csv_dict = excerpt.to_csv()
+        assert LabeledExcerpt.from_dict(csv_dict) == excerpt
+        # convert strings to integers - handles empty
+        csv_dict["ref_span_start"] = ""
+        csv_dict["ref_span_end"] = ""
         assert LabeledExcerpt.from_dict(csv_dict) == excerpt
 
         # Error if detection or identification methods fields have bad type

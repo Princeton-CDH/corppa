@@ -247,13 +247,24 @@ class Excerpt:
         input_args = deepcopy(d)
         # Remove excerpt_id if present
         input_args.pop("excerpt_id", None)
+        cls_field_types = cls.field_types()
         # Convert any set-type fields (i.e., detection methods)
-        set_fields = [k for k, v in cls.field_types().items() if v == set]
+        set_fields = [k for k, v in cls_field_types.items() if v == set]
         for field_name in set_fields:
             try:
                 input_args[field_name] = input_to_set(input_args[field_name])
             except ValueError as err:
                 raise ValueError(f"{err} for {field_name}")
+
+        # support conversion from string to integer when loading from csv
+        int_fields = [k for k, v in cls_field_types.items() if v == int]
+        for field_name in int_fields:
+            input_val = input_args.get(field_name)
+            if isinstance(input_val, str):
+                if input_val == "":
+                    del input_args[field_name]
+                else:
+                    input_args[field_name] = int(input_val)
 
         return cls(**input_args)
 
