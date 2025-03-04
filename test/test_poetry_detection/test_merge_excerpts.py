@@ -353,3 +353,60 @@ def test_main_invalid_input(capsys, tmp_path):
             main()
         captured = capsys.readouterr()
         assert f"{other_data} is missing required excerpt fields" in captured.err
+
+
+def test_main_successful(capsys, tmp_path):
+    # test a succesful run
+    excerpt_datafile = tmp_path / "excerpts.csv"
+    _excerpts_to_csv(excerpt_datafile, [excerpt1, excerpt2])
+    # valid excerpt data
+    labeled_excerpt_datafile = tmp_path / "excerpt_ids.csv"
+
+    # copy excerpt1_label1 to confirm set output in csv
+    # - everything the same except for the method (unlikely!)
+    excerpt1_label1_method2 = replace(
+        excerpt1_label1, identification_methods={"refmatcha"}
+    )
+    _excerpts_to_csv(
+        labeled_excerpt_datafile, [excerpt1_label1, excerpt1_label1_method2]
+    )
+
+    output_file = tmp_path / "merged.csv"
+    with patch(
+        "sys.argv",
+        [
+            "merge_excerpts.py",
+            str(excerpt_datafile),
+            str(labeled_excerpt_datafile),
+            "-o",
+            str(output_file),
+        ],
+    ):
+        main()
+        captured = capsys.readouterr()
+
+    # summary output
+    assert "Loaded 4 excerpts from 2 files" in captured.out
+    assert "2 total excerpts after merging; 1 labeled excerpts" in captured.out
+
+    with output_file.open(encoding="utf-8") as merged_csv:
+        csv_reader = csv.DictReader(merged_csv)
+        merged_excerpts = list(iter(csv_reader))
+
+    # row 1: excerpt 2 unchanged (no labels to combine)
+    # NOTE: can't initialize as excerpt without removing unset label fields from csv
+    merged_ex2 = LabeledExcerpt.from_dict(merged_excerpts[0])
+    assert merged_ex2.excerpt_id == excerpt2.excerpt_id
+    assert not merged_ex2.poem_id
+
+    # row 2: excerpt 1 with merged labels
+    # NOTE: can't initialize as excerpt without removing unset label fields from csv
+    merged_ex1 = LabeledExcerpt.from_dict(merged_excerpts[1])
+    assert merged_ex1.excerpt_id == excerpt1.excerpt_id
+    # poem id and reference data preserved
+    assert merged_ex1.poem_id == excerpt1_label1.poem_id
+    assert merged_ex1.ref_span_start == excerpt1_label1.ref_span_start
+    assert merged_ex1.ref_span_end == excerpt1_label1.ref_span_end
+    assert merged_ex1.ref_span_text == excerpt1_label1.ref_span_text
+    # id methods combined
+    assert merged_ex1.identification_methods == {"manual", "refmatcha"}
