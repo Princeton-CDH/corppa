@@ -67,13 +67,13 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
     # check that we have the required fields for either
     # excerpt or labeled excerpt data
     columns = set(df.columns)
-    # treat presence of poem ids as indication of labeled excerpt
-    expected_type = "labeled excerpt"
+    expected_type = "excerpt"
     missing_columns = []
+    # treat presence of poem ids as indication of labeled excerpt
     if has_poem_ids(df):
+        expected_type = "labeled excerpt"
         missing_columns = REQ_LABELED_EXCERPT_FIELDS - columns
     else:
-        expected_type = "excerpt"
         missing_columns = REQ_EXCERPT_FIELDS - columns
 
     if missing_columns:

@@ -1,3 +1,4 @@
+import csv
 from dataclasses import replace
 
 import polars as pl
@@ -6,6 +7,7 @@ import pytest
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.merge_excerpts import (
     combine_excerpts,
+    excerpts_df,
     has_poem_ids,
     merge_duplicate_ids,
 )
@@ -222,3 +224,55 @@ def test_has_poem_ids():
     assert has_poem_ids(pl.DataFrame({"a": [1, 2], "poem_id": [None, None]})) is False
     # poem id is present and has at least one non-null value
     assert has_poem_ids(pl.DataFrame({"a": [1, 2], "poem_id": ["Z12", None]})) is True
+
+
+def _excerpts_to_csv(output_file, excerpts):
+    # utility method to create a test CSV file with excerpt or labeled excerpt
+    # data; takes a pathlib.Path and list of excerpt objects
+
+    # convert to a list of csv-serializable dicts
+    csv_data = [ex.to_csv() for ex in excerpts]
+    with output_file.open("w", encoding="utf-8") as filehandle:
+        # assuming for now that the first row has all the fields
+        # (may not hold generally but ok here)
+        csv_writer = csv.DictWriter(filehandle, fieldnames=csv_data[0].keys())
+        csv_writer.writeheader()
+        csv_writer.writerows(csv_data)
+
+
+def test_excerpts_df(tmp_path):
+    datafile = tmp_path / "excerpts.csv"
+    # valid excerpt data
+    _excerpts_to_csv(datafile, [excerpt1])
+    loaded_df = excerpts_df(datafile)
+    assert isinstance(loaded_df, pl.DataFrame)
+    assert len(loaded_df) == 1
+    assert loaded_df.row(0, named=True) == excerpt1.to_dict()
+    # set field has been loaded correctly as a list
+    assert loaded_df.schema["detection_methods"] == pl.List
+    # valid labeled excerpt data
+    _excerpts_to_csv(datafile, [excerpt1_label1, excerpt2_label1])
+    loaded_df = excerpts_df(datafile)
+    assert isinstance(loaded_df, pl.DataFrame)
+    assert len(loaded_df) == 2
+    assert loaded_df.row(0, named=True) == excerpt1_label1.to_dict()
+    # set field has been loaded correctly as a list
+    assert loaded_df.schema["identification_methods"] == pl.List
+
+    # invalid - non excerpt data
+    with datafile.open("w", encoding="utf-8") as filehandle:
+        csv_writer = csv.writer(filehandle)
+        csv_writer.writerow(["id", "note"])
+        csv_writer.writerow(["p.01", "missing"])
+
+    with pytest.raises(ValueError, match="missing required excerpt fields"):
+        excerpts_df(datafile)
+
+    # invalid - looks like labeled excerpt data but missing a field
+    with datafile.open("w", encoding="utf-8") as filehandle:
+        csv_writer = csv.writer(filehandle)
+        csv_writer.writerow(["poem_id", "title"])
+        csv_writer.writerow(["Z01", "the missing"])
+
+    with pytest.raises(ValueError, match="missing required labeled excerpt fields"):
+        excerpts_df(datafile)
