@@ -13,15 +13,7 @@ LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
 LABEL_ONLY_FIELDS = set(LABELED_EXCERPT_FIELDS) - set(EXCERPT_FIELDS)
 
 
-FIELD_TYPES = {
-    "notes": str,
-    "ref_span_end": int,
-    "poem_id": str,
-    "ref_corpus": str,
-    "ref_span_text": str,
-    "ref_span_start": int,
-    "identification_methods": str,
-}
+FIELD_TYPES = LabeledExcerpt.field_types()
 
 
 def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
@@ -112,11 +104,11 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
             .when(pl.col("identification_methods").is_null())
             .then(pl.col("identification_methods_right"))
             .otherwise(
-                pl.col("identification_methods")
-                .add(",")  # TODO: we should probably use a different delimiter...
-                .add(pl.col("identification_methods_right"))
+                pl.concat_list(
+                    pl.col("identification_methods"),
+                    pl.col("identification_methods_right"),
+                ).sort()
             )
-            .alias("val")
         ).drop("identification_methods_right")
 
     # the left join omits any excerpts in other_df that are not in the main df
