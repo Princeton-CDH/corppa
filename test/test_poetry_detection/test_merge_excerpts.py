@@ -1,5 +1,6 @@
 import csv
 from dataclasses import replace
+from unittest.mock import patch
 
 import polars as pl
 import pytest
@@ -10,6 +11,7 @@ from corppa.poetry_detection.merge_excerpts import (
     excerpts_df,
     fix_data_types,
     has_poem_ids,
+    main,
     merge_duplicate_ids,
 )
 
@@ -302,3 +304,20 @@ def test_fix_datatypes():
     # multival fields should be split into lists; empty value should be null
     detect_methods_parsed = fixed_df["detection_methods"].to_list()
     assert detect_methods_parsed == [["manual"], ["manual", "passim"], None]
+
+
+def test_main_argparse_errors(capsys, tmp_path):
+    # call with only one input file (two is minimum required)
+    with patch("sys.argv", ["merge_excerpts.py", "input", "-o", "output"]):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert "at least two input files are required for merging" in captured.err
+    # output file already exists
+    outfile = tmp_path / "merged.csv"
+    outfile.touch()
+    with patch("sys.argv", ["merge_excerpts.py", "input", "-o", str(outfile)]):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert f"{outfile} already exists, not overwriting" in captured.err

@@ -281,11 +281,16 @@ def main():
     args = parser.parse_args()
     # output file should not exist
     if args.output.exists():
-        print(f"Error: output file {args.output} already exists, not overwriting")
+        print(
+            f"Error: output file {args.output} already exists, not overwriting",
+            file=sys.stderr,
+        )
         sys.exit(-1)
     # we need at least two input files
     if len(args.input_files) < 2:
-        print("Error: at least two input files are required for merging")
+        print(
+            "Error: at least two input files are required for merging", file=sys.stderr
+        )
         sys.exit(-1)
 
     # load the first input file into a polars dataframe
