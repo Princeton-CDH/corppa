@@ -222,7 +222,7 @@ class Excerpt:
     def from_dict(cls, d: dict) -> "Excerpt":
         """
         Constructs a new Excerpt from a dictionary of the form produced by `to_dict`
-        or `to_json`.
+        or `to_csv`.
         """
         input_args = deepcopy(d)
         # Remove excerpt_id if present
