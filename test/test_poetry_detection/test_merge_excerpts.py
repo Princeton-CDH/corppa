@@ -4,10 +4,11 @@ from dataclasses import replace
 import polars as pl
 import pytest
 
-from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
+from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
 from corppa.poetry_detection.merge_excerpts import (
     combine_excerpts,
     excerpts_df,
+    fix_data_types,
     has_poem_ids,
     merge_duplicate_ids,
 )
@@ -276,3 +277,28 @@ def test_excerpts_df(tmp_path):
 
     with pytest.raises(ValueError, match="missing required labeled excerpt fields"):
         excerpts_df(datafile)
+
+
+def test_fix_datatypes():
+    df = pl.DataFrame(
+        {
+            "poem_id": ["a1", "a2", "a3"],
+            "ppa_span_start": ["1", "2", "3"],
+            "detection_methods": [
+                "manual",
+                MULTIVAL_DELIMITER.join(["manual", "passim"]),
+                None,
+            ],
+            "ignore_me": ["foo", "bar", "baz"],
+        }
+    )
+    fixed_df = fix_data_types(df)
+    # all columns should match (nothing removed or added)
+    assert df.columns == fixed_df.columns
+    # column datatypes should differ
+    assert df.schema != fixed_df.schema
+    assert fixed_df.schema["ppa_span_start"] == pl.Int64
+    assert fixed_df.schema["detection_methods"] == pl.List
+    # multival fields should be split into lists; empty value should be null
+    detect_methods_parsed = fixed_df["detection_methods"].to_list()
+    assert detect_methods_parsed == [["manual"], ["manual", "passim"], None]
