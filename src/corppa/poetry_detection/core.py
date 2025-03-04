@@ -6,7 +6,7 @@ import functools
 import types
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import Any, Optional, TypeAliasType, Union, get_args, get_origin
+from typing import Any, Optional, get_args, get_origin
 
 # Table of supported detection methods and their corresponding prefixes
 DETECTION_METHODS = {
