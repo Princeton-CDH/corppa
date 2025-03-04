@@ -123,7 +123,7 @@ def input_to_set(input_val: list | str | set) -> set:
         case str():  # format used by to_csv
             return set(input_val.split(MULTIVAL_DELIMITER))
         case set():
-            return set(input_val)
+            return input_val
         case _:
             raise ValueError(f"Unexpected value type '{type(input_val).__name__}'")
 
