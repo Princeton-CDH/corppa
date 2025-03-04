@@ -2,12 +2,13 @@
 Build passim page-level and span-level matches from passim output files.
 
 Examples:
-    get_passim_results.py --ppa-corpus ppa.jsonl --ref-corpus ref.jsonl \
+    get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref.jsonl \
         --passim-dir passim_output --page-results passim_page_results.jsonl \
         --span-results passim_spans.tsv
-    get_passim_results.py --ppa-corpus ppa.jsonl --ref-corpus ref_a.jsonl \
+    get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref_a.jsonl \
         --ref-corpus ref_b.jsonl --passim-dir passim_output \
-        --page-results passim_page_results.jsonl --span-results passim_spans.tsv
+        --page-results passim_page_results.jsonl --span-results passim_spans.tsv \
+        --ppa-text-corpus ppa.jsonl.gz
 """
 
 import argparse
@@ -15,15 +16,65 @@ import csv
 import re
 import sys
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from pathlib import Path
-from typing import TypedDict
+from typing import Any
 
 import orjsonl
 from tqdm import tqdm
 
+from corppa.poetry_detection.core import LabeledExcerpt
 
-def get_passim_span(alignment_record):
+
+def get_page_texts(page_ids: Iterable[str], text_corpus: Path) -> dict[str, str]:
+    """
+    Gathers the texts from corpus file for the specified pages (by id), returns
+    a dictionary mapping page ids to page texts.
+    """
+    page_texts = {}
+    for page in orjsonl.stream(text_corpus):
+        page_id = page["id"]
+        if page_id in page_ids:
+            page_texts[page_id] = page["text"]
+    return page_texts
+
+
+def get_passim_excerpts(
+    page_record: dict[str, Any], ppa_page_text: None | str = None
+) -> Generator[LabeledExcerpt]:
+    """
+    Extracts and yields the passim-identified passage-level excerpts from passim
+    page-level results record as produced by `build_passim_page_results`.
+
+    Optionally, can provide the original PPA page text to "correct" the excerpt
+    for any text transformations applied during the passim pipeline.
+    """
+    # Gather excerpts
+    if page_record["n_spans"]:
+        page_id = page_record["page_id"]
+        # Get ppa page text
+        for poem_span in page_record["poem_spans"]:
+            excerpt = LabeledExcerpt(
+                page_id=page_id,
+                ppa_span_start=poem_span["page_start"],
+                ppa_span_end=poem_span["page_end"],
+                ppa_span_text=poem_span["page_excerpt"],
+                detection_methods={"passim"},
+                poem_id=poem_span["ref_id"],
+                ref_corpus=poem_span["ref_corpus"],
+                ref_span_start=poem_span["ref_start"],
+                ref_span_end=poem_span["ref_end"],
+                ref_span_text=poem_span["ref_excerpt"],
+                identification_methods={"passim"},
+                notes=f"passim: {poem_span['matches']} char matches",
+            )
+            if ppa_page_text:
+                # Correct excerpt if we have the original page text
+                excerpt = excerpt.correct_page_excerpt(ppa_page_text)
+            yield excerpt
+
+
+def get_passim_span(alignment_record) -> dict[str, Any]:
     """
     Extract span record from and rename fields from passim alignment record into a new
     page-level record.
@@ -48,7 +99,7 @@ def extract_passim_spans(
     passim_dir: Path,
     include_excerpts: bool = False,
     disable_progress: bool = False,
-):
+) -> Generator[dict[str, Any]]:
     """
     Exctracts all span-level matches identified by passim returned as a generator
     """
@@ -66,8 +117,8 @@ def extract_passim_spans(
 
 
 def add_excerpts(
-    page_results,
-    ppa_corpus: Path,
+    page_results: dict[str, dict[str, Any]],
+    ppa_passim_corpus: Path,
     ref_corpora: Iterable[Path],
     disable_progress: bool = False,
 ) -> None:
@@ -75,11 +126,13 @@ def add_excerpts(
     Add original PPA and reference excerpts to the span within page results
     """
     # For tracking page reuse by reference text
-    refs_to_pages = defaultdict(lambda: defaultdict(set))
+    refs_to_pages: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
 
     # Add PPA excerpts
     ppa_progress = tqdm(
-        orjsonl.stream(ppa_corpus),
+        orjsonl.stream(ppa_passim_corpus),
         total=len(page_results),
         desc="Adding PPA excerpts",
         disable=disable_progress,
@@ -105,12 +158,9 @@ def add_excerpts(
         )
         for ref_record in ref_progress:
             ref_corpus = ref_record["corpus"]
-            # Skip unreference corpora
-            if ref_corpus not in refs_to_pages:
-                print(f"Warning: {ref_corpus} is never reused", file=sys.stderr)
-            # Skip unreferenced texts
             ref_id = ref_record["id"]
             if ref_id not in refs_to_pages[ref_corpus]:
+                # Skip unreferenced texts
                 continue
             for page_id in refs_to_pages[ref_corpus][ref_id]:
                 # Add reference excerpts to corresponding spans
@@ -121,15 +171,15 @@ def add_excerpts(
 
 
 def build_passim_page_results(
-    ppa_corpus: Path,
+    ppa_passim_corpus: Path,
     ref_corpora: Iterable[Path],
     passim_dir: Path,
     disable_progress: bool = False,
 ):
     # Initialize page-level results
-    page_results = {}
+    page_results: dict[str, dict[str, Any]] = {}
     page_progress = tqdm(
-        orjsonl.stream(ppa_corpus),
+        orjsonl.stream(ppa_passim_corpus),
         desc="Initializing PPA page-level results",
         disable=disable_progress,
     )
@@ -145,23 +195,28 @@ def build_passim_page_results(
 
     # Add excerpts to span records
     add_excerpts(
-        page_results, ppa_corpus, ref_corpora, disable_progress=disable_progress
+        page_results, ppa_passim_corpus, ref_corpora, disable_progress=disable_progress
     )
-
     return page_results
 
 
 def write_passim_results(
-    ppa_corpus: Path,
+    ppa_passim_corpus: Path,
     ref_corpora: Iterable[Path],
     passim_dir: Path,
     out_page_results: Path,
     out_span_results: Path,
+    ppa_text_corpus: None | Path = None,
     disable_progress: bool = False,
 ) -> None:
+    # Get page-level results
     page_results = build_passim_page_results(
-        ppa_corpus, ref_corpora, passim_dir, disable_progress=disable_progress
+        ppa_passim_corpus, ref_corpora, passim_dir, disable_progress=disable_progress
     )
+    # Optionally, gather relevant original PPA page texts
+    ppa_page_texts = {}
+    if ppa_text_corpus:
+        ppa_page_texts = get_page_texts(page_results.keys(), ppa_text_corpus)
 
     # Write page-level & span-level output by page
     page_progress = tqdm(
@@ -171,21 +226,13 @@ def write_passim_results(
     )
 
     with open(out_span_results, mode="w", newline="") as csvfile:
-        fieldnames = [
-            "ref_id",
-            "ref_corpus",
-            "ref_start",
-            "ref_end",
-            "page_id",
-            "page_start",
-            "page_end",
+        # Add additional passim-specific fields
+        fieldnames = LabeledExcerpt.fieldnames() + [
             "matches",
-            "ref_excerpt",
-            "ppa_excerpt",
             "aligned_ref_excerpt",
             "aligned_ppa_excerpt",
         ]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, dialect="excel-tab")
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
         for page_id, record in page_progress:
@@ -193,10 +240,10 @@ def write_passim_results(
             orjsonl.append(out_page_results, record)
 
             # Write span-level results to file
-            for span in record["poem_spans"]:
-                match = span.copy()
-                match["page_id"] = page_id
-                writer.writerow(match)
+            for excerpt in get_passim_excerpts(
+                record, ppa_page_text=ppa_page_texts.get(page_id)
+            ):
+                writer.writerow(excerpt.to_csv())
 
 
 def main():
@@ -206,7 +253,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build passim results.")
     # Required arguments
     parser.add_argument(
-        "--ppa-corpus",
+        "--ppa-passim-corpus",
         help="Path to PPA passim-friendly corpus file (JSONL)",
         type=Path,
         required=True,
@@ -244,13 +291,18 @@ def main():
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument(
+        "--ppa-text-corpus",
+        help="Original PPA text corpus file (JSONL) for correcting identified excerpts",
+        type=Path,
+    )
 
     args = parser.parse_args()
 
     # Validate input/output paths
-    if not args.ppa_corpus.is_file():
+    if not args.ppa_passim_corpus.is_file():
         print(
-            f"Error: PPA corpus {args.ppa_corpus} does not exist",
+            f"Error: PPA passim corpus {args.ppa_passim_corpus} does not exist",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -279,14 +331,21 @@ def main():
             file=sys.stderr,
         )
         sys.exit(1)
+    if args.ppa_text_corpus and not args.ppa_text_corpus.is_file():
+        print(
+            f"Error: ppa text corpus {args.ppa_text_corpus} does not exist",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     write_passim_results(
-        args.ppa_corpus,
+        args.ppa_passim_corpus,
         args.ref_corpus,
         args.passim_dir,
         args.page_results,
         args.span_results,
-        not args.progress,
+        ppa_text_corpus=args.ppa_text_corpus,
+        progress=not args.progress,
     )
 
 
