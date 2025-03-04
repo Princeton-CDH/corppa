@@ -1,13 +1,10 @@
 from dataclasses import replace
+from typing import Optional
 from unittest.mock import patch
 
 import pytest
 
-from corppa.poetry_detection.core import (
-    Excerpt,
-    LabeledExcerpt,
-    Span,
-)
+from corppa.poetry_detection.core import Excerpt, LabeledExcerpt, Span, field_real_type
 
 
 class TestSpan:
@@ -589,3 +586,16 @@ class TestLabeledExcerpt:
         )
 
         assert field_types == expected_types
+
+
+def test_field_real_type():
+    # regular type
+    assert field_real_type(str) == str
+    # type annotation / alas
+    assert field_real_type(set[str]) == set
+    # optional (= union of type and NoneType)
+    assert field_real_type(Optional[int]) == int
+
+    with pytest.raises(ValueError):
+        # we don't support anything that isn't a type or type alias
+        field_real_type("text content")

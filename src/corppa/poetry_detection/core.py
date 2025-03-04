@@ -95,7 +95,11 @@ def field_real_type(field_type) -> type:
         return origin
     # if Optional or Union, return the first non-none type
     ftypes = get_args(field_type)
-    return [arg for arg in ftypes if arg != types.NoneType][0]
+    if ftypes:
+        return [arg for arg in ftypes if arg != types.NoneType][0]
+
+    # if we get here, this is an input we can't handle
+    raise ValueError(f"Cannot determine real type for '{field_type}'")
 
 
 @dataclass(kw_only=True, frozen=True)
