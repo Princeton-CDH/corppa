@@ -1,4 +1,39 @@
 #!/usr/bin/env python
+"""
+This script merges detected poems excerpts (i.e. :class:~`corppa.poetry_detection.core.Excerpt`)
+with identified poem excerpts (i.e. :class:~`corppa.poetry_detection.core.LabeledExcerpt`);
+it also handles merging duplicate poem identifications in simple cases.
+
+It takes two or more input files of excerpt or labeled excerpt data in CSV format,
+merges the excerpts, and outputs a CSV of the merged excerpt data.  All excerpts
+are included in the output, whether they were merged with any other records or not.
+
+Merging logic is as follows:
+- Excerpts are merged on the combination of page id and excerpt id
+- When working with two sets of labeled excerpts, records are merged on the
+  combination of page id, excerpt id, and poem id
+    - If the same excerpt has different identifications, both
+      labeled excerpts will be included in the output
+    - If the same excerpt has duplicate identifications, they will be merged
+      into a single excerpt that includes both identification methods
+- When merging excerpts where both records have notes, the notes content
+  will be combined
+
+After all input files are combined, the script checks for duplicate
+excerpt idenfications that can be consolidated. This currently only handles
+these simple cases:
+- All poem identification and reference fields match (poem_id, ref_span_start, ref_span_text, ref_span_end)
+- Poem identification matches and reference fields are null in one set
+    (e.g. manual identification and refmatcha identification)
+
+Limitations:
+- Generally assumes excerpts do not require merging within a single input file
+- Merging based on poem_id does not compare or consolidate reference span indices
+  and text fields; supporting multiple identification methods that output
+  span information will require revision
+- CSV input and output only (JSONL may be added in future)
+
+"""
 
 import argparse
 import pathlib
@@ -102,6 +137,10 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     # if poem_id is present and not empty in both dataframes,
     # include that in the join fields to avoid collapsing different ids
     if has_poem_ids(df) and has_poem_ids(other_df):
+        # NOTE: for now, the script does not care about variations between
+        # reference span start, end, and text if the poem identifications match
+        # That assumption is valid for the current set, since manual ids
+        # do not have spans, but we may need to revisit in future
         join_fields.append("poem_id")
 
     # before joining, drop redundant fields that will be the same
@@ -181,9 +220,6 @@ def merge_duplicate_ids(df):
         repeats = data.filter(
             data.drop("identification_methods", "index").is_duplicated()
         )
-
-        # TODO: if id is same but ref start/span/text differs, should we merge?
-        # (probably not in this round)
 
         if not repeats.is_empty():
             # convert list of id methods to string in each row, then combine all rows
