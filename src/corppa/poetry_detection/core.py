@@ -82,9 +82,13 @@ class Span:
 
 
 def field_real_type(field_type) -> type:
-    """Return the base type for a dataclass field type annotation.
-    For unions or optional values, returns the first non-None type; for type
-    aliases, returns the original type.
+    """Return the real type for a dataclass field type annotation.
+    For unions or optional values (e.g. `Optional[int]`), returns the first
+    non-None type; for type aliases (e.g. `set[str]`, returns the original type
+    that was used to create the alias. For example:
+        - int -> int
+        - Optional[int] -> int
+        - set[str] -> set
     """
     # if it's a regular type, return unchanged
     if isinstance(field_type, type):
