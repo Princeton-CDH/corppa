@@ -293,21 +293,26 @@ def main():
         )
         sys.exit(-1)
 
-    # load the first input file into a polars dataframe
-    # content is either excerpt or labeled excerpt
-    excerpts = excerpts_df(args.input_files[0])
-    total_excerpts = len(excerpts)
+    total_excerpts = 0
+    excerpts = None
 
-    # starting with the second input file, merge into the main excerpt
-    for input_file in args.input_files[1:]:
+    # load files in order specified, and merge them in one by one
+    for input_file in args.input_files:
         try:
             merge_df = excerpts_df(input_file)
         except ValueError as err:
             # if any input file does not have minimum required fields, bail out
-            print(err)
+            print(err, file=sys.stderr)
             sys.exit(-1)
         total_excerpts += len(merge_df)
-        excerpts = combine_excerpts(excerpts, merge_df)
+
+        # on the first loop, main excerpts df is unset, nothing to merge
+        if excerpts is None:
+            excerpts = merge_df
+        else:
+            # on every loop after the first, update excerpts by
+            # merging with the new input file
+            excerpts = combine_excerpts(excerpts, merge_df)
 
     excerpts = merge_duplicate_ids(excerpts)
 

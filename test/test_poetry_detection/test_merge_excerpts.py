@@ -321,3 +321,35 @@ def test_main_argparse_errors(capsys, tmp_path):
             main()
         captured = capsys.readouterr()
         assert f"{outfile} already exists, not overwriting" in captured.err
+
+
+def test_main_invalid_input(capsys, tmp_path):
+    excerpt_datafile = tmp_path / "excerpts.csv"
+    # valid excerpt data
+    _excerpts_to_csv(excerpt_datafile, [excerpt1])
+    other_data = tmp_path / "other.csv"
+    # invalid - non excerpt data
+    # NOTE: copied from earlier test; consider converting to fixture
+    with other_data.open("w", encoding="utf-8") as filehandle:
+        csv_writer = csv.writer(filehandle)
+        csv_writer.writerow(["id", "note"])
+        csv_writer.writerow(["p.01", "missing"])
+
+    with patch(
+        "sys.argv",
+        ["merge_excerpts.py", str(excerpt_datafile), str(other_data), "-o", "output"],
+    ):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert f"{other_data} is missing required excerpt fields" in captured.err
+
+    # should get the same error no matter what order we specify input files
+    with patch(
+        "sys.argv",
+        ["merge_excerpts.py", str(other_data), str(excerpt_datafile), "-o", "output"],
+    ):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert f"{other_data} is missing required excerpt fields" in captured.err
