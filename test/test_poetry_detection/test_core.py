@@ -387,6 +387,18 @@ class TestExcerpt:
             "excerpt_id",
         ]
 
+    def test_field_types(self):
+        field_types = Excerpt.field_types()
+        assert field_types == {
+            "page_id": str,
+            "ppa_span_start": int,
+            "ppa_span_end": int,
+            "ppa_span_text": str,
+            "detection_methods": set,
+            "notes": str,
+            "excerpt_id": str,
+        }
+
 
 class TestLabeledExcerpt:
     def test_init(self):
@@ -561,3 +573,19 @@ class TestLabeledExcerpt:
             "ref_span_text",
             "identification_methods",
         ]
+
+    def test_field_types(self):
+        field_types = LabeledExcerpt.field_types()
+        expected_types = Excerpt.field_types()
+        expected_types.update(
+            {
+                "poem_id": str,
+                "ref_corpus": str,
+                "ref_span_start": int,
+                "ref_span_end": int,
+                "ref_span_text": str,
+                "identification_methods": set,
+            }
+        )
+
+        assert field_types == expected_types

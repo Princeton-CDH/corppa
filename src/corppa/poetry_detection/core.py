@@ -2,9 +2,10 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
+import types
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import Any, Optional
+from typing import Any, Optional, TypeAliasType, Union, get_args, get_origin
 
 # Table of supported detection methods and their corresponding prefixes
 DETECTION_METHODS = {
@@ -79,6 +80,24 @@ class Span:
         return overlap / max(len(self), len(other))
 
 
+def field_real_type(field_type) -> type:
+    """Return the base type for a dataclass field type annotation.
+    For unions or optional values, returns the first non-None type; for type
+    aliases, returns the original type.
+    """
+    # if it's a regular type, return unchanged
+    if isinstance(field_type, type):
+        return field_type
+    # for a type alias, return the original type
+    # e.g. for annotation of set[str] return the set type
+    origin = get_origin(field_type)
+    if isinstance(origin, type):
+        return origin
+    # if Optional or Union, return the first non-none type
+    ftypes = get_args(field_type)
+    return [arg for arg in ftypes if arg != types.NoneType][0]
+
+
 @dataclass(kw_only=True, frozen=True)
 class Excerpt:
     """
@@ -145,12 +164,6 @@ class Excerpt:
                     json_dict[key] = value
         return json_dict
 
-    @classmethod
-    def fieldnames(cls) -> list[str]:
-        """Return a list of names for the fields in this class,
-        in order."""
-        return [f.name for f in fields(cls)]
-
     def to_csv(self) -> dict[str, int | str]:
         """
         Returns a CSV-friendly dict of the poem excerpt. Note that like `to_dict` unset
@@ -165,6 +178,18 @@ class Excerpt:
                 else:
                     csv_dict[key] = value
         return csv_dict
+
+    @classmethod
+    def fieldnames(cls) -> list[str]:
+        """Return a list of names for the fields in this class,
+        in order."""
+        return [f.name for f in fields(cls)]
+
+    @classmethod
+    def field_types(cls) -> dict[str, Any]:
+        """Return a dictionary of field names and corresponding types
+        for this class."""
+        return {f.name: field_real_type(f.type) for f in fields(cls)}
 
     @staticmethod
     def from_dict(d: dict) -> "Excerpt":
