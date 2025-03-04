@@ -4,7 +4,11 @@ import polars as pl
 import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
-from corppa.poetry_detection.merge_excerpts import combine_excerpts, merge_duplicate_ids
+from corppa.poetry_detection.merge_excerpts import (
+    combine_excerpts,
+    has_poem_ids,
+    merge_duplicate_ids,
+)
 
 excerpt1 = Excerpt(
     page_id="p.1",
@@ -209,3 +213,12 @@ def test_merge_duplicate_ids():
     assert excerpt.ref_span_start == excerpt1_label1.ref_span_start
     assert excerpt.ref_span_end == excerpt1_label1.ref_span_end
     assert excerpt.ref_span_text == excerpt1_label1.ref_span_text
+
+
+def test_has_poem_ids():
+    # no poem_id column
+    assert has_poem_ids(pl.DataFrame({"a": [1, 2, 3]})) is False
+    # poem id is present but has no values
+    assert has_poem_ids(pl.DataFrame({"a": [1, 2], "poem_id": [None, None]})) is False
+    # poem id is present and has at least one non-null value
+    assert has_poem_ids(pl.DataFrame({"a": [1, 2], "poem_id": ["Z12", None]})) is True

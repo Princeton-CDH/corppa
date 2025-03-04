@@ -62,7 +62,7 @@ def fix_columns(df):
 def has_poem_ids(df: pl.DataFrame) -> bool:
     """Check if a Polars DataFrame has poem_id values. Returns true if 'poem_id'
     is present in the list of columns and there is at least one non-null value."""
-    return "poem_id" in df.columns and df["poem_id"].count()
+    return bool("poem_id" in df.columns and df["poem_id"].count())
 
 
 def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
