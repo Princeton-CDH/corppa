@@ -263,16 +263,18 @@ class TestExcerpt:
             "detection_methods": "manual",
             "excerpt_id": "m@0:1",
         }
-
-        result = excerpt.to_csv()
-        assert result == expected_result
+        assert excerpt.to_csv() == expected_result
 
         # With optional fields
         excerpt = replace(excerpt, notes="notes")
         expected_result["notes"] = "notes"
+        assert excerpt.to_csv() == expected_result
 
-        result = excerpt.to_csv()
-        assert result == expected_result
+        # with multiple values for set field
+        excerpt = replace(excerpt, detection_methods={"manual", "passim"})
+        expected_result["excerpt_id"] = "c@0:1"
+        expected_result["detection_methods"] = "manual;passim"
+        assert excerpt.to_csv() == expected_result
 
     def test_from_dict(self):
         # JSONL-friendly dict

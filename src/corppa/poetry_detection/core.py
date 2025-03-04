@@ -103,6 +103,10 @@ def field_real_type(field_type) -> type:
     raise TypeError(f"Cannot determine real type for '{field_type}'")
 
 
+#: character to use when converting sets to and from delimited string
+MULTIVAL_DELIMITER = ";"
+
+
 def input_to_set(input_val: list | str | set) -> set:
     """Convert supported inputs to set; intended for convenience
     when initializing :attr:`Excerpt.detection_methods` and
@@ -113,7 +117,7 @@ def input_to_set(input_val: list | str | set) -> set:
         case list():  # format used by to_json
             return set(input_val)
         case str():  # format used by to_csv
-            return set(input_val.split(", "))
+            return set(input_val.split(MULTIVAL_DELIMITER))
         case set():
             return set(input_val)
         case _:
@@ -194,9 +198,10 @@ class Excerpt:
         csv_dict: dict[str, int | str] = {}
         for key, value in asdict(self).items():
             if value is not None:
-                # Convert sets to comma-separated lists
+                # Convert sets to delimited string
                 if type(value) is set:
-                    csv_dict[key] = ", ".join(value)
+                    # to guarantee deterministic order, sort before joining
+                    csv_dict[key] = MULTIVAL_DELIMITER.join(sorted(value))
                 else:
                     csv_dict[key] = value
         return csv_dict
