@@ -4,10 +4,10 @@ Build passim page-level and span-level matches from passim output files.
 Examples:
     get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref.jsonl \
         --passim-dir passim_output --page-results passim_page_results.jsonl \
-        --span-results passim_spans.tsv
+        --span-results passim_spans.csv
     get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref_a.jsonl \
         --ref-corpus ref_b.jsonl --passim-dir passim_output \
-        --page-results passim_page_results.jsonl --span-results passim_spans.tsv \
+        --page-results passim_page_results.jsonl --span-results passim_spans.csv \
         --ppa-text-corpus ppa.jsonl.gz
 """
 
@@ -279,7 +279,7 @@ def main():
     )
     parser.add_argument(
         "--span-results",
-        help="Filename for the span-level passim results (TSV)",
+        help="Filename for the span-level passim results (CSV)",
         type=Path,
         required=True,
     )

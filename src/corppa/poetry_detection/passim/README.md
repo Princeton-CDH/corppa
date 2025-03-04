@@ -82,8 +82,8 @@ Page-level results are saved as a JSONL file, and include records for pages wher
 for pages where `passim` identifies *no* reuse. This file is primarily meant for evaluating (and
 optimizing) the performance of `passim`.
 
-Excerpt-level results are saved as a TSV file. With each row corresponding to a single poetry excerpt
-identified by `passim`.
+Excerpt-level results are saved as a CSV file. With each row corresponding to a single poetry excerpt
+identified by `passim` in the form of `LabeledExcerpt` objects.
 
 This script requires quite a few files beyond passim's output directory. This script also requires all
 of the input corpora for the `passim` run. Additionally, since the PPA text corpus underwent text
@@ -94,9 +94,9 @@ Example usage:
 ```
     get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref.jsonl \
         --passim-dir passim_output --page-results passim_page_results.jsonl \
-        --span-results passim_spans.tsv
+        --span-results passim_spans.csv
     get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref_a.jsonl \
         --ref-corpus ref_b.jsonl --passim-dir passim_output \
-        --page-results passim_page_results.jsonl --span-results passim_spans.tsv \
+        --page-results passim_page_results.jsonl --span-results passim_spans.csv \
         --ppa-text-corpus ppa.jsonl.gz
 ```
