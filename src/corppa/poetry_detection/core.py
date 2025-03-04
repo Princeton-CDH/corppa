@@ -104,7 +104,7 @@ def field_real_type(field_type) -> type:
 
 
 #: character to use when converting sets to and from delimited string
-MULTIVAL_DELIMITER = ";"
+MULTIVAL_DELIMITER = "; "
 
 
 def input_to_set(input_val: list | str | set) -> set:
