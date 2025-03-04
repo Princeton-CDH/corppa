@@ -611,6 +611,6 @@ def test_field_real_type():
     # optional (= union of type and NoneType)
     assert field_real_type(Optional[int]) == int
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         # method doesn't support anything that isn't a type or type alias
         field_real_type("text content")

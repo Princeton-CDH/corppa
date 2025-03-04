@@ -100,7 +100,24 @@ def field_real_type(field_type) -> type:
         return [arg for arg in ftypes if arg != types.NoneType][0]
 
     # if we get here, this is an input we can't handle
-    raise ValueError(f"Cannot determine real type for '{field_type}'")
+    raise TypeError(f"Cannot determine real type for '{field_type}'")
+
+
+def input_to_set(input_val: list | str | set) -> set:
+    """Convert supported inputs to set; intended for convenience
+    when initializing :attr:`Excerpt.detection_methods` and
+    :attr:`LabeledExcerpt.identification_methods`.
+    """
+    # match case syntax equivalent to isinstance(input_val, list)
+    match input_val:
+        case list():  # format used by to_json
+            return set(input_val)
+        case str():  # format used by to_csv
+            return set(input_val.split(", "))
+        case set():
+            return set(input_val)
+        case _:
+            raise ValueError(f"Unexpected value type '{type(input_val).__name__}'")
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -198,8 +215,8 @@ class Excerpt:
         for this class."""
         return {f.name: field_real_type(f.type) for f in fields(cls)}
 
-    @staticmethod
-    def from_dict(d: dict) -> "Excerpt":
+    @classmethod
+    def from_dict(cls, d: dict) -> "Excerpt":
         """
         Constructs a new Excerpt from a dictionary of the form produced by `to_dict`
         or `to_json`.
@@ -207,22 +224,15 @@ class Excerpt:
         input_args = deepcopy(d)
         # Remove excerpt_id if present
         input_args.pop("excerpt_id", None)
-        # Convert detection methods to set
-        detection_methods = input_args["detection_methods"]
-        if type(detection_methods) is list:
-            ## `to_json` format
-            input_args["detection_methods"] = set(detection_methods)
-        elif type(detection_methods) is str:
-            ## `to_csv` format
-            if ", " in detection_methods:
-                input_args["detection_methods"] = set(detection_methods.split(", "))
-            else:
-                input_args["detection_methods"] = {detection_methods}
-        else:
-            raise ValueError(
-                f"Unexpected value type '{type(detection_methods).__name__}' for detection_methods"
-            )
-        return Excerpt(**input_args)
+        # Convert any set-type fields (i.e., detection methods)
+        set_fields = [k for k, v in cls.field_types().items() if v == set]
+        for field_name in set_fields:
+            try:
+                input_args[field_name] = input_to_set(input_args[field_name])
+            except ValueError as err:
+                raise ValueError(f"{err} for {field_name}")
+
+        return cls(**input_args)
 
     def strip_whitespace(self) -> "Excerpt":
         """
@@ -269,28 +279,3 @@ class LabeledExcerpt(Excerpt):
             raise ValueError(
                 f"Reference span's start index {self.ref_span_start} must be less than its end index {self.ref_span_end}"
             )
-
-    @staticmethod
-    def from_dict(d: dict) -> "LabeledExcerpt":
-        """
-        Constructs a new LabeledExcerpt from a dictionary of the form produced by `to_dict`
-        or `to_json`.
-        """
-        input_args = deepcopy(d)
-        # Remove excerpt_id if present
-        input_args.pop("excerpt_id", None)
-        # Convert detection & identification methods to set
-        for fieldname in ["detection_methods", "identification_methods"]:
-            value = input_args[fieldname]
-            if type(value) is list:
-                ## `to_json` format
-                input_args[fieldname] = set(value)
-            elif type(value) is str:
-                ## `to_csv` format
-                input_args[fieldname] = set(value.split(", "))
-            else:
-                raise ValueError(
-                    f"Unexpected value type '{type(value).__name__}' for {fieldname}"
-                )
-
-        return LabeledExcerpt(**input_args)
