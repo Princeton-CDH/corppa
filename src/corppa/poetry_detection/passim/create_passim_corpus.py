@@ -87,7 +87,7 @@ def transform_record(
     # TODO: Revisit whether to preserve blank pages. It should not meaningfully
     #       impact performance, but ensures a 1-1 line corresponds between the
     #       input and output JSONL files.
-    out_record["text"] = clean_text(out_record.get("text", ""))
+    out_record["text"] = clean_text(record.get("text", ""))
     return out_record
 
 
