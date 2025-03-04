@@ -43,11 +43,14 @@ import polars as pl
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
 
-EXCERPT_FIELDS = Excerpt.fieldnames()
+#: List of required fields for excerpt data
+REQ_EXCERPT_FIELDS = set(Excerpt.fieldnames(required_only=True))
+#: List required fields for labeled excerpt data
+REQ_LABELED_EXCERPT_FIELDS = set(LabeledExcerpt.fieldnames(required_only=True))
+#: All fields for labeled excerpts, in the expected order
 LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
-LABEL_ONLY_FIELDS = set(LABELED_EXCERPT_FIELDS) - set(EXCERPT_FIELDS)
 
-
+#: dictionary of excerpt field names with associated data types
 FIELD_TYPES = LabeledExcerpt.field_types()
 # override set types with list, since Polars does not have a set type
 FIELD_TYPES["detection_methods"] = pl.List
@@ -59,19 +62,27 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
     with column names based on fields in
     :class:`~corppa.poetry_detection.core.LaebledExcerpt`."""
     # load input file as a polars dataframe
-    # excerpt fields are a subset of labeled excerpt, so load as labeled
     # for now assume csv; in future may add support for jsonl
+    df = pl.read_csv(input_file)
+    # check that we have the required fields for either
+    # excerpt or labeled excerpt data
+    columns = set(df.columns)
+    # treat presence of poem ids as indication of labeled excerpt
+    expected_type = "labeled excerpt"
+    missing_columns = []
+    if has_poem_ids(df):
+        missing_columns = REQ_LABELED_EXCERPT_FIELDS - columns
+    else:
+        expected_type = "excerpt"
+        missing_columns = REQ_EXCERPT_FIELDS - columns
 
-    # TODO: requiring all fields means adjudication data poem ids are ignored
-    # what is the minimum set we need to check for?
-    return fix_data_types(pl.read_csv(input_file))
+    if missing_columns:
+        raise ValueError(
+            f"Input file {input_file} is missing required {expected_type} fields: {', '.join(missing_columns)}"
+        )
 
-    try:
-        return pl.read_csv(input_file, columns=LABELED_EXCERPT_FIELDS)
-    except pl.exceptions.ColumnNotFoundError as err:
-        print(err)
-        # if label fields are missing, load as unlabeled excerpts
-        return pl.read_csv(input_file, columns=EXCERPT_FIELDS)
+    # set the correct data types for excerpt fields before returning
+    return fix_data_types(df)
 
 
 def fix_data_types(df):
@@ -284,7 +295,12 @@ def main():
 
     # starting with the second input file, merge into the main excerpt
     for input_file in args.input_files[1:]:
-        merge_df = excerpts_df(input_file)
+        try:
+            merge_df = excerpts_df(input_file)
+        except ValueError as err:
+            # if any input file does not have minimum required fields, bail out
+            print(err)
+            sys.exit(-1)
         total_excerpts += len(merge_df)
         excerpts = combine_excerpts(excerpts, merge_df)
 
