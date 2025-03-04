@@ -2,6 +2,7 @@
 Custom data type for poetry excerpts identified with the text of PPA pages.
 """
 
+import functools
 import types
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, fields, replace
@@ -184,12 +185,14 @@ class Excerpt:
         return csv_dict
 
     @classmethod
+    @functools.cache
     def fieldnames(cls) -> list[str]:
         """Return a list of names for the fields in this class,
         in order."""
         return [f.name for f in fields(cls)]
 
     @classmethod
+    @functools.cache
     def field_types(cls) -> dict[str, Any]:
         """Return a dictionary of field names and corresponding types
         for this class."""

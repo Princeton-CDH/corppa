@@ -396,6 +396,21 @@ class TestExcerpt:
             "excerpt_id": str,
         }
 
+    @patch("corppa.poetry_detection.core.field_real_type")
+    def test_field_types_cached(self, mock_field_real_type):
+        # clear the cache so we can confirm it works as expected
+        Excerpt.field_types.cache_clear()
+        field_info = Excerpt.field_types()
+        # field type method should be called once for each field
+        assert mock_field_real_type.call_count == len(field_info)
+
+        # should be cached and not called again; call count should stay the same
+        field_info = Excerpt.field_types()
+        assert mock_field_real_type.call_count == len(field_info)
+
+        # reclear the cache to remove mock values from cached result
+        Excerpt.field_types.cache_clear()
+
 
 class TestLabeledExcerpt:
     def test_init(self):
@@ -597,5 +612,5 @@ def test_field_real_type():
     assert field_real_type(Optional[int]) == int
 
     with pytest.raises(ValueError):
-        # we don't support anything that isn't a type or type alias
+        # method doesn't support anything that isn't a type or type alias
         field_real_type("text content")
