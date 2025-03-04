@@ -6,7 +6,7 @@ import sys
 
 import polars as pl
 
-from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
+from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
 
 EXCERPT_FIELDS = Excerpt.fieldnames()
 LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
@@ -14,6 +14,9 @@ LABEL_ONLY_FIELDS = set(LABELED_EXCERPT_FIELDS) - set(EXCERPT_FIELDS)
 
 
 FIELD_TYPES = LabeledExcerpt.field_types()
+# override set types with list, since Polars does not have a set type
+FIELD_TYPES["detection_methods"] = pl.List
+FIELD_TYPES["identification_methods"] = pl.List
 
 
 def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
@@ -26,7 +29,7 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
 
     # TODO: requiring all fields means adjudication data poem ids are ignored
     # what is the minimum set we need to check for?
-    return pl.read_csv(input_file)  # , columns=LABELED_EXCERPT_FIELDS)
+    return fix_data_types(pl.read_csv(input_file))
 
     try:
         return pl.read_csv(input_file, columns=LABELED_EXCERPT_FIELDS)
@@ -34,6 +37,27 @@ def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
         print(err)
         # if label fields are missing, load as unlabeled excerpts
         return pl.read_csv(input_file, columns=EXCERPT_FIELDS)
+
+
+def fix_data_types(df):
+    """Return a modified polars DataFrame with excerpt or labeled excerpt data
+    with the appropriate data types. In particular, this handles converting
+    multivalue method fields into Polars lists.
+    """
+
+    # get expected field types for columns that match excerpt / label excerpt fields
+    df_types = {column: FIELD_TYPES.get(column) for column in df.columns}
+    for c, ctype in df_types.items():
+        # for list (set) types, split strings on multival delimiter to convert to list
+        if ctype is pl.List:
+            # only split if column is currently a string
+            if df.schema[c] == pl.String:
+                df = df.with_columns(pl.col(c).str.split(MULTIVAL_DELIMITER))
+        # for any other field type, cast the column to the expected type
+        elif ctype is not None:
+            df = df.with_columns(pl.col(c).cast(ctype))
+
+    return df
 
 
 def fix_columns(df):
@@ -46,16 +70,12 @@ def fix_columns(df):
     df_columns = set(df.columns)
     expected_columns = set(LABELED_EXCERPT_FIELDS)
     missing_columns = expected_columns - df_columns
-    # if any columns are missing, add them with the appropriate type
+    # if any columns are missing, add them and make sure types are correct
     if missing_columns:
-        df = df.with_columns(
-            [
-                pl.lit(None).alias(field).cast(FIELD_TYPES[field])
-                for field in missing_columns
-            ]
-        )
+        df = df.with_columns([pl.lit(None).alias(field) for field in missing_columns])
+        df = fix_data_types(df)
 
-    # set consistent order
+    # set consistent order to allow extending/appending
     return df.select(LABELED_EXCERPT_FIELDS)
 
 
@@ -105,18 +125,21 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
         ).drop("notes_right")
 
     if "identification_methods_right" in merged.columns:
+        # use list set union method to merge values, ignoring nulls
+        # - if left value is null, use right side
+        # - if right value is null, use left
+        # - if both are non-null, combine
+        # NOTE: null check is required to avoid null + value turning into a null
+        # although there may be a more elegant polars way to handle this
         merged = merged.with_columns(
-            identification_methods=pl.when(
-                pl.col("identification_methods_right").is_null()
-            )
-            .then(pl.col("identification_methods"))
-            .when(pl.col("identification_methods").is_null())
+            identification_methods=pl.when(pl.col("identification_methods").is_null())
             .then(pl.col("identification_methods_right"))
+            .when(pl.col("identification_methods_right").is_null())
+            .then(pl.col("identification_methods"))
             .otherwise(
-                pl.concat_list(
-                    pl.col("identification_methods"),
-                    pl.col("identification_methods_right"),
-                ).sort()
+                pl.col("identification_methods").list.set_union(
+                    pl.col("identification_methods_right")
+                )
             )
         ).drop("identification_methods_right")
 
@@ -125,7 +148,7 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     # in other_df that are not present in the first df
     right_df = other_df.join(df, on=join_fields, how="anti")
     if not right_df.is_empty():
-        # ensure field order is exactly the same, then append the
+        # ensure field order and types match, then append the
         # excerpts from the right dataframe to the end of the merged dataframe
         merged = fix_columns(merged)
         merged = merged.select(LABELED_EXCERPT_FIELDS).extend(fix_columns(right_df))
@@ -230,6 +253,20 @@ def main():
         excerpts = combine_excerpts(excerpts, merge_df)
 
     excerpts = merge_duplicate_ids(excerpts)
+
+    # write the merged data to the requested output file
+    # (in future, support multiple formats - at least csv/jsonl)
+
+    # convert list fields for output to csv and reporting
+    excerpts = excerpts.with_columns(
+        detection_methods=pl.col("detection_methods")
+        .list.sort()
+        .list.join(MULTIVAL_DELIMITER),
+        identification_methods=pl.col("identification_methods")
+        .list.sort()
+        .list.join(MULTIVAL_DELIMITER),
+    )
+
     labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
 
     # summary information about the content and what as done
@@ -248,8 +285,6 @@ def main():
         # row is a tuple of value, count
         print(f"\t{row[0]}: {row[1]:,}")
 
-    # write the merged data to the requested output file
-    # (in future, support multiple formats - at least csv/jsonl)
     excerpts.write_csv(args.output)
 
 
