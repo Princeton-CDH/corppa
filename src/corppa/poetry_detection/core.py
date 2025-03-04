@@ -5,7 +5,7 @@ Custom data type for poetry excerpts identified with the text of PPA pages.
 import functools
 import types
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field, fields, replace
+from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import Any, Optional, get_args, get_origin
 
 # Table of supported detection methods and their corresponding prefixes
@@ -212,10 +212,25 @@ class Excerpt:
         return csv_dict
 
     @classmethod
-    def fieldnames(cls) -> list[str]:
+    def fieldnames(cls, required_only=False) -> list[str]:
         """Return a list of names for the fields in this class,
-        in order."""
-        return [f.name for f in fields(cls)]
+        in order. Takes an optional parameter `required_only` to
+        return the list of fields that are required for initialization."""
+        cls_fields = fields(cls)
+        # when requested, filter required fields based on default
+        # value and fields where init=False
+        if required_only:
+            cls_fields = [
+                f
+                for f in cls_fields
+                if (
+                    f.default == MISSING
+                    and f.default_factory == MISSING
+                    and f.init != False
+                )
+            ]
+
+        return [f.name for f in cls_fields]
 
     @classmethod
     def field_types(cls) -> dict[str, Any]:

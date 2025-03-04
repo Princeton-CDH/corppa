@@ -395,6 +395,16 @@ class TestExcerpt:
             "excerpt_id",
         ]
 
+    def test_fieldnames_required(self):
+        req_fieldnames = Excerpt.fieldnames(required_only=True)
+        assert req_fieldnames == [
+            "page_id",
+            "ppa_span_start",
+            "ppa_span_end",
+            "ppa_span_text",
+            "detection_methods",
+        ]
+
     def test_field_types(self):
         field_types = Excerpt.field_types()
         assert field_types == {
@@ -579,6 +589,14 @@ class TestLabeledExcerpt:
             "ref_span_start",
             "ref_span_end",
             "ref_span_text",
+            "identification_methods",
+        ]
+
+    def test_fieldnames_required(self):
+        req_fieldnames = LabeledExcerpt.fieldnames(required_only=True)
+        assert req_fieldnames == Excerpt.fieldnames(required_only=True) + [
+            "poem_id",
+            "ref_corpus",
             "identification_methods",
         ]
 
