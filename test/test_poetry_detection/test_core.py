@@ -280,7 +280,9 @@ class TestExcerpt:
         # with multiple values for set field
         excerpt = replace(excerpt, detection_methods={"manual", "passim"})
         expected_result["excerpt_id"] = "c@0:1"
-        expected_result["detection_methods"] = "manual;passim"
+        expected_result["detection_methods"] = MULTIVAL_DELIMITER.join(
+            ["manual", "passim"]
+        )
         assert excerpt.to_csv() == expected_result
 
     def test_from_dict(self):
