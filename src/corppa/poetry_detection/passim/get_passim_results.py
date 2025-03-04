@@ -345,7 +345,7 @@ def main():
         args.page_results,
         args.span_results,
         ppa_text_corpus=args.ppa_text_corpus,
-        progress=not args.progress,
+        disable_progress=not args.progress,
     )
 
 
