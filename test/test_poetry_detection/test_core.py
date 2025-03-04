@@ -4,7 +4,14 @@ from unittest.mock import patch
 
 import pytest
 
-from corppa.poetry_detection.core import Excerpt, LabeledExcerpt, Span, field_real_type
+from corppa.poetry_detection.core import (
+    MULTIVAL_DELIMITER,
+    Excerpt,
+    LabeledExcerpt,
+    Span,
+    field_real_type,
+    input_to_set,
+)
 
 
 class TestSpan:
@@ -651,3 +658,17 @@ def test_field_real_type():
     with pytest.raises(TypeError):
         # method doesn't support anything that isn't a type or type alias
         field_real_type("text content")
+
+
+def test_input_to_set():
+    # string, single value
+    assert input_to_set("a") == {"a"}
+    # delimited string
+    assert input_to_set(MULTIVAL_DELIMITER.join(["a", "b"])) == {"a", "b"}
+    # list
+    assert input_to_set(["a", "b", "c"]) == {"a", "b", "c"}
+    # set
+    assert input_to_set({"a", "b", "c"}) == {"a", "b", "c"}
+    # unsupported input
+    with pytest.raises(ValueError, match="Unexpected value type 'int'"):
+        input_to_set(1)
