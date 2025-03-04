@@ -602,6 +602,41 @@ class TestLabeledExcerpt:
 
         assert field_types == expected_types
 
+    def test_from_excerpt(self):
+        excerpt = Excerpt(
+            page_id="page_id",
+            ppa_span_start=0,
+            ppa_span_end=1,
+            ppa_span_text="page_text",
+            detection_methods={"manual"},
+        )
+        # initialize with all required fields
+        labeled_ex = LabeledExcerpt.from_excerpt(
+            excerpt,
+            poem_id="Z1234",
+            ref_corpus="test-corpus",
+            identification_methods={"manual"},
+        )
+        # spot check resulting object
+        assert labeled_ex.page_id == excerpt.page_id
+        assert labeled_ex.excerpt_id == excerpt.excerpt_id
+        assert labeled_ex.poem_id == "Z1234"
+        assert labeled_ex.ref_corpus == "test-corpus"
+
+        # should be able to override fields
+        labeled_ex = LabeledExcerpt.from_excerpt(
+            excerpt,
+            ppa_span_end=10,
+            poem_id="Z1234",
+            ref_corpus="test-corpus",
+            identification_methods={"manual"},
+        )
+        assert labeled_ex.ppa_span_end == 10
+
+        # results in init error without required fields
+        with pytest.raises(TypeError, match="missing 3 required"):
+            LabeledExcerpt.from_excerpt(excerpt)
+
 
 def test_field_real_type():
     # regular type

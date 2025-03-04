@@ -279,3 +279,12 @@ class LabeledExcerpt(Excerpt):
             raise ValueError(
                 f"Reference span's start index {self.ref_span_start} must be less than its end index {self.ref_span_end}"
             )
+
+    @classmethod
+    def from_excerpt(cls, ex: Excerpt, **kwargs: dict) -> "LabeledExcerpt":
+        """Create a :class:`LabeledExcerpt` using an :class:`Excerpt` as a
+        starting point and supplying data for additional fields."""
+        excerpt_info = asdict(ex)
+        excerpt_info.update(kwargs)
+        excerpt_info.pop("excerpt_id")
+        return cls(**excerpt_info)
