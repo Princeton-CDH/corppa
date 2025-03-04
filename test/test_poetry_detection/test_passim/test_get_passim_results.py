@@ -48,7 +48,7 @@ def test_get_passim_excerpts(mock_correct_excerpt):
                 "ref_excerpt": "B",
                 "page_start": 1,
                 "page_end": 2,
-                "page_excerpt": "b",
+                "ppa_excerpt": "b",
                 "matches": 1,
             },
             {
@@ -59,7 +59,7 @@ def test_get_passim_excerpts(mock_correct_excerpt):
                 "ref_excerpt": "bb",
                 "page_start": 9,
                 "page_end": 11,
-                "page_excerpt": "BB",
+                "ppa_excerpt": "BB",
                 "matches": 2,
             },
         ],

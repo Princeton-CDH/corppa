@@ -26,7 +26,7 @@ from tqdm import tqdm
 from corppa.poetry_detection.core import LabeledExcerpt
 
 
-def get_page_texts(page_ids: Iterable[str], text_corpus: Path) -> dict[str, str]:
+def get_page_texts(page_ids: Iterable[str], text_corpus: Path) -> dict[str, None | str]:
     """
     Gathers the texts from corpus file for the specified pages (by id), returns
     a dictionary mapping page ids to page texts.
@@ -35,7 +35,7 @@ def get_page_texts(page_ids: Iterable[str], text_corpus: Path) -> dict[str, str]
     for page in orjsonl.stream(text_corpus):
         page_id = page["id"]
         if page_id in page_ids:
-            page_texts[page_id] = page["text"]
+            page_texts[page_id] = page.get("text", "")
     return page_texts
 
 
@@ -58,7 +58,7 @@ def get_passim_excerpts(
                 page_id=page_id,
                 ppa_span_start=poem_span["page_start"],
                 ppa_span_end=poem_span["page_end"],
-                ppa_span_text=poem_span["page_excerpt"],
+                ppa_span_text=poem_span["ppa_excerpt"],
                 detection_methods={"passim"},
                 poem_id=poem_span["ref_id"],
                 ref_corpus=poem_span["ref_corpus"],
