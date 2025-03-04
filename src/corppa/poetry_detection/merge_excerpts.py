@@ -59,6 +59,12 @@ def fix_columns(df):
     return df.select(LABELED_EXCERPT_FIELDS)
 
 
+def has_poem_ids(df: pl.DataFrame) -> bool:
+    """Check if a Polars DataFrame has poem_id values. Returns true if 'poem_id'
+    is present in the list of columns and there is at least one non-null value."""
+    return "poem_id" in df.columns and df["poem_id"].count()
+
+
 def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     """Combine two Polars dataframes with excerpt or labeled excerpt data.
     Excerpts are joined on the combination of page id and excerpt id.
@@ -70,18 +76,20 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
       will be combined
     - multiple labeled excerpts for the same excerpt id are NOT combined
     """
-
-    # smplest option is to do a LEFT join on page id and excerpt id
+    # simplest option is to do a LEFT join on page id and excerpt id
     join_fields = ["page_id", "excerpt_id"]
+
+    # if poem_id is present and not empty in both dataframes,
+    # include that in the join fields to avoid collapsing different ids
+    if has_poem_ids(df) and has_poem_ids(other_df):
+        join_fields.append("poem_id")
+
     # before joining, drop redundant fields that will be the same
     # on any excerpt with matching page & excerpt id
     other_join = other_df.drop(
         "detection_methods", "ppa_span_start", "ppa_span_end", "ppa_span_text"
     )
     merged = df.join(other_join, on=join_fields, how="left")
-
-    # NOTE: could also have right columns for poem_id_right, ref_corpus_right
-    # if they are the same, merge; otherwise... split into two rows
 
     # if notes_right is present, then we have notes coming from both sides
     # of the join; combine the notes into a single notes field
@@ -90,8 +98,9 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
         # and then strip any outer newlines
         merged = merged.with_columns(
             notes=pl.col("notes")
+            .str.strip_chars()
             .add(pl.lit("\n"))
-            .add(pl.col("notes_right"))
+            .add(pl.col("notes_right").str.strip_chars())
             .str.strip_chars("\n")
         ).drop("notes_right")
 

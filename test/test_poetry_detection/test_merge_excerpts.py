@@ -121,6 +121,7 @@ def test_combine_excerpts_1ex_different_label():
 
 
 def test_combine_excerpts_two_different_labels():
+    # two different labeled excerpts should not be merged
     assert excerpt1_label1.excerpt_id != excerpt2_label1.excerpt_id
     df = pl.from_dicts([excerpt1_label1.to_dict()])
     other_df = pl.from_dicts([excerpt2_label1.to_dict()])
@@ -135,7 +136,7 @@ def test_combine_excerpts_two_different_labels():
 
 
 def test_combine_excerpts_1ex_2labels_diffmethod():
-    # excerpt + two matching labeled excerpts
+    # unlabeled excerpt + two matching labeled excerpts
     # - same excerpt id, two labels with same ref ids but different method
     # combine method does not merge these
     df = pl.from_dicts([excerpt1.to_dict()])
@@ -146,6 +147,19 @@ def test_combine_excerpts_1ex_2labels_diffmethod():
     other_df = pl.from_dicts(
         [excerpt1_label1.to_dict(), excerpt1_label1_method2.to_dict()]
     )
+    # left and right are merged but duplicate ids within the other df
+    # are not merged by this method
+    merged = combine_excerpts(df, other_df)
+    assert len(merged) == 2
+
+
+def test_combine_different_labels():
+    # combine should NOT merge labeled excerpts with different poem id
+    df = pl.from_dicts([excerpt1_label1.to_dict()])
+    excerpt1_diff_label = replace(excerpt1_label1, poem_id="Z1234")
+    other_df = pl.from_dicts([excerpt1_diff_label.to_dict()])
+
+    # distinct poem ids should NOT be merged
     merged = combine_excerpts(df, other_df)
     assert len(merged) == 2
 
