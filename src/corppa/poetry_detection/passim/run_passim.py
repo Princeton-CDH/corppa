@@ -153,7 +153,7 @@ def main():
         "--max-df",
         help="Passim parameter (maxDF): upper limit on document frequency",
         type=int,
-        default=100,
+        default=10000,
     )
     parser.add_argument(
         "--min-match",
