@@ -376,7 +376,10 @@ class TestExcerpt:
 
     @patch("corppa.poetry_detection.core.PairwiseAligner")
     def test_page_excerpt(self, mock_pairwise_aligner):
-        # Setup mocks
+        # Setup mocks.
+        # There are many mocked objects because of how alignment works in BioPython.
+        # See the BioPython docs for more detail:
+        #   https://biopython.org/docs/dev/Tutorial/chapter_pairwise.html#sec-pairwise-aligner
         ## Mock resulting alignment object
         mock_alignment = NonCallableMock()
         ### The start & end indices of aligned sequences;
