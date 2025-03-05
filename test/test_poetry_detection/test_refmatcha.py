@@ -9,13 +9,15 @@ search_texts = [
     (
         """the hour when | rites un | -holy
 ed each | Paynim | voice to | pray'r""",
-        "the hour when rites unholy ed each Paynim voice to prayr",
+        """the hour when rites unholy
+ed each Paynim voice to prayr""",
     ),
     # strip outer whitespace; handle long s
     (
         """  Thoſe darts whoſe points make gods adore
 His might, and deprecate his power.   """,
-        "Those darts whose points make gods adore His might and deprecate his power",
+        """Those darts whose points make gods adore
+His might and deprecate his power""",
     ),
     # metric notation that splits words
     (

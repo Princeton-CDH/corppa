@@ -21,6 +21,7 @@ import codecs
 import csv
 import logging
 import pathlib
+import re
 from glob import iglob
 
 try:
@@ -142,7 +143,8 @@ def compile_metadata(data_dir, output_file):
             .with_columns(source=pl.lit(SOURCE_ID["Chadwyck-Healey"]))
             .with_columns(
                 pl.concat_str(
-                    [pl.col("author_fname"), pl.col("author_lname")], separator=" "
+                    [pl.col("author_fname"), pl.col("author_lname")],
+                    separator=" ",
                 ).alias("author")
             )
             .select(["id", "source", "author", "title"])
@@ -205,6 +207,10 @@ def compile_metadata(data_dir, output_file):
     pqwriter.close()
 
 
+# unicode line separator; used in some internet poems text files
+LINE_SEPARATOR = "\u2028"
+
+
 def _text_for_search(expr):
     """Takes a polars expression (e.g. column or literal value) and applies
     text pattern replacements to clean up to make it easier to find matches."""
@@ -216,11 +222,15 @@ def _text_for_search(expr):
         # replace other puncutation with spaces
         .str.replace_all("[[:punct:]]", " ")
         # remove indent entity in CH (probably more of these...)
-        .str.replace_all("&indent;", " ")
-        # normalize whitespace
-        # NOTE: if we can do this on the query term instead,
+        .str.replace_all(
+            "&indent;", " "
+        )  # TODO: remove when we switch to new version of CH texts
+        .str.replace_all(
+            LINE_SEPARATOR, "\n"
+        )  # replace unicode line separator with newline
+        # normalize whitespace except for newlines, so that
         # matching reference text in the output will be more readable
-        .str.replace_all("[\t\n\v\f\r ]+", " ")  # could also use [[:space:]]
+        .str.replace_all("[\t\v\f\r ]+", " ")  # replace all whitespace but newlines
         # replace curly quotes with straight (both single and double)
         .str.replace_all("[”“]", '"')
         .str.replace_all("[‘’]", "'")
@@ -331,9 +341,15 @@ def find_reference_poem(input_row, ref_df, meta_df):
         logger.info(f"Searching on {search_field_label}: {search_text}")
 
         try:
-            # do a case-insensitive search
-            re_search = f"(?i){search_text}"
-            re_extract = f"(?i)^(?<preceding_text>.*)(?<ref_span_text>{search_text})"
+            # do a case-insensitive, whitespace-insensitive search
+            # convert one or more whitespace of any kind to match any whitespace
+            search_text_ignore_ws = re.sub(r"\s+", "[[:space:]]+", search_text)
+            # search regex for filtering
+            re_search = f"(?i){search_text_ignore_ws}"
+            # regex for extracting match and preceding text, which we need for indexing
+            re_extract = (
+                f"(?i)^(?<preceding_text>.*)(?<ref_span_text>{search_text_ignore_ws})"
+            )
             result = (
                 # filter to rows that match the regex search
                 ref_df.filter(pl.col("search_text").str.contains(re_search))
