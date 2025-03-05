@@ -600,17 +600,19 @@ def process(input_file):
                 excerpt_fields = {
                     k: v for k, v in row.items() if k in Excerpt.fieldnames()
                 }
-                excerpt_fields.pop("excerpt_id")
-                excerpt_fields["detection_methods"] = [
-                    excerpt_fields["detection_methods"]
-                ]
-                notes = excerpt_fields.pop("notes") or ""
+                # initialize as an excerpt object to use as basis
+                # for creating labeled excerpt
+                excerpt = Excerpt.from_dict(excerpt_fields)
+                notes = excerpt.notes or ""
                 notes += f"refmatcha: {match_poem['notes']}"
+
+                # create labeled excerpt from original excerpt
+                # with poem id and reference span information
 
                 # NOTE: if identification logic results in a bad span, this will
                 # raise a value error
-                # TODO: Use new from_excerpt method once we have it
-                excerpt = LabeledExcerpt(
+                excerpt = LabeledExcerpt.from_excerpt(
+                    excerpt,
                     # labeled excerpt fields - reference poem information
                     poem_id=match_poem["id"],
                     ref_corpus=match_poem["source"],
@@ -619,10 +621,9 @@ def process(input_file):
                     ref_span_text=match_poem["ref_span_text"],
                     identification_methods={"refmatcha"},
                     notes=notes,
-                    **excerpt_fields,
                 )
                 match_found += 1
-                # TODO: use new to_csv method
+                # write out as csv
                 csvwriter.writerow(excerpt.to_csv())
 
     print(f"Poems with match information saved to {output_file}")
