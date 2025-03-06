@@ -2,8 +2,8 @@ from unittest.mock import call, patch
 
 from corppa.poetry_detection.core import LabeledExcerpt
 from corppa.poetry_detection.passim.get_passim_results import (
+    build_passim_excerpt,
     get_page_texts,
-    get_passim_excerpts,
     get_passim_span,
 )
 
@@ -24,86 +24,39 @@ def test_get_page_texts(mock_orjsonl):
 
 
 @patch.object(LabeledExcerpt, "correct_page_excerpt")
-def test_get_passim_excerpts(mock_correct_excerpt):
-    # Page with no poetry
-    page_record = {"page_id": "page_c", "n_spans": 0, "poem_spans": []}
-    results = get_passim_excerpts(page_record)
-    assert list(results) == []
-    mock_correct_excerpt.assert_not_called()
-    ## No difference with correction
-    results = get_passim_excerpts(page_record, ppa_page_text="ppa text")
-    assert list(results) == []
-    mock_correct_excerpt.assert_not_called()
-
-    # Page with some poetry excerpts
-    page_record = {
-        "page_id": "page",
-        "n_spans": 2,
-        "poem_spans": [
-            {
-                "ref_id": "poem_a",
-                "ref_corpus": "ref",
-                "ref_start": 11,
-                "ref_end": 12,
-                "ref_excerpt": "B",
-                "page_start": 1,
-                "page_end": 2,
-                "ppa_excerpt": "b",
-                "matches": 1,
-            },
-            {
-                "ref_id": "poem_b",
-                "ref_corpus": "ref",
-                "ref_start": 5,
-                "ref_end": 7,
-                "ref_excerpt": "bb",
-                "page_start": 9,
-                "page_end": 11,
-                "ppa_excerpt": "BB",
-                "matches": 2,
-            },
-        ],
+def test_build_passim_excerpt(mock_correct_excerpt):
+    span_record = {
+        "ref_id": "poem_a",
+        "ref_corpus": "ref",
+        "ref_start": 11,
+        "ref_end": 12,
+        "ref_excerpt": "B",
+        "page_start": 1,
+        "page_end": 2,
+        "ppa_excerpt": "b",
+        "matches": 1,
     }
-    ## Basic case (without correction)
-    expected_results = [
-        LabeledExcerpt(
-            page_id="page",
-            ppa_span_start=1,
-            ppa_span_end=2,
-            ppa_span_text="b",
-            poem_id="poem_a",
-            ref_corpus="ref",
-            ref_span_start=11,
-            ref_span_end=12,
-            ref_span_text="B",
-            detection_methods={"passim"},
-            identification_methods={"passim"},
-            notes="passim: 1 char matches",
-        ),
-        LabeledExcerpt(
-            page_id="page",
-            ppa_span_start=9,
-            ppa_span_end=11,
-            ppa_span_text="BB",
-            poem_id="poem_b",
-            ref_corpus="ref",
-            ref_span_start=5,
-            ref_span_end=7,
-            ref_span_text="bb",
-            detection_methods={"passim"},
-            identification_methods={"passim"},
-            notes="passim: 2 char matches",
-        ),
-    ]
-    results = list(get_passim_excerpts(page_record))
-    assert list(results) == expected_results
+    # Basic case (without correction)
+    expected_result = LabeledExcerpt(
+        page_id="page_id",
+        ppa_span_start=1,
+        ppa_span_end=2,
+        ppa_span_text="b",
+        poem_id="poem_a",
+        ref_corpus="ref",
+        ref_span_start=11,
+        ref_span_end=12,
+        ref_span_text="B",
+        detection_methods={"passim"},
+        identification_methods={"passim"},
+        notes="passim: 1 char matches",
+    )
+    assert build_passim_excerpt("page_id", span_record) == expected_result
     mock_correct_excerpt.assert_not_called()
-    ## With correction
-    mock_correct_excerpt.side_effect = ["a", "b"]
-    results = list(get_passim_excerpts(page_record, ppa_page_text="ppa_page"))
-    assert results == ["a", "b"]
-    assert mock_correct_excerpt.call_count == 2
-    mock_correct_excerpt.assert_has_calls([call("ppa_page"), call("ppa_page")])
+    # With correction
+    mock_correct_excerpt.side_effect = "a"
+    assert build_passim_excerpt("page_id", span_record, ppa_page_text="ppa_page") == "a"
+    mock_correct_excerpt.assert_called_once_with("ppa_page")
 
 
 def test_get_passim_span():

@@ -39,39 +39,34 @@ def get_page_texts(page_ids: Iterable[str], text_corpus: Path) -> dict[str, None
     return page_texts
 
 
-def get_passim_excerpts(
-    page_record: dict[str, Any], ppa_page_text: None | str = None
-) -> Generator[LabeledExcerpt]:
+def build_passim_excerpt(
+    page_id: str, span_record: dict[str, Any], ppa_page_text: None | str = None
+) -> LabeledExcerpt:
     """
-    Extracts and yields the passim-identified passage-level excerpts from passim
-    page-level results record as produced by `build_passim_page_results`.
+    Creates passim excerpt using the passed in page id and passim span record as
+    produced by `build_passim_page_results.`
 
     Optionally, can provide the original PPA page text to "correct" the excerpt
     for any text transformations applied during the passim pipeline.
     """
-    # Gather excerpts
-    if page_record["n_spans"]:
-        page_id = page_record["page_id"]
-        # Get ppa page text
-        for poem_span in page_record["poem_spans"]:
-            excerpt = LabeledExcerpt(
-                page_id=page_id,
-                ppa_span_start=poem_span["page_start"],
-                ppa_span_end=poem_span["page_end"],
-                ppa_span_text=poem_span["ppa_excerpt"],
-                detection_methods={"passim"},
-                poem_id=poem_span["ref_id"],
-                ref_corpus=poem_span["ref_corpus"],
-                ref_span_start=poem_span["ref_start"],
-                ref_span_end=poem_span["ref_end"],
-                ref_span_text=poem_span["ref_excerpt"],
-                identification_methods={"passim"},
-                notes=f"passim: {poem_span['matches']} char matches",
-            )
-            if ppa_page_text:
-                # Correct excerpt if we have the original page text
-                excerpt = excerpt.correct_page_excerpt(ppa_page_text)
-            yield excerpt
+    excerpt = LabeledExcerpt(
+        page_id=page_id,
+        ppa_span_start=span_record["page_start"],
+        ppa_span_end=span_record["page_end"],
+        ppa_span_text=span_record["ppa_excerpt"],
+        detection_methods={"passim"},
+        poem_id=span_record["ref_id"],
+        ref_corpus=span_record["ref_corpus"],
+        ref_span_start=span_record["ref_start"],
+        ref_span_end=span_record["ref_end"],
+        ref_span_text=span_record["ref_excerpt"],
+        identification_methods={"passim"},
+        notes=f"passim: {span_record['matches']} char matches",
+    )
+    if ppa_page_text:
+        # Correct excerpt if we have the original page text
+        excerpt = excerpt.correct_page_excerpt(ppa_page_text)
+    return excerpt
 
 
 def get_passim_span(alignment_record) -> dict[str, Any]:
@@ -226,12 +221,10 @@ def write_passim_results(
     )
 
     with open(out_span_results, mode="w", newline="") as csvfile:
+        # Passim-specific fields
+        passim_fields = ["matches", "aligned_ref_excerpt", "aligned_ppa_excerpt"]
         # Add additional passim-specific fields
-        fieldnames = LabeledExcerpt.fieldnames() + [
-            "matches",
-            "aligned_ref_excerpt",
-            "aligned_ppa_excerpt",
-        ]
+        fieldnames = LabeledExcerpt.fieldnames() + passim_fields
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -240,10 +233,12 @@ def write_passim_results(
             orjsonl.append(out_page_results, record)
 
             # Write span-level results to file
-            for excerpt in get_passim_excerpts(
-                record, ppa_page_text=ppa_page_texts.get(page_id)
-            ):
-                writer.writerow(excerpt.to_csv())
+            page_text = ppa_page_texts.get(page_id)
+            for span in record["spans"]:
+                excerpt = build_passim_excerpt(page_id, span, ppa_text=page_text)
+                row_fields = excerpt.to_csv()
+                row_fields += {key: record[key] for key in passim_fields}
+                writer.writerow(row_fields)
 
 
 def main():
