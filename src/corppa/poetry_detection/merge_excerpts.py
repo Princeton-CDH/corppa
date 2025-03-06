@@ -7,24 +7,29 @@ it also handles merging duplicate poem identifications in simple cases.
 It takes two or more input files of excerpt or labeled excerpt data in CSV format,
 merges the excerpts, and outputs a CSV of the merged excerpt data.  All excerpts
 are included in the output, whether they were merged with any other records or not.
+This means that in most cases, the output will likely be a mix of labeled
+and unlabeled excerpts.
 
 Merging logic is as follows:
 - Excerpts are merged on the combination of page id and excerpt id
 - When working with two sets of labeled excerpts, records are merged on the
   combination of page id, excerpt id, and poem id
-    - If the same excerpt has different identifications, both
+    - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
-    - If the same excerpt has duplicate identifications, they will be merged
-      into a single excerpt that includes both identification methods
+    - If the same excerpt has duplicate labels (i.e., the same `poem_id` from two
+      different identification methods), they will be merged
+      into a single labeled excerpt; the `identification_methods` in the
+      resulting labeled excerpt will be the union of methods in the merged excerpts
 - When merging excerpts where both records have notes, the notes content
-  will be combined
+  will be combined. (Combined notes order follows input file order.)
 
 After all input files are combined, the script checks for duplicate
 excerpt idenfications that can be consolidated. This currently only handles
 these simple cases:
 - All poem identification and reference fields match (poem_id, ref_span_start, ref_span_text, ref_span_end)
 - Poem identification matches and reference fields are null in one set
-    (e.g. manual identification and refmatcha identification)
+    (e.g. manual identification, which does not include reference fields, and
+    refmatcha identification)
 
 Limitations:
 - Generally assumes excerpts do not require merging within a single input file
@@ -206,9 +211,14 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     return merged
 
 
-def merge_duplicate_ids(df):
-    # look for multiple rows for the same excerpt id and poem id,
-    # try to merge them (only handles simple cases for now)
+def merge_labeled_excerpts(df: pl.DataFrame) -> pl.DataFrame:
+    """Takes a polars Dataframe that includes labeled excerpts and attempts to
+    merges excerpts with same page id, excerpt id, and poem id. Returns the resulting
+    dataframe, with any duplicate excerpts merged.
+    For now, merging is only done on the simple cases where reference
+    fields match exactly, or where reference fields are present in one labeled
+    excerpt and null in the other.
+    """
 
     # copy the df and add a row index for removal
     updated_df = df.with_row_index()
@@ -234,7 +244,7 @@ def merge_duplicate_ids(df):
 
         if not repeats.is_empty():
             # convert list of id methods to string in each row, then combine all rows
-            # TODO: standardize on delimited string or list when loading/serializing
+            # TODO: switch to list set union methods here
             repeats = (
                 repeats.with_columns(
                     # convert list of ids in each row to string
@@ -314,7 +324,7 @@ def main():
             # merging with the new input file
             excerpts = combine_excerpts(excerpts, merge_df)
 
-    excerpts = merge_duplicate_ids(excerpts)
+    excerpts = merge_labeled_excerpts(excerpts)
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)

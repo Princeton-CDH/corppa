@@ -12,7 +12,7 @@ from corppa.poetry_detection.merge_excerpts import (
     fix_data_types,
     has_poem_ids,
     main,
-    merge_duplicate_ids,
+    merge_labeled_excerpts,
 )
 
 excerpt1 = Excerpt(
@@ -173,7 +173,7 @@ def test_combine_different_labels():
     assert len(merged) == 2
 
 
-def test_merge_duplicate_ids():
+def test_merge_labeled_excerpts():
     # excerpt + two matching labeled excerpts
     # - same excerpt id, two labels with same ref ids but different method
 
@@ -182,7 +182,7 @@ def test_merge_duplicate_ids():
         excerpt1_label1, identification_methods={"refmatcha"}
     )
     df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label1_method2.to_dict()])
-    merged = merge_duplicate_ids(df)
+    merged = merge_labeled_excerpts(df)
     assert len(merged) == 1
     # should have all columns for labeled excerpt (order-agnostic)
     assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
@@ -199,7 +199,7 @@ def test_merge_duplicate_ids():
         identification_methods={"other"},
     )
     df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label1_other.to_dict()])
-    merged = merge_duplicate_ids(df)
+    merged = merge_labeled_excerpts(df)
     assert len(merged) == 1
     # should have all columns for labeled excerpt (order-agnostic)
     assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
@@ -210,7 +210,7 @@ def test_merge_duplicate_ids():
 
     # order should not matter
     df = pl.from_dicts([excerpt1_label1_other.to_dict(), excerpt1_label1.to_dict()])
-    merged = merge_duplicate_ids(df)
+    merged = merge_labeled_excerpts(df)
     assert len(merged) == 1
     excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
     assert excerpt.identification_methods == {"manual", "other"}
