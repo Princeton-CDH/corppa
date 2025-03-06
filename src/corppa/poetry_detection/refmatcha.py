@@ -41,6 +41,9 @@ from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 
 logger = logging.getLogger(__name__)
 
+#: identifier for this script, for labeled excerpt id method & notes
+SCRIPT_ID = "refmatcha"
+
 # for convenience, assume the poetry reference data directory is
 # available relative to wherever this script is called from
 REF_DATA_DIR = pathlib.Path("poetry-reference-data")
@@ -344,18 +347,14 @@ def identify_excerpt(
     # can we use excerpt objects to simplify?
     # labeled_ex = LabeledExcerpt.from_excerpt(Excerpt.from_dict(excerpt))
     id_info = {
-        f: None
-        for f in [
-            "poem_id",
-            "ref_corpus",
-            "ref_span_start",
-            "ref_span_end",
-            "ref_span_text",
-        ]
+        "poem_id": None,
+        "ref_corpus": None,
+        "ref_span_start": None,
+        "ref_span_end": None,
+        "ref_span_text": None,
+        "identification_methods": None,  # empty unless we are able to id
+        "notes": excerpt.get("notes") or "",
     }
-    id_info["identification_methods"] = ["refmatcha"]  # set normally but list in polars
-    # copy existing notes content for appending
-    id_info["notes"] = excerpt.get("notes") or ""
 
     search_field = f"search_{search_text}"
     search_field_label = search_text.replace("_", " ")
@@ -365,13 +364,13 @@ def identify_excerpt(
     try:
         # do a case-insensitive, whitespace-insensitive search
         # convert one or more whitespace of any kind to match any whitespace
-        search_text_ignore_ws = re.sub(r"\s+", "[[:space:]]+", search_text)
+        search_pattern = re.sub(r"\s+", "[[:space:]]+", search_text)
         # search regex for filtering
-        re_search = f"(?i){search_text_ignore_ws}"
-        # regex for extracting match and preceding text, which we need for indexing
-        re_extract = (
-            f"(?i)^(?<preceding_text>.*)(?<ref_span_text>{search_text_ignore_ws})"
-        )
+        re_search = f"(?i){search_pattern}"
+        # regex to extracting match and preceding text, to calculate indices
+        # NOTE: must use s flag to allow . to match newlines
+        re_extract = f"(?is)^(?<preceding_text>.*)(?<ref_span_text>{search_pattern})"
+
         result = (
             # filter poetry reference dataframe to rows with text that match the regex search
             reference_df.filter(pl.col("search_text").str.contains(re_search))
@@ -395,25 +394,30 @@ def identify_excerpt(
     except pl.exceptions.ComputeError as err:
         print(f"Error searching: {err}")
 
-    # if search text didn't match anything , bail out
-    if result.is_empty():
-        # return empty id dict
-        return id_info
+    # if anything matched search text, determine if results are useful
+    if not result.is_empty():
+        num_matches = result.height  # height = number of rows
 
-    # otherwise, determine if the results are useful
-    num_matches = result.height  # height = number of rows
-
-    # if we get a single match, assume it is authoritative
-    if num_matches == 1:
-        # get dataframe row as dict
-        match_poem = result.row(0, named=True)
-        # convert reference data fields to labeled excerpt fields
-        id_info["poem_id"] = match_poem["id"]
-        id_info["ref_corpus"] = match_poem["source"]
-        # add note about how the match was determined
-        id_info["notes"] = "\n".join(
-            [id_info["notes"], f"refmatcha: single match on {search_field_label}"]
-        ).strip()
+        # if we get a single match, assume it is authoritative
+        if num_matches == 1:
+            # rename columns and limit to the fields we need for output
+            result = result.rename({"id": "poem_id", "source": "ref_corpus"})[
+                [
+                    "poem_id",
+                    "ref_corpus",
+                    "ref_span_start",
+                    "ref_span_end",
+                    "ref_span_text",
+                ]
+            ]
+            # update identification dict with the first row in dict format
+            id_info.update(result.row(0, named=True))
+            # add note about how the match was determined
+            id_info["notes"] = "\n".join(
+                [id_info["notes"], f"refmatcha: single match on {search_field_label}"]
+            ).strip()
+            # set id method
+            id_info["identification_methods"] = [SCRIPT_ID]
 
     return id_info
 
