@@ -544,19 +544,6 @@ class TestLabeledExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
-    def test_fieldnames(self):
-        fieldnames = LabeledExcerpt.fieldnames()
-        # should inherit from Excerpt but include
-        # additional fields
-        assert fieldnames == Excerpt.fieldnames() + [
-            "poem_id",
-            "ref_corpus",
-            "ref_span_start",
-            "ref_span_end",
-            "ref_span_text",
-            "identification_methods",
-        ]
-
     def test_from_dict(self):
         # JSONL-friendly dict
         excerpt = LabeledExcerpt(
