@@ -277,14 +277,14 @@ def main():
     parser.add_argument(
         "-o",
         "--output",
-        help="output filename for merged excerpts",
+        help="Output filename for merged excerpts (CSV)",
         type=pathlib.Path,
         required=True,
     )
     parser.add_argument(
         "input_files",
         nargs="+",
-        help="Two or more input files with excerpt or labeled except data",
+        help="Two or more input files with excerpt or labeled excerpt data",
         type=pathlib.Path,
     )
 
