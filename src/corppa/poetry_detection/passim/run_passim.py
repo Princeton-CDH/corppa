@@ -153,7 +153,7 @@ def main():
         "--max-df",
         help="Passim parameter (maxDF): upper limit on document frequency",
         type=int,
-        default=100,
+        default=10000,
     )
     parser.add_argument(
         "--min-match",
@@ -165,7 +165,7 @@ def main():
         "--ngram-size",
         help="Passim parameter (n): n-gram order",
         type=int,
-        default=25,
+        default=15,
     )
     parser.add_argument(
         "--floating-ngrams",
@@ -176,13 +176,13 @@ def main():
         "--gap",
         help="Passim parameter (gap): minimum size of gap that separates passage",
         type=int,
-        default=600,
+        default=300,
     )
     parser.add_argument(
         "--min-align",
         help="Passim paramaeter (min-align): minimum length of alignment",
         type=int,
-        default=50,
+        default=25,
     )
     parser.add_argument("-v", "--verbose", action="store_true")
 

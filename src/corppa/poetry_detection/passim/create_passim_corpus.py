@@ -13,11 +13,43 @@ python create_passim_corpus.py poetry.jsonl poetry-passim.jsonl ref_poetry
 
 import argparse
 import pathlib
+import re
 import sys
 from typing import Iterator
 
+import ftfy
 import orjsonl
 from tqdm import tqdm
+
+# Character conversion map for text cleaning
+CHAR_CONVERSION_MAP = {
+    "ſ": "s",  # long s
+    # ae ligatures
+    "æ": "ae",
+    "Æ": "AE",
+    # oe ligatures
+    "œ": "oe",
+    "Œ": "OE",
+}
+CHAR_TRANSLATION_TABLE = str.maketrans(CHAR_CONVERSION_MAP)
+
+
+def clean_text(text: str) -> str:
+    """
+    Clean text to make finding matches easier.
+    """
+    # Let ftfy clean text including normalizing ligatures and quote marks
+    result_text = ftfy.fix_text(
+        text,
+        unescape_html=False,  # Assume text is not HTML
+        fix_encoding=False,  # Assume no encoding errors at this stage
+        normalization="NFKC",
+    )
+    # Perform a few additional character-level replacements
+    result_text = result_text.translate(CHAR_TRANSLATION_TABLE)
+    # Collapse sequences of whitespace to singular space
+    result_text = re.sub(r"\s+", " ", result_text)
+    return result_text
 
 
 def transform_record(
@@ -27,7 +59,8 @@ def transform_record(
     preserve_fields: bool = False,
 ):
     """
-    Converts a record (dict) to a passim-friendly form.
+    Converts a record (dict) to a passim-friendly form and transforms ("cleans")
+    the text field to a form more condusive for passim.
 
     This method returns a new record (dict) with the following fields:
         * "id": record[id_field]
@@ -54,7 +87,7 @@ def transform_record(
     # TODO: Revisit whether to preserve blank pages. It should not meaningfully
     #       impact performance, but ensures a 1-1 line corresponds between the
     #       input and output JSONL files.
-    out_record["text"] = record.get("text", "")
+    out_record["text"] = clean_text(record.get("text", ""))
     return out_record
 
 
@@ -106,7 +139,11 @@ def save_passim_corpus(
     orjsonl.save(
         output_corpus,
         build_passim_corpus(
-            input_corpus, corpus_name, id_field, preserve_fields, disable_progress
+            input_corpus,
+            corpus_name,
+            id_field,
+            preserve_fields=preserve_fields,
+            disable_progress=disable_progress,
         ),
     )
 

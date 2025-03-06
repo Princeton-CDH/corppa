@@ -5,7 +5,9 @@ Custom data type for poetry excerpts identified with the text of PPA pages.
 import types
 from copy import deepcopy
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import Any, Optional, get_args, get_origin
+from typing import Any, Optional, Self, get_args, get_origin
+
+from Bio.Align import PairwiseAligner
 
 # Table of supported detection methods and their corresponding prefixes
 DETECTION_METHODS = {
@@ -265,7 +267,7 @@ class Excerpt:
 
         return cls(**input_args)
 
-    def strip_whitespace(self) -> "Excerpt":
+    def strip_whitespace(self) -> Self:
         """
         Return a copy of this excerpt with any leading and trailing whitespace
         removed from the text and start and end indices updated to match any changes.
@@ -277,6 +279,46 @@ class Excerpt:
             ppa_span_start=self.ppa_span_start + ldiff,
             ppa_span_end=self.ppa_span_end - rdiff,
             ppa_span_text=self.ppa_span_text.strip(),
+        )
+
+    def correct_page_excerpt(self, page_text: str) -> Self:
+        """
+        For an excerpt that may have undergone textual transformations during
+        the detection process, this method attemps to correct the excerpt such
+        that the returned excerpt has the indicies and text correpsonding to
+        the original page text (rather than the transformed version). The
+        correspondence is determined using the Needleman-Wunsch algorithm.
+
+        Warning: If the wrong page text is passed in, this method will still
+        find an alignment, but "correct" the excerpt... but not to something
+        meaningful. In the future, we may add support to guard against this
+        issue.
+        """
+        # TODO: Make the alignment settings more visible. However, they are
+        #       meant to be fixed values.
+        # See BioPython docs for more detail on the PairwiseAligner
+        # https://biopython.org/docs/dev/Tutorial/chapter_pairwise.html#sec-pairwise-aligner
+        aligner = PairwiseAligner(
+            mismatch_score=-0.5,
+            gap_score=-0.5,
+            query_left_gap_score=0,  # no penalty for gaps to the left of the excerpt
+            query_right_gap_score=0,  # no penlty for gaps to the right of the excerpt
+        )
+        # List of best alignments, there can be more than one
+        results = aligner.align(page_text, self.ppa_span_text)
+        # Use first resulting alignment even if there are more than one
+        alignment = results[0]
+        # Get the PPA pages aligned sequences.
+        ppa_aligned_seqs = alignment.aligned[0]
+        ## Starting index of the first aligned sequence
+        new_start = ppa_aligned_seqs[0][0]
+        ## Ending index of the final aligned sequence
+        new_end = ppa_aligned_seqs[-1][1]
+        return replace(
+            self,
+            ppa_span_start=new_start,
+            ppa_span_end=new_end,
+            ppa_span_text=page_text[new_start:new_end],
         )
 
 

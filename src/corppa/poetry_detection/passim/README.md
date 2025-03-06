@@ -20,6 +20,10 @@ Minimally, for each record (i.e. line) the follow three fields are created:
              input to `create_passim_corpus.py`.
 3. `text`: The record's text derived from the input record's `text` field.
 
+Note that the `text` field is modified to increase passim's chance's of identifying
+poetry reuse. This involves some character-level normalization as well as collapsing
+converting all sequences of whitespace into a singular space character.
+
 Optionally, all other fields of the input records may be preserved by including the
 `--preserve-fields` flag.
 
@@ -70,33 +74,29 @@ excerpts and one that does not. This is due to the fact that `passim` output fil
 contain the full excerpts themselves, only an aligned version (one that includes "-" symbols
 to indicate places where a character was "inserted" for alignment).
 
-#### Get page-level `passim` results without excerpts
-Currently, the default case does not include excerpts in the output JSONL file. It requires
-the following arguments:
-- `input_corpus`: The input corpus containing PPA texts used in in the passim run
-- `passim_output_dir`: The passim output directory for the passim run
-- `output`: Filename for the output page-level results (JSONL)
+### 3. Build `passim` page-level and excerpt-level results
+After running `passim`, we can use `get_passim_results.py` to build the page-level and excerpt-level
+passages identified by `passim`.
+
+Page-level results are saved as a JSONL file, and include records for pages where `passim` identifies
+for pages where `passim` identifies *no* reuse. This file is primarily meant for evaluating (and
+optimizing) the performance of `passim`.
+
+Excerpt-level results are saved as a CSV file. With each row corresponding to a single poetry excerpt
+identified by `passim` in the form of `LabeledExcerpt` objects.
+
+This script requires quite a few files beyond passim's output directory. This script also requires all
+of the input corpora for the `passim` run. Additionally, since the PPA text corpus underwent text
+transformations, the original PPA text corpus must be provided if accurate PPA excerpts are desired.
+Currently this (`--ppa-text-corpus`) is an optional parameter.
 
 Example usage:
 ```
-python get_passim_page_results.py ppa_passim.jsonl passim-output passim_page_results.jsonl
-```
-
-#### Get page-level `passim` results with excerpts
-To include the full excerpt texts, the `--include-excerpts` flag must be set. Additionally,
-any reference corpus files (JSONL) used in the passim run must be provided using the
-`--ref-corpus` optional argument.
-
-Example usage:
-```
-python get_passim_page_results.py ppa_text.jsonl passim-output passim_page_results.jsonl \
-   --include-excerpts --ref-corpus ref_poems.jsonl
-```
-
-### 4. Build excerpt-level results
-Finally, an excerpt-level results file (CSV) can be built from the page-level results
-*with excerpts* built in the previous step using `get_passim_excerpts.py`.
-
-```
-python get_passim_excerpts.py passim_page_results.jsonl passim_excerpts.csv
+    get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref.jsonl \
+        --passim-dir passim_output --page-results passim_page_results.jsonl \
+        --span-results passim_spans.csv
+    get_passim_results.py --ppa-passim-corpus ppa_passim.jsonl --ref-corpus ref_a.jsonl \
+        --ref-corpus ref_b.jsonl --passim-dir passim_output \
+        --page-results passim_page_results.jsonl --span-results passim_spans.csv \
+        --ppa-text-corpus ppa.jsonl.gz
 ```
