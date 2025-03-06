@@ -92,7 +92,6 @@ def get_passim_span(alignment_record) -> dict[str, Any]:
 
 def extract_passim_spans(
     passim_dir: Path,
-    include_excerpts: bool = False,
     disable_progress: bool = False,
 ) -> Generator[dict[str, Any]]:
     """
@@ -100,7 +99,7 @@ def extract_passim_spans(
     """
     align_dir = passim_dir.joinpath("align.json")
     if not align_dir.is_dir():
-        raise ValueError("Error: Alignment directory '{align.json}' does not exist.")
+        raise ValueError(f"Error: Alignment directory '{align_dir}' does not exist")
     for filepath in align_dir.glob("*.json"):
         record_progress = tqdm(
             orjsonl.stream(filepath),
@@ -148,19 +147,19 @@ def add_excerpts(
     for ref_corpus in ref_corpora:
         ref_progress = tqdm(
             orjsonl.stream(ref_corpus),
-            desc=f"Adding {ref_corpus} excerpts",
+            desc=f"Adding {ref_corpus} reference excerpts",
             disable=disable_progress,
         )
         for ref_record in ref_progress:
-            ref_corpus = ref_record["corpus"]
+            corpus_id = ref_record["corpus"]
             ref_id = ref_record["id"]
-            if ref_id not in refs_to_pages[ref_corpus]:
+            if ref_id not in refs_to_pages[corpus_id]:
                 # Skip unreferenced texts
                 continue
-            for page_id in refs_to_pages[ref_corpus][ref_id]:
+            for page_id in refs_to_pages[corpus_id][ref_id]:
                 # Add reference excerpts to corresponding spans
                 for span in page_results[page_id]["poem_spans"]:
-                    if span["ref_corpus"] == ref_corpus and span["ref_id"] == ref_id:
+                    if span["ref_corpus"] == corpus_id and span["ref_id"] == ref_id:
                         start, end = span["ref_start"], span["ref_end"]
                         span["ref_excerpt"] = ref_record["text"][start:end]
 
@@ -234,10 +233,12 @@ def write_passim_results(
 
             # Write span-level results to file
             page_text = ppa_page_texts.get(page_id)
-            for span in record["poem_spans"]:
-                excerpt = build_passim_excerpt(page_id, span, ppa_text=page_text)
+            for span_record in record["poem_spans"]:
+                excerpt = build_passim_excerpt(
+                    page_id, span_record, ppa_page_text=page_text
+                )
                 row_fields = excerpt.to_csv()
-                row_fields += {key: record[key] for key in passim_fields}
+                row_fields.update({key: span_record[key] for key in passim_fields})
                 writer.writerow(row_fields)
 
 
