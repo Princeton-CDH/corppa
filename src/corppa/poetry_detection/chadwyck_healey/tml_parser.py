@@ -299,7 +299,7 @@ class TMLPoetryParser:
 
     # Field names for output metadata
     metadata_fields = [
-        "filename",
+        "id",
         "author_lastname",
         "author_firstname",
         "author_birth",
@@ -692,7 +692,7 @@ class TMLPoetryParser:
 
             # extract metadata from the header section
             metadata = self.extract_metadata(soup)
-            metadata["filename"] = file_path.name
+            metadata["id"] = file_path.stem
 
             # in metadata-only mode, bail out before text extraction logic, returning None for poetry_text
             if self.metadata_only:
