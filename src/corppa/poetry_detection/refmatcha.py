@@ -246,11 +246,16 @@ def searchable_text(text):
     return unidecode(pl.select(_text_for_search(pl.lit(text))).item())
 
 
-def generate_search_text(df, field="text", output_field=None):
-    """Takes a Polars dataframe and generates a searchable text field
-    based on the input column (by default, input column is "text" and
-    output is "search_text").  Removes punctuation, normalizes whitespace,
-    and strips trailing and leading whitespace, etc."""
+def generate_search_text(
+    df: pl.DataFrame, field: str = "text", output_field: str | None = None
+) -> pl.DataFrame:
+    """Takes a Polars dataframe and returns an updated version of the
+    dataframe with a searchable text column based on the input field
+    (default input column is "text" and output is "search_text"; an input
+    of "first_line" will result in an output column of "search_first_line").
+    Removes punctuation, normalizes whitespace, and does other small cleanup."""
+    # name output field based in input unless specified,
+    # e.g. for input field first_line, create a field named search_first_line
     if output_field is None:
         output_field = f"search_{field}"
     return df.with_columns(**{output_field: _text_for_search(pl.col(field))})
@@ -324,6 +329,93 @@ def fuzzy_partial_ratio(series, search_text):
     # generates a list of scores for each input search text, but we only have
     # one input string, so return the first list of scores
     return scores[0]
+
+
+# new version of simplified fiend_reference_poem method
+
+
+def identify_excerpt(
+    excerpt: dict, reference_df: pl.DataFrame, search_text: str = "text"
+) -> dict:
+    """Given an unlabeled excerpt as a dict from a polars dataframe and a
+    reference poetry data frame, attempt to identify the excerpt. Returns
+    a dictionary of labeled excerpt fields with poem identification and
+    reference information filled in if found."""
+    # can we use excerpt objects to simplify?
+    # labeled_ex = LabeledExcerpt.from_excerpt(Excerpt.from_dict(excerpt))
+    id_info = {
+        f: None
+        for f in [
+            "poem_id",
+            "ref_corpus",
+            "ref_span_start",
+            "ref_span_end",
+            "ref_span_text",
+        ]
+    }
+    id_info["identification_methods"] = ["refmatcha"]  # set normally but list in polars
+    # copy existing notes content for appending
+    id_info["notes"] = excerpt.get("notes") or ""
+
+    search_field = f"search_{search_text}"
+    search_field_label = search_text.replace("_", " ")
+    # get the searchable version of the text to use for attempted identification
+    # use unidecode to drop accents (often used to indicate meter)
+    search_text = unidecode(excerpt[search_field])
+    try:
+        # do a case-insensitive, whitespace-insensitive search
+        # convert one or more whitespace of any kind to match any whitespace
+        search_text_ignore_ws = re.sub(r"\s+", "[[:space:]]+", search_text)
+        # search regex for filtering
+        re_search = f"(?i){search_text_ignore_ws}"
+        # regex for extracting match and preceding text, which we need for indexing
+        re_extract = (
+            f"(?i)^(?<preceding_text>.*)(?<ref_span_text>{search_text_ignore_ws})"
+        )
+        result = (
+            # filter poetry reference dataframe to rows with text that match the regex search
+            reference_df.filter(pl.col("search_text").str.contains(re_search))
+            # for those that match, extract the search text AND
+            # all of the text that comes before it
+            .with_columns(captures=pl.col("search_text").str.extract_groups(re_extract))
+            .unnest("captures")
+            # calculate start based on character length of text before the match
+            # NOTE: can't use str.find because it returns byte offset instead of char offset
+            .with_columns(ref_span_start=pl.col("preceding_text").str.len_chars())
+            # calculate span end based on span start and length of matching text
+            .with_columns(
+                ref_span_end=pl.col("ref_span_start").add(
+                    pl.col("ref_span_text").str.len_chars()
+                )
+            )
+            # drop preceding text, since it may be quite large
+            .drop("preceding_text")
+        )
+
+    except pl.exceptions.ComputeError as err:
+        print(f"Error searching: {err}")
+
+    # if search text didn't match anything , bail out
+    if result.is_empty():
+        # return empty id dict
+        return id_info
+
+    # otherwise, determine if the results are useful
+    num_matches = result.height  # height = number of rows
+
+    # if we get a single match, assume it is authoritative
+    if num_matches == 1:
+        # get dataframe row as dict
+        match_poem = result.row(0, named=True)
+        # convert reference data fields to labeled excerpt fields
+        id_info["poem_id"] = match_poem["id"]
+        id_info["ref_corpus"] = match_poem["source"]
+        # add note about how the match was determined
+        id_info["notes"] = "\n".join(
+            [id_info["notes"], f"refmatcha: single match on {search_field_label}"]
+        ).strip()
+
+    return id_info
 
 
 def find_reference_poem(input_row, ref_df, meta_df):
