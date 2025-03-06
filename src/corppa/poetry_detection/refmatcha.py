@@ -264,42 +264,46 @@ def generate_search_text(
     return df.with_columns(**{output_field: _text_for_search(pl.col(field))})
 
 
-def multiple_matches(df, search_field):
-    # when a result has multiple matches, see if we can determine if
-    # it is the same poem in different sources
-    match_count = int(df.height)
+def multiple_matches(filtered_ref_df):
+    """When a result has multiple matches, see if we can determine if
+    it is the same poem in different sources. Takes a filtered reference
+    dataframe with matches for a single excerpt; returns a 1-row dataframe
+    and text reason if a confident match is found.
+    """
+    match_count = int(filtered_ref_df.height)
 
     #  check if both author and title match (ignoring punctuation and case)
     # TODO: could use rapidfuzz here to check author & title are sufficiently similar
     # e.g. these should be treated as matches but are not currently:
     #    Walter Scott      ┆ Coronach
     #    Walter, Sir Scott ┆ CCLXXVIII CORONACH
-    df = df.with_columns(
+    df = filtered_ref_df.with_columns(
         _author=pl.col("author").str.replace_all("[[:punct:]]", "").str.to_lowercase(),
         _title=pl.col("title").str.replace_all("[[:punct:]]", "").str.to_lowercase(),
     )
 
     dupe_df = df.filter(df.select(["_author", "_title"]).is_duplicated())
 
-    match_poem = None
+    match_df = None
+    reason = None
     if not dupe_df.is_empty():
         # if all rows match, return the first one
         if int(dupe_df.height) == match_count:
-            match_poem = dupe_df.to_dicts()[0]
-            match_poem["notes"] = (
-                f"multiple matches on {search_field}, all rows match author + title"
-            )
+            # return a dataframe with the first row
+            match_df = dupe_df.limit(1)
+            reason = "all rows match author + title"
+
         # if duplicate rows are a majority, return the first one
         elif dupe_df.height >= match_count / 2:
             # TODO: include alternates in notes?
             # these majority matches may be less confident
-            match_poem = dupe_df.to_dicts()[0]
-            match_poem["notes"] = (
-                f"multiple matches on {search_field}, majority match author + title ({dupe_df.height} out of {match_count})"
+            match_df = dupe_df.limit(1)
+            reason = (
+                f"majority match author + title ({dupe_df.height} out of {match_count})"
             )
 
-    if match_poem is not None:
-        return match_poem
+    if match_df is not None:
+        return match_df, reason
 
     # if author/title duplication check failed, check for author matches
     # poetry foundation includes shakespeare drama excerpts with alternate names
@@ -311,11 +315,11 @@ def multiple_matches(df, search_field):
             pl.col("source") != SOURCE_ID["Poetry Foundation"]
         )
         if non_poetryfoundtn.height == 1:
-            match_poem = non_poetryfoundtn.to_dicts()[0]
-            match_poem["notes"] = (
-                "multiple matches, duplicate author but not title; excluding Poetry Foundation"
-            )
-            return match_poem
+            match_df = non_poetryfoundtn.limit(1)
+            reason = "duplicate author but not title; excluding Poetry Foundation"
+            return match_df, reason
+
+    return None, None
 
 
 def fuzzy_partial_ratio(series, search_text):
@@ -397,11 +401,22 @@ def identify_excerpt(
     # if anything matched search text, determine if results are useful
     if not result.is_empty():
         num_matches = result.height  # height = number of rows
+        match_df = None
 
         # if we get a single match, assume it is authoritative
         if num_matches == 1:
-            # rename columns and limit to the fields we need for output
-            result = result.rename({"id": "poem_id", "source": "ref_corpus"})[
+            match_df = result
+            id_note = f"single match on {search_field_label}"
+        elif num_matches < 10:
+            # if there are a small number of matches, check if we have
+            # duplicates across corpora and they agree
+            match_df, reason = multiple_matches(result)
+            if match_df is not None:
+                id_note = f"multiple matches ({num_matches}) on {search_field_label}: {reason}"
+
+        if match_df is not None:
+            # rename columns and limit to the fields we to return
+            match_df = match_df.rename({"id": "poem_id", "source": "ref_corpus"})[
                 [
                     "poem_id",
                     "ref_corpus",
@@ -410,12 +425,10 @@ def identify_excerpt(
                     "ref_span_text",
                 ]
             ]
-            # update identification dict with the first row in dict format
-            id_info.update(result.row(0, named=True))
+            # update identification dict with first row in dict format
+            id_info.update(match_df.row(0, named=True))
             # add note about how the match was determined
-            id_info["notes"] = "\n".join(
-                [id_info["notes"], f"refmatcha: single match on {search_field_label}"]
-            ).strip()
+            id_info["notes"] = f"{id_info['notes']}\n{SCRIPT_ID}: {id_note}".strip()
             # set id method
             id_info["identification_methods"] = [SCRIPT_ID]
 

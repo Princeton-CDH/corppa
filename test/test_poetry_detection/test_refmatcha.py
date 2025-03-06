@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import polars as pl
 import pytest
 
@@ -71,6 +73,16 @@ def reference_df():
     return generate_search_text(pl.from_dicts(ref_poetry_data))
 
 
+reference_fields = [
+    "poem_id",
+    "ref_corpus",
+    "ref_span_text",
+    "ref_span_start",
+    "ref_span_end",
+    "identification_methods",
+]
+
+
 def test_identify_excerpt(reference_df):
     # test identify_excerpt method directly
     excerpt_row = excerpt_earth.to_dict()
@@ -97,26 +109,45 @@ def test_identify_excerpt(reference_df):
     id_result = identify_excerpt(excerpt_row, reference_df)
     assert id_result["poem_id"] == ref_poetry_data[0]["id"]
 
-    reference_fields = [
-        "poem_id",
-        "ref_corpus",
-        "ref_span_text",
-        "ref_span_start",
-        "ref_span_end",
-        "identification_methods",
-    ]
-
     # no match
     excerpt_row["search_text"] = "Disdain forbids me and my dread of shame"
     id_result = identify_excerpt(excerpt_row, reference_df)
     for ref_field in reference_fields:
         assert id_result[ref_field] is None
 
+
+@patch("corppa.poetry_detection.refmatcha.multiple_matches")
+def test_identify_excerpt_multiple(mock_multimatch, reference_df):
+    # test identify_excerpt method when multiple matches are found
+    excerpt_row = excerpt_earth.to_dict()
+    # manually set search text for now
     # too many matches, can't consolidate
     excerpt_row["search_text"] = "wonderful works"
+
+    # duplicate results don't match
+    mock_multimatch.return_value = (None, None)
     id_result = identify_excerpt(excerpt_row, reference_df)
     for ref_field in reference_fields:
         assert id_result[ref_field] is None
+
+    reason = "all rows match author + title"
+    # fill in values for reference span
+    ref_match_df = reference_df.with_columns(
+        ref_span_text=pl.lit("matched text"),
+        ref_span_start=pl.lit(10),
+        ref_span_end=pl.lit(20),
+    )
+    mock_multimatch.return_value = (ref_match_df.limit(1), reason)
+    id_result = identify_excerpt(excerpt_row, reference_df)
+    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
+    assert id_result["ref_corpus"] == ref_poetry_data[0]["source"]
+    assert id_result["ref_span_text"] == "matched text"
+    assert id_result["ref_span_start"] == 10
+    assert id_result["ref_span_end"] == 20
+    assert (
+        id_result["notes"]
+        == "refmatcha: multiple matches (2) on text: all rows match author + title"
+    )
 
 
 def test_identify_excerpt_map_elements(reference_df):
