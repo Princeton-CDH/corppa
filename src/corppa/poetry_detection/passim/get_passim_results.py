@@ -234,7 +234,7 @@ def write_passim_results(
 
             # Write span-level results to file
             page_text = ppa_page_texts.get(page_id)
-            for span in record["spans"]:
+            for span in record["poem_spans"]:
                 excerpt = build_passim_excerpt(page_id, span, ppa_text=page_text)
                 row_fields = excerpt.to_csv()
                 row_fields += {key: record[key] for key in passim_fields}
