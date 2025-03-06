@@ -272,7 +272,7 @@ def merge_labeled_excerpts(df: pl.DataFrame) -> pl.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Merge excerpts with identified excerpts or notes"
+        description="Merge excerpts with labeled excerpts or notes"
     )
     parser.add_argument(
         "-o",
@@ -300,6 +300,15 @@ def main():
     if len(args.input_files) < 2:
         print(
             "Error: at least two input files are required for merging", file=sys.stderr
+        )
+        sys.exit(-1)
+
+    # make sure input files exist
+    non_existent_input = [f for f in args.input_files if not f.exists()]
+    if non_existent_input:
+        print(
+            f"Error: input files not found: {', '.join([str(f) for f in non_existent_input])}",
+            file=sys.stderr,
         )
         sys.exit(-1)
 

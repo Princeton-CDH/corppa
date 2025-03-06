@@ -313,6 +313,7 @@ def test_main_argparse_errors(capsys, tmp_path):
             main()
         captured = capsys.readouterr()
         assert "at least two input files are required for merging" in captured.err
+
     # output file already exists
     outfile = tmp_path / "merged.csv"
     outfile.touch()
@@ -321,6 +322,41 @@ def test_main_argparse_errors(capsys, tmp_path):
             main()
         captured = capsys.readouterr()
         assert f"{outfile} already exists, not overwriting" in captured.err
+
+    # input files don't exist
+    input1 = tmp_path / "excerpts.csv"
+    input2 = tmp_path / "more_excerpts.csv"
+    # both input files don't actually eixst
+    with patch(
+        "sys.argv", ["merge_excerpts.py", str(input1), str(input2), "-o", "output"]
+    ):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert "input files not found" in captured.err
+        assert str(input1) in captured.err
+        assert str(input2) in captured.err
+    # one file exists, the other doesn't
+    input1.touch()
+    with patch(
+        "sys.argv", ["merge_excerpts.py", str(input1), str(input2), "-o", "output"]
+    ):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert "input files not found" in captured.err
+        assert str(input1) not in captured.err
+        assert str(input2) in captured.err
+    # input file order shouldn't matter - same error if inputs reversed
+    with patch(
+        "sys.argv", ["merge_excerpts.py", str(input2), str(input1), "-o", "output"]
+    ):
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert "input files not found" in captured.err
+        assert str(input1) not in captured.err
+        assert str(input2) in captured.err
 
 
 def test_main_invalid_input(capsys, tmp_path):
