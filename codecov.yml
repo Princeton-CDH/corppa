@@ -1,0 +1,13 @@
+coverage:
+  status:
+    project:
+      default: false  # disable default status check
+      all:  # custom target for app+tests
+        # target: auto
+        target: 75  # override auto target since current coverage is lower
+      tests:  # declare a new status context  for "tests"
+        target: 100%  # we always want 100% coverage here
+        paths:
+          - "test/"  # only include coverage in "tests/" folder
+
+
