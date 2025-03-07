@@ -99,7 +99,7 @@ def test_identify_excerpt(reference_df):
     assert (
         id_result["ref_span_text"] == "the earth is the Lords and the fullness thereof"
     )
-    assert id_result["notes"] == "refmatcha: single match on text"
+    assert id_result["id_notes"] == "refmatcha: single match on text"
     assert id_result["identification_methods"] == [SCRIPT_ID]
 
     # single match, whitespace agnostic
@@ -114,6 +114,46 @@ def test_identify_excerpt(reference_df):
     id_result = identify_excerpt(excerpt_row, reference_df)
     for ref_field in reference_fields:
         assert id_result[ref_field] is None
+
+
+def test_identify_excerpt_first_line(reference_df):
+    excerpt_row = excerpt_earth.to_dict()
+    # manually set search text for now with multiline content
+    excerpt_row["search_text"] = (
+        "The earth is the Lords and the fullness thereof\nWhen hungry and thirsty we're ready to faint"
+    )
+    excerpt_row["search_first_line"] = "The earth is the Lords and the fullness thereof"
+
+    # single match
+    id_result = identify_excerpt(excerpt_row, reference_df, "first_line")
+    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
+    assert id_result["ref_span_start"] == 50
+    # end and text adjusted based on length of search text
+    assert id_result["ref_span_end"] == 142
+    assert (
+        id_result["ref_span_text"]
+        == "the earth is the Lords and the fullness thereof \nWhen hungry and thirsty were ready to faint"
+    )
+
+
+def test_identify_excerpt_last_line(reference_df):
+    excerpt_row = excerpt_earth.to_dict()
+    # manually set search text for now with multiline content
+    excerpt_row["search_text"] = (
+        "The earth is the Lords and the fullness thereof\nWhen hungry and thirsty we're ready to faint"
+    )
+    excerpt_row["search_last_line"] = "When hungry and thirsty were ready to faint"
+
+    # single match
+    id_result = identify_excerpt(excerpt_row, reference_df, "last_line")
+    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
+    # start and text adjusted based on length of search text
+    assert id_result["ref_span_start"] == 50
+    assert id_result["ref_span_end"] == 142
+    assert (
+        id_result["ref_span_text"]
+        == "the earth is the Lords and the fullness thereof \nWhen hungry and thirsty were ready to faint"
+    )
 
 
 @patch("corppa.poetry_detection.refmatcha.multiple_matches")
@@ -145,9 +185,13 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
     assert id_result["ref_span_start"] == 10
     assert id_result["ref_span_end"] == 20
     assert (
-        id_result["notes"]
-        == "refmatcha: multiple matches (2) on text: all rows match author + title"
+        id_result["id_notes"]
+        == "refmatcha: 2 matches on text: all rows match author + title"
     )
+
+
+# TODO: handle special characters like this
+# (?i)*[[:space:]]+me[[:space:]]+val[[:space:]]+The
 
 
 def test_identify_excerpt_map_elements(reference_df):
@@ -173,4 +217,4 @@ def test_identify_excerpt_map_elements(reference_df):
     # expect poem id to be set from reference poem
     assert row_dict["poem_id"] == ref_poetry_data[0]["id"]
     assert row_dict["ref_corpus"] == ref_poetry_data[0]["source"]
-    assert row_dict["notes"] == "refmatcha: single match on text"
+    assert row_dict["id_notes"] == "refmatcha: single match on text"
