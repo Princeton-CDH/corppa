@@ -468,127 +468,13 @@ def identify_excerpt(
     return id_info
 
 
-def find_reference_poem(input_row, ref_df, meta_df):
-    result = {"poem_id"}
-    previously_searched = []
-    for search_field in ["search_text", "search_first_line", "search_last_line"]:
-        search_field_label = search_field.replace("search_", "").replace("_", " ")
-        # use unidecode to drop accents (often used to indicate meter)
-        search_text = unidecode(input_row[search_field])
-        # skip if the exact same content has already been searched(e.g. for single-line excerpts)
-        # and don't search on empty strings
-        if search_text in previously_searched or search_text.strip() == "":
-            continue
-        previously_searched.append(search_text)
-        logger.info(f"Searching on {search_field_label}: {search_text}")
+def _find_reference_poem_OLD(input_row, ref_df, meta_df):
+    # NOTE: this is the old version of the identification method
+    # which is now replaced by identify_excerpt
+    # fuzzy matching will be updated and restored later
 
-        try:
-            # do a case-insensitive, whitespace-insensitive search
-            # convert one or more whitespace of any kind to match any whitespace
-            search_text_ignore_ws = re.sub(r"\s+", "[[:space:]]+", search_text)
-            # search regex for filtering
-            re_search = f"(?i){search_text_ignore_ws}"
-            # regex for extracting match and preceding text, which we need for indexing
-            re_extract = (
-                f"(?i)^(?<preceding_text>.*)(?<ref_span_text>{search_text_ignore_ws})"
-            )
-            result = (
-                # filter to rows that match the regex search
-                ref_df.filter(pl.col("search_text").str.contains(re_search))
-                # for those that match, extract the search text AND
-                # all of the text that comes before it
-                .with_columns(
-                    captures=pl.col("search_text").str.extract_groups(re_extract)
-                )
-                .unnest("captures")
-                # calculate start based on character length of text before the match
-                # NOTE: can't use str.find because it returns byte offset instead of char offset
-                .with_columns(ref_span_start=pl.col("preceding_text").str.len_chars())
-                # calculate span end based on span start and length of matching text
-                .with_columns(
-                    ref_span_end=pl.col("ref_span_start").add(
-                        pl.col("ref_span_text").str.len_chars()
-                    )
-                )
-                # drop preceding text, since it may be quite large
-                .drop("preceding_text")
-            )
-
-        except pl.exceptions.ComputeError as err:
-            print(f"Error searching: {err}")
-            continue
-        # if no matches, try the next search field
-        if result.is_empty():
-            continue
-
-        # if the match was NOT found based on the full text,
-        # adjust reference start/end/text for the full span
-        if search_field != "search_text":
-            # use search text length as basis for reference span length
-            search_text_length = len(input_row["search_text"])
-
-            if search_field == "search_first_line":
-                # if matched on first line, start is correct;
-                # recalculate end based on the length of the input search text
-                result = result.with_columns(
-                    ref_span_end=pl.col("ref_span_start").add(search_text_length)
-                )
-            # and use slice to get the substring for that content
-            elif search_field == "search_last_line":
-                # if matched on last line, end is correct; adjust start
-                result = result.with_columns(
-                    ref_span_start=pl.col("ref_span_end").add(-search_text_length)
-                ).with_columns(
-                    # dont' allow span start to be smaller than zero
-                    ref_span_start=pl.when(pl.col("ref_span_start") < 0)
-                    .then(0)
-                    .otherwise(pl.col("ref_span_start"))
-                )
-
-            # then extract full reference text for adjusted indices
-            result = result.with_columns(
-                ref_span_text=pl.col("search_text").str.slice(
-                    pl.col("ref_span_start"), search_text_length
-                )
-            )
-
-        # otherwise, see if the results are useful
-        num_matches = result.height  # height = number of rows
-        # join matching poem with metadata dataframe
-        # so we can include poem title and author in the output
-        result = result.join(
-            meta_df,
-            # join on the combination of poem id and source id
-            on=pl.concat_str([pl.col("id"), pl.col("source")], separator="|"),
-            how="left",  # occasionally ids do not match,
-            # e.g. Chadwyck Healey poem id we have text for but not in metadata
-        )
-        result = result.drop("text", "id_right", "source_right", "search_text")
-
-        # if we get a single match, assume it is authoritative
-        if num_matches == 1:
-            # match poem includes id, author, title
-            match_poem = result.to_dicts()[0]
-            # add note about how the match was determined
-            match_poem["notes"] = f"single match on {search_field_label}"
-            # include number of matches found
-            match_poem["match_count"] = num_matches
-
-            return match_poem
-        elif num_matches < 10:
-            # if there's a small number of matches, check for duplicates
-            match_poem = multiple_matches(result, search_field_label)
-            # return match if a good enough result was found
-            if match_poem:
-                match_poem["match_count"] = num_matches
-                return match_poem
-
-    # skip fuzzy match for now, while revising output
-    # TODO: add argparse flag to control whether we try fuzzy matching
-    return
-
-    # NOTE: could make configurable to skip fuzzy searches,
-    # or maybe truncate large excepts before running fuzzy search
+    # TODO: add argparse to make it configurable whether to try fuzzy matchingd
+    # also consider truncating large excepts before running fuzzy matching
 
     # if no matches were found yet, try a fuzzy search on the full text
     search_text = unidecode(input_row["search_text"])
