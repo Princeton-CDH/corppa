@@ -468,7 +468,8 @@ def identify_excerpt(
     return id_info
 
 
-def _find_reference_poem_OLD(input_row, ref_df, meta_df):
+# NOTE: disabling code coverage since this code is skipped for now
+def _find_reference_poem_OLD(input_row, ref_df, meta_df):  # pragma: no cover
     # NOTE: this is the old version of the identification method
     # which is now replaced by identify_excerpt
     # fuzzy matching will be updated and restored later
