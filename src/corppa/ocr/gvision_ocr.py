@@ -27,7 +27,7 @@ os.environ["GRPC_VERBOSITY"] = "NONE"
 
 
 def ocr_image_via_gvision(
-    gvision_client: google_vision.ImageAnnotatorClient,
+    gvision_client: "google_vision.ImageAnnotatorClient",
     input_image: pathlib.Path,
     out_txt: pathlib.Path,
     out_json: pathlib.Path,
