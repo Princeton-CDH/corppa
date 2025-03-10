@@ -47,93 +47,14 @@ import sys
 import polars as pl
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
-
-#: List of required fields for excerpt data
-REQ_EXCERPT_FIELDS = set(Excerpt.fieldnames(required_only=True))
-#: List required fields for labeled excerpt data
-REQ_LABELED_EXCERPT_FIELDS = set(LabeledExcerpt.fieldnames(required_only=True))
-#: All fields for labeled excerpts, in the expected order
-LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
-
-#: dictionary of excerpt field names with associated data types
-FIELD_TYPES = LabeledExcerpt.field_types()
-# override set types with list, since Polars does not have a set type
-FIELD_TYPES["detection_methods"] = pl.List
-FIELD_TYPES["identification_methods"] = pl.List
-
-
-def excerpts_df(input_file: pathlib.Path) -> pl.DataFrame:
-    """Load the specified input file as a Polars dataframe,
-    with column names based on fields in
-    :class:`~corppa.poetry_detection.core.LaebledExcerpt`."""
-    # load input file as a polars dataframe
-    # for now assume csv; in future may add support for jsonl
-    df = pl.read_csv(input_file)
-    # check that we have the required fields for either
-    # excerpt or labeled excerpt data
-    columns = set(df.columns)
-    expected_type = "excerpt"
-    missing_columns = []
-    # treat presence of poem ids as indication of labeled excerpt
-    if has_poem_ids(df):
-        expected_type = "labeled excerpt"
-        missing_columns = REQ_LABELED_EXCERPT_FIELDS - columns
-    else:
-        missing_columns = REQ_EXCERPT_FIELDS - columns
-
-    if missing_columns:
-        raise ValueError(
-            f"Input file {input_file} is missing required {expected_type} fields: {', '.join(missing_columns)}"
-        )
-
-    # set the correct data types for excerpt fields before returning
-    return fix_data_types(df)
-
-
-def fix_data_types(df):
-    """Return a modified polars DataFrame with excerpt or labeled excerpt data
-    with the appropriate data types. In particular, this handles converting
-    multivalue method fields into Polars lists.
-    """
-
-    # get expected field types for columns that match excerpt / label excerpt fields
-    df_types = {column: FIELD_TYPES.get(column) for column in df.columns}
-    for c, ctype in df_types.items():
-        # for list (set) types, split strings on multival delimiter to convert to list
-        if ctype is pl.List:
-            # only split if column is currently a string
-            if df.schema[c] == pl.String:
-                df = df.with_columns(pl.col(c).str.split(MULTIVAL_DELIMITER))
-        # for any other field type, cast the column to the expected type
-        elif ctype is not None:
-            df = df.with_columns(pl.col(c).cast(ctype))
-
-    return df
-
-
-def fix_columns(df):
-    """Ensure a polars dataframe has all expected columns for
-    fields in :class:~`corppa.poetry_detection.core.LabeledExcerpt`,
-    in the expected order, so that dataframes can be combined consistently.
-    Any fields not present will be added as a series of null values
-    with the appropriate type.
-    """
-    df_columns = set(df.columns)
-    expected_columns = set(LABELED_EXCERPT_FIELDS)
-    missing_columns = expected_columns - df_columns
-    # if any columns are missing, add them and make sure types are correct
-    if missing_columns:
-        df = df.with_columns([pl.lit(None).alias(field) for field in missing_columns])
-        df = fix_data_types(df)
-
-    # set consistent order to allow extending/appending
-    return df.select(LABELED_EXCERPT_FIELDS)
-
-
-def has_poem_ids(df: pl.DataFrame) -> bool:
-    """Check if a Polars DataFrame has poem_id values. Returns true if 'poem_id'
-    is present in the list of columns and there is at least one non-null value."""
-    return bool("poem_id" in df.columns and df["poem_id"].count())
+from corppa.poetry_detection.polars_utils import (
+    FIELD_TYPES,
+    LABELED_EXCERPT_FIELDS,
+    REQ_LABELED_EXCERPT_FIELDS,
+    has_poem_ids,
+    load_excerpts_df,
+    standardize_dataframe,
+)
 
 
 def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
@@ -205,8 +126,10 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
     if not right_df.is_empty():
         # ensure field order and types match, then append the
         # excerpts from the right dataframe to the end of the merged dataframe
-        merged = fix_columns(merged)
-        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(fix_columns(right_df))
+        merged = standardize_dataframe(merged)
+        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(
+            standardize_dataframe(right_df)
+        )
 
     return merged
 
@@ -318,7 +241,7 @@ def main():
     # load files in order specified, and merge them in one by one
     for input_file in args.input_files:
         try:
-            merge_df = excerpts_df(input_file)
+            merge_df = load_excerpts_df(input_file)
         except ValueError as err:
             # if any input file does not have minimum required fields, bail out
             print(err, file=sys.stderr)
