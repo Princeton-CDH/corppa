@@ -3,8 +3,8 @@ General-purpose methods for working with paths, PPA identifiers, and directories
 """
 
 import os
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterator, List
 
 _htid_encode_map = {":": "+", "/": "=", ".": ","}
 _htid_encode_table = str.maketrans(_htid_encode_map)
@@ -146,10 +146,10 @@ def get_page_number(pagefile: Path) -> str:
 
 def find_relative_paths(
     base_dir: Path,
-    exts: List[str],
+    exts: Iterable[str],
     follow_symlinks: bool = True,
     group_by_dir: bool = False,
-) -> Iterator[Path] | Iterator[tuple[Path, list]]:
+) -> Iterator[Path] | Iterator[tuple[Path, list[Path]]]:
     """
     This method finds files anywhere under the specified base directory
     that match any of the specified file extensions (case insensitive),
@@ -169,8 +169,8 @@ def find_relative_paths(
     The result will include the two items: ``alpha.jpg`` and ``d/beta.jpg``
 
     When ``group_by_dir`` is ``True``, resulting files will be returned grouped
-    by the parent directory. The return result is a tuple of a single :class:`pathlib.Path`
-    object for the directory and a list of :class:`pathlib.Path` objects for the files in that
+    by the parent directory. The return result is a tuple of a single :py:class:`pathlib.Path`
+    object for the directory and a list of :py:class:`pathlib.Path` objects for the files in that
     directory that match the specified extensions.  Given a hierarchy like this: ::
 
         images/vol-a/
@@ -185,6 +185,7 @@ def find_relative_paths(
     # Using pathlib.Path.walk / os.walk over glob because (1) it allows us to
     # find files with multiple extensions in a single walk of the directory
     # and (2) lets us leverage additional functionality of pathlib.
+    walk_generator: Iterator[tuple[str | Path, list[str], list[str]]]  # for mypy
     if hasattr(base_dir, "walk"):
         # As of Python 3.12, Path.walk exists
         walk_generator = base_dir.walk(follow_symlinks=follow_symlinks)
@@ -204,9 +205,9 @@ def find_relative_paths(
         # if group by dir is specified, yield dirpath and list of files,
         # but only if at least one relevant file is found
         if group_by_dir:
-            include_files = list(include_files)
-            if include_files:
-                yield (dirpath.relative_to(base_dir), include_files)
+            include_files_list = list(include_files)
+            if include_files_list:
+                yield (dirpath.relative_to(base_dir), include_files_list)
         else:
             # otherwise yield just the files
             yield from include_files
