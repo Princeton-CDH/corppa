@@ -11,5 +11,14 @@ OCR
 
 Utils
 -----
+
+Filter Utility
+^^^^^^^^^^^^^^
+.. automodule:: corppa.utils.filter
+  :members:
+
+Path Utilities
+^^^^^^^^^^^^^^
 .. automodule:: corppa.utils.path_utils
   :members:
+
