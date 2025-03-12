@@ -292,6 +292,63 @@ def replace_entities(text: str, entity_map: dict[str, str] = CUSTOM_ENTITY_MAP) 
     return text
 
 
+def passes_filter(poem_meta: dict[str, str]) -> bool:
+    """
+    Determine if a poem should be included in results based on its metadata.
+    Works too recent (written ~1929 or later) are excluded from the working set.
+    Returns ``True`` if the poem's metadata should be included, and ``False`` if
+    the poem should be excluded.
+    """
+    # 1. Attempt to filter by period tag:
+    #    Pass: poems from periods before the 20th c. (all other tags)
+    if poem_meta["period"] and poem_meta["period"] != "Twentieth-Century 1900-1999":
+        return True
+
+    # 2. Attempt to filter by author birth year:
+    #    Pass: poem with authors who died before 1929
+    author_dod_year = re.search(r"\d\d\d\d", poem_meta["author_death"])
+    if author_dod_year:
+        if int(author_dod_year[0]) < 1929:
+            return True
+    else:
+        # BCE dates
+        if re.match(r"BC", poem_meta["author_death"]):
+            return True
+
+    # 3. Attempt to filter by author birth year:
+    #    Pass: poems with authors born before 1915
+    #    Fail: poems with authors born after 1915
+    ## Try extracting 4-digit year
+    author_dob_year = re.search(r"\d\d\d\d", poem_meta["author_birth"])
+    if author_dob_year:
+        if int(author_dob_year[0]) < 1915:
+            return True
+        else:
+            return False
+    else:
+        ## BCE dates
+        if re.match(r"B\.?C\.?\d+", poem_meta["author_birth"]):
+            return True
+        ## Specifies century
+        if re.match(r"cent.1\dth", poem_meta["author_birth"]):
+            return True
+
+    # 4. Attempt to filter by dates in edition title
+    #    Pass: poems whose edition titles include a date before 1929
+    #    Fail: poems whose editions titles include only dates 1929+
+    matches = re.findall(r"\d\d\d\d", poem_meta["edition_text"])
+    if matches:
+        for match in matches:
+            if int(match) < 1929:
+                return True
+        return False
+
+    # 5. Finally, conservatively filter out remaining 20th c. poems
+    #    Pass: poems without period tag
+    #    Fail: poems with 20th century period tag
+    return not poem_meta["period"]
+
+
 class TMLPoetryParser:
     """
     Parser object for parsing Chadwyck-Healey poem .TML files
@@ -326,6 +383,7 @@ class TMLPoetryParser:
         output_csv: Path,
         check_encodings: bool = False,
         metadata_only: bool = False,
+        filter_results: bool = False,
         show_progress: bool = True,
         verbose: bool = False,
     ):
@@ -334,6 +392,7 @@ class TMLPoetryParser:
         self.metadata_file = output_csv
         self.check_encodings = check_encodings
         self.metadata_only = metadata_only
+        self.filter_results = filter_results
         self.show_progress = show_progress
         self.verbose = verbose
 
@@ -694,6 +753,10 @@ class TMLPoetryParser:
             metadata = self.extract_metadata(soup)
             metadata["id"] = file_path.stem
 
+            # if filtering is set, return null objects if metadata fails filter
+            if self.filter_results and not passes_filter(metadata):
+                return None, None
+
             # in metadata-only mode, bail out before text extraction logic, returning None for poetry_text
             if self.metadata_only:
                 return metadata, None
@@ -807,7 +870,7 @@ class TMLPoetryParser:
             for f in self.figure_only:
                 print("  -", f)
 
-    def extract_metadata(self, soup: Tag):
+    def extract_metadata(self, soup: Tag) -> dict[str, str]:
         """
         Extract metadata from the TML file's head section.
         Handles multiple authors (original and translator) as well as special cases
@@ -858,6 +921,13 @@ class TMLPoetryParser:
                     "death": death,
                     "period": "",  # special handling for "Anon." cases with a period in fname...
                 }
+
+                # special case: check if birth year is actually death year
+                if re.match(r"\d\d\d\d.+d\.", birth) and not death:
+                    # move birth field to death field
+                    author_info[death] = birth
+                    # nullify birth field
+                    author_info[birth] = ""
 
                 # special handling: if the last name is "Anon." and the first name is actually a time range.
                 if lname == "Anon." and re.match(r"^\d{3,4}(-\d{3,4})?$", fname):
@@ -968,6 +1038,11 @@ def main():
         action="store_true",
     )
     parser_arg.add_argument(
+        "--filter-results",
+        help="Filter results to pre-1929 works as possible by metadata",
+        action="store_true",
+    )
+    parser_arg.add_argument(
         "--progress",
         help="Show progress",
         action=argparse.BooleanOptionalAction,
@@ -992,6 +1067,7 @@ def main():
         output_csv=args.output_csv,
         check_encodings=args.check_encodings,
         metadata_only=args.metadata_only,
+        filter_results=args.filter_results,
         show_progress=args.progress,
         verbose=args.verbose,
     )
