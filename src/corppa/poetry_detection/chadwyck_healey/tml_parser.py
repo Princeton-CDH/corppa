@@ -826,8 +826,8 @@ class TMLPoetryParser:
             writer = csv.DictWriter(csvfile, fieldnames=self.metadata_fields)
             writer.writeheader()
 
-            processed = False
             for i, file_path in enumerate(file_progress):
+                processed = False
                 if num_files and i == num_files:
                     # Exit early if limit reached
                     break
