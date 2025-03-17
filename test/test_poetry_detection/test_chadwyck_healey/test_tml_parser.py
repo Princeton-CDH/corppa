@@ -2,7 +2,7 @@ import pytest
 
 from corppa.poetry_detection.chadwyck_healey.tml_parser import (
     determine_encoding,
-    passes_filter,
+    ppa_relevant,
     replace_entities,
 )
 
@@ -55,7 +55,7 @@ def test_replace_entities():
     assert replace_entities(text) == expected_result
 
 
-def test_passes_filter():
+def test_ppa_relevant():
     # Basic required poem metadata form
     basic_meta = {
         k: "" for k in ["period", "author_birth", "author_death", "edition_text"]
@@ -69,10 +69,10 @@ def test_passes_filter():
     }:
         poem_meta = basic_meta | {"period": period}
         # Basic case
-        assert passes_filter(poem_meta)
+        assert ppa_relevant(poem_meta)
         # Passes regardless of date(s) in author_birth and edition_text fields
-        assert passes_filter(poem_meta | {"author_birth": "2000"})
-        assert passes_filter(poem_meta | {"edition_text": "2000"})
+        assert ppa_relevant(poem_meta | {"author_birth": "2000"})
+        assert ppa_relevant(poem_meta | {"edition_text": "2000"})
 
     # 2. Author death year
     for period in ["", "Twentieth-Century 1900-1999"]:
@@ -80,27 +80,27 @@ def test_passes_filter():
         # Passes if author_death is before 1929
         for year in ["1901", "1928", "BC", "BC50"]:
             dod_meta = poem_meta | {"author_death": year}
-            assert passes_filter(dod_meta)
+            assert ppa_relevant(dod_meta)
             # Passes regardless of date(s) in author_birth and edition_text fields
-            assert passes_filter(dod_meta | {"author_birth": "2000"})
-            assert passes_filter(dod_meta | {"edition_text": "2000"})
+            assert ppa_relevant(dod_meta | {"author_birth": "2000"})
+            assert ppa_relevant(dod_meta | {"edition_text": "2000"})
 
     # 3. Check author birth year
     for period in ["", "Twentieth-Century 1900-1999"]:
         poem_meta = basic_meta | {"period": period}
         # Passes if author_birth is before 1915
         for year in {"1901", "B.C.40", "BC120", "cent.15th"}:
-            assert passes_filter(poem_meta | {"author_birth": year})
+            assert ppa_relevant(poem_meta | {"author_birth": year})
             ## Passes regardless of date(s) in edition_fields
-            assert passes_filter(
+            assert ppa_relevant(
                 poem_meta | {"author_birth": year, "edition_text": "2000"}
             )
 
         # Fails if author_birth is 1915 or later
         for year in {"1915", "1916", "2000"}:
-            assert not passes_filter(poem_meta | {"author_birth": year})
+            assert not ppa_relevant(poem_meta | {"author_birth": year})
             ## Fails regardless of date(s) in edition_fields
-            assert not passes_filter(
+            assert not ppa_relevant(
                 poem_meta | {"author_birth": year, "edition_text": "1900"}
             )
 
@@ -111,13 +111,13 @@ def test_passes_filter():
         poem_meta = basic_meta | {"period": period}
         # Passes if edition contains a date before 1929
         for title in pass_titles:
-            assert passes_filter(poem_meta | {"edition_text": title})
+            assert ppa_relevant(poem_meta | {"edition_text": title})
         # Fails if editions contains date that are >= 1929
         for title in fail_titles:
-            assert not passes_filter(poem_meta | {"edition_text": title})
+            assert not ppa_relevant(poem_meta | {"edition_text": title})
 
     # 4. Catch-all
     ## 20th century poems without additional metadata fail
-    assert not passes_filter(basic_meta | {"period": "Twentieth-Century 1900-1999"})
+    assert not ppa_relevant(basic_meta | {"period": "Twentieth-Century 1900-1999"})
     ## poems without tags or any other additional metadata pass
-    assert passes_filter(basic_meta)
+    assert ppa_relevant(basic_meta)
