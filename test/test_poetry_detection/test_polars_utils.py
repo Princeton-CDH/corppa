@@ -106,6 +106,20 @@ def test_fix_datatypes():
     assert detect_methods_parsed == [["manual"], ["manual", "passim"], None]
 
 
+def test_fix_datatypes_null_to_list():
+    df = pl.DataFrame(
+        {
+            "poem_id": ["a1", "a2", "a3"],
+            "ppa_span_start": ["1", "2", "3"],
+            "detection_methods": [None, None, None],
+        }
+    )
+    # if no values are set in a list field, type is pl.Null
+    fixed_df = fix_data_types(df)
+    # type should be set to list of string
+    assert fixed_df.schema["detection_methods"] == pl.List(pl.String)
+
+
 def test_load_excerpts_df(tmp_path):
     datafile = tmp_path / "excerpts.csv"
     # valid excerpt data
