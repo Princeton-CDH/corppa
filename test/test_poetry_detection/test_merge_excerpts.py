@@ -8,7 +8,6 @@ from test_polars_utils import _excerpts_to_csv
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.merge_excerpts import (
-    combine_excerpts,
     main,
     merge_excerpts,
 )
@@ -61,11 +60,10 @@ excerpt2_label1 = LabeledExcerpt.from_excerpt(
 )
 
 
-def test_combine_excerpts_1ex_1label():
+def test_merge_excerpts_1ex_1label():
     # excerpt + labeled excerpt (same id)
-    df = pl.from_dicts([excerpt1.to_dict()])
-    other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = combine_excerpts(df, other_df)
+    df = pl.from_dicts([excerpt1.to_dict(), excerpt1_label1.to_dict()])
+    merged = merge_excerpts(df)
     # expect one row
     assert len(merged) == 1
     # should have all columns for labeled excerpt (order-agnostic)
@@ -76,25 +74,25 @@ def test_combine_excerpts_1ex_1label():
     assert merged_excerpt == excerpt1_label1
 
 
-def test_combine_excerpts_1ex_2labels():
+def test_merge_excerpts_1ex_2labels():
     # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
-    df = pl.from_dicts([excerpt1.to_dict()])
-    other_df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label2.to_dict()])
-    merged = combine_excerpts(df, other_df)
-    # expect two rows with  two different labels
+    df = pl.from_dicts(
+        [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label2.to_dict()]
+    )
+    merged = merge_excerpts(df)
+    # expect two rows with two different labels
     assert len(merged) == 2
-    # polars preserves order, so we can check that they match what was sent in
+    # original orderis NOT preserved due to grouping and sorting
     # results should exactly match the labeled excerpts since all other fields are same
-    assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label1
-    assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label2
+    assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label2
+    assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label1
 
 
-def test_combine_excerpts_1ex_note_1label():
+def test_merge_excerpts_1ex_note_1label():
     # excerpt with note + labeled excerpt (same id)
     ex1_notes = replace(excerpt1, notes="detection information")
-    df = pl.from_dicts([ex1_notes.to_dict()])
-    other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = combine_excerpts(df, other_df)
+    df = pl.from_dicts([ex1_notes.to_dict(), excerpt1_label1.to_dict()])
+    merged = merge_excerpts(df)
     # expect one row
     assert len(merged) == 1
     # should have all columns for labeled excerpt - no extra notes field
@@ -107,11 +105,10 @@ def test_combine_excerpts_1ex_note_1label():
     assert merged_excerpt == excerpt_with_notes
 
 
-def test_combine_excerpts_1ex_different_label():
+def test_merge_excerpts_1ex_different_label():
     # excerpt 2 + labeled excerpt 1 - should preserve both
-    df = pl.from_dicts([excerpt2.to_dict()])
-    other_df = pl.from_dicts([excerpt1_label1.to_dict()])
-    merged = combine_excerpts(df, other_df)
+    df = pl.from_dicts([excerpt2.to_dict(), excerpt1_label1.to_dict()])
+    merged = merge_excerpts(df)
     # expect two rows
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
@@ -127,12 +124,11 @@ def test_combine_excerpts_1ex_different_label():
     assert merged_excerpt1_label1 == excerpt1_label1
 
 
-def test_combine_excerpts_two_different_labels():
+def test_merge_excerpts_two_different_labels():
     # two different labeled excerpts should not be merged
     assert excerpt1_label1.excerpt_id != excerpt2_label1.excerpt_id
-    df = pl.from_dicts([excerpt1_label1.to_dict()])
-    other_df = pl.from_dicts([excerpt2_label1.to_dict()])
-    merged = combine_excerpts(df, other_df)
+    df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt2_label1.to_dict()])
+    merged = merge_excerpts(df)
     # expect two rows
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
@@ -142,32 +138,33 @@ def test_combine_excerpts_two_different_labels():
     assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt2_label1
 
 
-def test_combine_excerpts_1ex_2labels_diffmethod():
+def test_merge_excerpts_1ex_2labels_diffmethod():
     # unlabeled excerpt + two matching labeled excerpts
     # - same excerpt id, two labels with same ref ids but different method
     # combine method does not merge these
-    df = pl.from_dicts([excerpt1.to_dict()])
+
     # everything the same except for the method (unlikely!)
     excerpt1_label1_method2 = replace(
         excerpt1_label1, identification_methods={"refmatcha"}
     )
-    other_df = pl.from_dicts(
-        [excerpt1_label1.to_dict(), excerpt1_label1_method2.to_dict()]
+    df = pl.from_dicts(
+        [
+            excerpt1.to_dict(),
+            excerpt1_label1.to_dict(),
+            excerpt1_label1_method2.to_dict(),
+        ]
     )
-    # left and right are merged but duplicate ids within the other df
-    # are not merged by this method
-    merged = combine_excerpts(df, other_df)
-    assert len(merged) == 2
+    merged = merge_excerpts(df)
+    assert len(merged) == 1
 
 
-def test_combine_different_labels():
+def test_merge_different_labels():
     # combine should NOT merge labeled excerpts with different poem id
-    df = pl.from_dicts([excerpt1_label1.to_dict()])
     excerpt1_diff_label = replace(excerpt1_label1, poem_id="Z1234")
-    other_df = pl.from_dicts([excerpt1_diff_label.to_dict()])
+    df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_diff_label.to_dict()])
 
     # distinct poem ids should NOT be merged
-    merged = combine_excerpts(df, other_df)
+    merged = merge_excerpts(df)
     assert len(merged) == 2
 
 
@@ -222,7 +219,9 @@ def test_merge_excerpts():
         ref_span_text=None,
         identification_methods={"other"},
     )
-    df = pl.from_dicts([excerpt1_label1.to_dict(), excerpt1_label1_other.to_dict()])
+    df = pl.from_dicts(
+        [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label1_other.to_dict()]
+    )
     merged = merge_excerpts(df)
     assert len(merged) == 1
     # should have all columns for labeled excerpt (order-agnostic)
@@ -362,7 +361,7 @@ def test_main_successful(capsys, tmp_path):
         captured = capsys.readouterr()
 
     # summary output
-    assert "Loaded 4 excerpts from 2 files" in captured.out
+    assert "Loaded 4 excerpts (2 labeled) from 2 files" in captured.out
     assert "2 total excerpts after merging; 1 labeled excerpts" in captured.out
 
     with output_file.open(encoding="utf-8") as merged_csv:

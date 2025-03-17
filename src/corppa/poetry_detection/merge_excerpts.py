@@ -48,111 +48,7 @@ import sys
 import polars as pl
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER
-from corppa.poetry_detection.polars_utils import (
-    LABELED_EXCERPT_FIELDS,
-    has_poem_ids,
-    load_excerpts_df,
-    standardize_dataframe,
-)
-
-
-def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
-    """Combine two Polars dataframes with excerpt or labeled excerpt data.
-    Excerpts are joined on the combination of page id and excerpt id.
-    All excerpts from both dataframes are included in the resulting dataframe.
-    Excerpts are combined as follows:
-    - an unlabeled excerpt and a labeled excerpt for the same excerpt
-      will be combined
-    - if combined excerpts both have content in the notes, the notes text
-      will be combined
-    - multiple labeled excerpts for the same excerpt id are NOT combined
-    """
-    # simplest option is to do a LEFT join on page id and excerpt id
-    join_fields = ["page_id", "excerpt_id"]
-
-    # if poem_id is present and not empty in both dataframes,
-    # include that in the join fields to avoid collapsing different ids
-    if has_poem_ids(df) and has_poem_ids(other_df):
-        # NOTE: for now, the script does not care about variations between
-        # reference span start, end, and text if the poem identifications match
-        # That assumption is valid for the current set, since manual ids
-        # do not have spans, but we may need to revisit in future
-        join_fields.append("poem_id")
-
-    # before joining, drop redundant fields that will be the same
-    # on any excerpt with matching page & excerpt id
-    other_join = other_df.drop(
-        "detection_methods", "ppa_span_start", "ppa_span_end", "ppa_span_text"
-    )
-    merged = df.join(other_join, on=join_fields, how="left")
-
-    # if notes_right is present, then we have notes coming from both sides
-    # of the join; combine the notes into a single notes field
-    if "notes_right" in merged.columns:
-        # update notes field by combining left and right notes with a newline,
-        # and then strip any outer newlines
-        merged = merged.with_columns(
-            notes=pl.col("notes")
-            .str.strip_chars()
-            .add(pl.lit("\n"))
-            .add(pl.col("notes_right").str.strip_chars())
-            .str.strip_chars("\n")
-        ).drop("notes_right")
-
-    if "identification_methods_right" in merged.columns:
-        # if ANY values are not null, then we need to merge
-        # TODO: if we can fill null with empty list, maybe set union
-        # doesn't require conditionals here
-
-        if merged["identification_methods_right"].count():
-            # use list set union method to merge values, ignoring nulls
-            # - if left value is null, use right side
-            # - if right value is null, use left
-            # - if both are non-null, combine
-            # NOTE: null check is required to avoid null + value turning into a null
-            # although there may be a more elegant polars way to handle this
-            # print(merged.filter(pl.col('identification_methods_right').is_not_null())[['identification_methods', 'identification_methods_right']])
-            merged = merged.with_columns(pl.col("identification_methods").fill_null([]))
-            print(
-                merged.filter(pl.col("identification_methods").is_not_null())[
-                    [
-                        "identification_methods",
-                        "identification_methods_right",
-                    ]
-                ]
-            )
-            merged = merged.with_columns(
-                identification_methods=pl.when(
-                    pl.col("identification_methods").is_null()
-                )
-                .then(pl.col("identification_methods_right"))
-                .when(pl.col("identification_methods_right").is_null())
-                .then(pl.col("identification_methods"))
-                .when(
-                    pl.col("identification_methods").is_not_null()
-                    & pl.col("identification_methods_right").is_not_null()
-                )
-                .then(
-                    pl.col("identification_methods").list.set_union(
-                        pl.col("identification_methods_right")
-                    )
-                )
-            )
-        # then drop the right side
-        merged = merged.drop("identification_methods_right")
-
-    # the left join omits any excerpts in other_df that are not in the main df
-    # use an "anti" join starting with the other df to get all the rows
-    # in other_df that are not present in the first df
-    right_df = other_df.join(df, on=join_fields, how="anti")
-    if not right_df.is_empty():
-        # ensure field order and types match, then append the
-        # excerpts from the right dataframe to the end of the merged dataframe
-        merged = standardize_dataframe(merged)
-        merged = merged.select(LABELED_EXCERPT_FIELDS).extend(
-            standardize_dataframe(right_df)
-        )
-    return merged
+from corppa.poetry_detection.polars_utils import load_excerpts_df
 
 
 def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
@@ -211,18 +107,16 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
                     )
                 )
             )
-            combined_id_methods = list(
-                set(
-                    list(
-                        itertools.chain.from_iterable(
-                            repeats["identification_methods"].to_list()
-                        )
-                    )
+            # id methods could be all unset even in a group
+            id_methods = repeats["identification_methods"].drop_nulls().to_list()
+            if id_methods:
+                combined_id_methods = list(
+                    set(list(itertools.chain.from_iterable(id_methods)))
                 )
-            )
-            # join all unique notes within this group; don't repeat duplicate notes
-            # preserve order, which puts unlabeled excerpt first
-            combined_notes = "\n".join(repeats["notes"].unique(maintain_order=True))
+            # join all unique notes within this group; don't repeat notes
+            # preserve order (unlabeled excerpt notes first)
+            unique_notes = repeats["notes"].drop_nulls().unique(maintain_order=True)
+            combined_notes = "\n".join([n for n in unique_notes if n.strip()])
 
             repeats = repeats.with_columns(
                 detection_methods=pl.lit(combined_detect_methods),
@@ -252,7 +146,7 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
         # identify repeats where reference values all agree
         # (either same values or don't conflict because unset)
         repeats = data.filter(
-            data.drop("identification_methods", "index").is_duplicated()
+            data.drop("identification_methods", "notes", "index").is_duplicated()
         )
 
         if not repeats.is_empty():
@@ -326,26 +220,25 @@ def main():
         sys.exit(-1)
 
     total_excerpts = 0
-    excerpts = None
+    input_dfs = []
 
-    # load files in order specified, and merge them in one by one
+    # load files and combine into a single excerpt dataframe
     for input_file in args.input_files:
         try:
-            merge_df = load_excerpts_df(input_file)
+            input_dfs.append(load_excerpts_df(input_file))
         except ValueError as err:
             # if any input file does not have minimum required fields, bail out
             print(err, file=sys.stderr)
             sys.exit(-1)
-        total_excerpts += len(merge_df)
 
-        # on the first loop, main excerpts df is unset, nothing to merge
-        if excerpts is None:
-            excerpts = merge_df
-        else:
-            # on every loop after the first, update excerpts by
-            # merging with the new input file
-            excerpts = combine_excerpts(excerpts, merge_df)
+    # combine input dataframes with a "diagonal" concat, which aligns
+    # columns and fills in nulls for missing columns in any of the dataframes
+    excerpts = pl.concat(input_dfs, how="diagonal")
+    # get initial totals before merging
+    total_excerpts = excerpts.height
+    initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
 
+    # merge labeled + unlabeled excerpts AND duplicate labeled excerpts
     excerpts = merge_excerpts(excerpts)
 
     # write the merged data to the requested output file
@@ -365,7 +258,7 @@ def main():
 
     # summary information about the content and what as done
     print(
-        f"""Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files.
+        f"""Loaded {total_excerpts:,} excerpts ({initial_labeled_excerpts:,} labeled) from {len(args.input_files)} files.
 {len(excerpts):,} total excerpts after merging; {len(labeled_excerpts):,} labeled excerpts. """
     )
     detectmethod_counts = excerpts["detection_methods"].value_counts()
