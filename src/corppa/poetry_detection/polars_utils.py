@@ -46,6 +46,8 @@ def fix_data_types(df):
             # only split if column is currently a string
             if df.schema[c] == pl.String:
                 df = df.with_columns(pl.col(c).str.split(MULTIVAL_DELIMITER))
+            elif df.schema[c] == pl.Null:
+                df = df.with_columns(pl.col(c).cast(pl.List(pl.String)))
         # For any other field type, cast the column to the expected type
         elif ctype is not None:
             df = df.with_columns(pl.col(c).cast(ctype))
