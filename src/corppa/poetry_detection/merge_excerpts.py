@@ -48,16 +48,50 @@ import sys
 import polars as pl
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER
-from corppa.poetry_detection.polars_utils import load_excerpts_df
+from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_dataframe
+
+
+def combine_duplicate_methods_notes(repeats_df: pl.DataFrame) -> pl.DataFrame:
+    """Takes a dataframe of repeated excerpts with duplicate information,
+    and combines detection_methods, identification_methods, and notes.
+    Returns the updated dataframe with the combined fields.
+    """
+    # get id methods as a list of lists, use itertools to unwrap
+    # the lists; consume the itertools generator and use set to uniquify,
+    # then convert back to list to put back in the polars dataframe
+    detect_methods = repeats_df["detection_methods"].drop_nulls().to_list()
+    combined_detect_methods = list(
+        set(list(itertools.chain.from_iterable(detect_methods)))
+    )
+    # id methods could be all unset even in a group
+    id_methods = repeats_df["identification_methods"].drop_nulls().to_list()
+    combined_id_methods = None
+    if id_methods:
+        combined_id_methods = list(set(list(itertools.chain.from_iterable(id_methods))))
+    # join all unique notes within this group; don't repeat notes
+    # preserve order (unlabeled excerpt notes first)
+    unique_notes = repeats_df["notes"].drop_nulls().unique(maintain_order=True)
+    combined_notes = "\n".join([n for n in unique_notes if n.strip()])
+
+    repeats_df = repeats_df.with_columns(
+        detection_methods=pl.lit(combined_detect_methods),
+        identification_methods=pl.lit(combined_id_methods),
+        notes=pl.lit(combined_notes),
+    )
+    return repeats_df
 
 
 def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
-    """Takes a polars Dataframe that includes labeled excerpts and attempts to
-    merges excerpts with same page id, excerpt id, and poem id. Returns the resulting
-    dataframe, with any duplicate excerpts merged.
+    """Takes a polars Dataframe that includes labeled excerpts and merges:
+    - unlabeled excerpts with matching labeled excerpts (merge based on
+      page id and excerpt id)
+    - labeled excerpts with other labeled excerpts with the same label
+      (merge based on combination of page id, excerpt id, and poem id)
+
+    Returns the a dataframe with duplicate excerpts merged.
     For now, merging is only done on the simple cases where reference
     fields match exactly, or where reference fields are present in one labeled
-    excerpt and null in the other.
+    excerpt and unset in the other.
     """
 
     # copy the df and add a row index for removal
@@ -65,9 +99,9 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
     # create a df with the same schema but no data to collect merged excerpts
     merged_excerpts = updated_df.clear()
 
-    # first group by page id and excerpt id without poem id
-    # to merge corresponding labeled and unlabeled excerpts
+    # merge unlabeled excerpts with matching labeled excerpt
     # OR excerpt with and without notes
+    # group by page id and excerpt id only
     for group, data in updated_df.group_by(["page_id", "excerpt_id"]):
         # group is a tuple of values for page id, excerpt id, poem id
         # data is a df of the grouped rows for this set
@@ -94,44 +128,15 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
         )
 
         if not repeats.is_empty():
-            # combine id methods across all rows
-            # get id methods as a list of lists, use itertools to unwrap
-            # the lists; consume the itertools generator and use set to uniquify,
-            # then convert back to list to put back in the polars dataframe
-            combined_detect_methods = list(
-                set(
-                    list(
-                        itertools.chain.from_iterable(
-                            repeats["detection_methods"].to_list()
-                        )
-                    )
-                )
-            )
-            # id methods could be all unset even in a group
-            id_methods = repeats["identification_methods"].drop_nulls().to_list()
-            if id_methods:
-                combined_id_methods = list(
-                    set(list(itertools.chain.from_iterable(id_methods)))
-                )
-            # join all unique notes within this group; don't repeat notes
-            # preserve order (unlabeled excerpt notes first)
-            unique_notes = repeats["notes"].drop_nulls().unique(maintain_order=True)
-            combined_notes = "\n".join([n for n in unique_notes if n.strip()])
-
-            repeats = repeats.with_columns(
-                detection_methods=pl.lit(combined_detect_methods),
-                identification_methods=pl.lit(combined_id_methods),
-                notes=pl.lit(combined_notes),
-            )
+            repeats = combine_duplicate_methods_notes(repeats)
             # remove the repeats from the main dataframe
             updated_df = updated_df.filter(
                 ~pl.col("index").is_in(repeats.select(pl.col("index")))
             )
-            # add the consolidated row to the merged df
+            # add the consolidated row with combined values to the merged df
             merged_excerpts.extend(repeats[:1])
 
-            # TODO: need similar logic for detection methods (potentially) and notes
-
+    # merge labeled excerpts with matching labels
     # group by page id, excerpt id, and poem id to find repeated identifications
     for group, data in updated_df.group_by(["page_id", "excerpt_id", "poem_id"]):
         # group is a tuple of values for page id, excerpt id, poem id
@@ -140,8 +145,8 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
         # sort so any empty values for optional fields are last,
         # then fill values forward - i.e., treat nulls as duplicates
         data = data.sort(
-            "ref_span_start", "ref_span_end", "ref_span_text", nulls_last=True
-        ).select(pl.all().forward_fill())
+            "ref_span_start", "ref_span_end", "ref_span_text", nulls_last=False
+        ).select(pl.all().backward_fill())
 
         # identify repeats where reference values all agree
         # (either same values or don't conflict because unset)
@@ -150,27 +155,13 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
         )
 
         if not repeats.is_empty():
-            # convert list of id methods to string in each row, then combine all rows
-            # TODO: switch to list set union methods here
-            repeats = (
-                repeats.with_columns(
-                    # convert list of ids in each row to string
-                    id_meth=pl.col("identification_methods").list.join(",")
-                )
-                # combine all the ids across row as a string
-                .with_columns(combined_id_string=pl.col("id_meth").str.join(","))
-                # split again to convert to list format
-                .with_columns(
-                    identification_methods=pl.col("combined_id_string").str.split(",")
-                )
-                # drop the interim fields
-                .drop("id_meth", "combined_id_string")
-            )
+            repeats = combine_duplicate_methods_notes(repeats)
             # remove the repeats from the main dataframe
             updated_df = updated_df.filter(
                 ~pl.col("index").is_in(repeats.select(pl.col("index")))
             )
-            # add the consolidated row to the merged df
+            # add the consolidated row with combined values to the merged df
+            merged_excerpts.extend(repeats[:1])
             merged_excerpts.extend(repeats[:1])
 
     # combine and return
@@ -237,9 +228,15 @@ def main():
     # get initial totals before merging
     total_excerpts = excerpts.height
     initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
+    # output summary information about input data
+    print(
+        f"Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files ({initial_labeled_excerpts:,} labeled)."
+    )
 
     # merge labeled + unlabeled excerpts AND duplicate labeled excerpts
     excerpts = merge_excerpts(excerpts)
+    # standardize columns so we have all expected fields and no extras
+    excerpts = standardize_dataframe(excerpts)
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
@@ -258,8 +255,7 @@ def main():
 
     # summary information about the content and what as done
     print(
-        f"""Loaded {total_excerpts:,} excerpts ({initial_labeled_excerpts:,} labeled) from {len(args.input_files)} files.
-{len(excerpts):,} total excerpts after merging; {len(labeled_excerpts):,} labeled excerpts. """
+        f"{len(excerpts):,} excerpts after merging; {len(labeled_excerpts):,} labeled excerpts."
     )
     detectmethod_counts = excerpts["detection_methods"].value_counts()
     idmethod_counts = labeled_excerpts["identification_methods"].value_counts()
