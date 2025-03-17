@@ -2,6 +2,7 @@ import pytest
 
 from corppa.poetry_detection.chadwyck_healey.tml_parser import (
     determine_encoding,
+    filter_post_1928,
     replace_entities,
 )
 
@@ -52,3 +53,71 @@ def test_replace_entities():
     text = "&GREs;&grP;&grW;&GRST;"
     expected_result = "ἘΠΩς"
     assert replace_entities(text) == expected_result
+
+
+def test_filter_post_1928():
+    # Basic required poem metadata form
+    basic_meta = {
+        k: "" for k in ["period", "author_birth", "author_death", "edition_text"]
+    }
+
+    # 1. Poems with non-20th century period tags pass
+    for period in {
+        "Fifteenth-Century Poetry",
+        "Middle English Poetry 1100-1400",
+        "foo",
+    }:
+        poem_meta = basic_meta | {"period": period}
+        # Basic case
+        assert filter_post_1928(poem_meta)
+        # Passes regardless of date(s) in author_birth and edition_text fields
+        assert filter_post_1928(poem_meta | {"author_birth": "2000"})
+        assert filter_post_1928(poem_meta | {"edition_text": "2000"})
+
+    # 2. Author death year
+    for period in ["", "Twentieth-Century 1900-1999"]:
+        poem_meta = basic_meta | {"period": period}
+        # Passes if author_death is before 1929
+        for year in ["1901", "1928", "BC", "BC50"]:
+            dod_meta = poem_meta | {"author_death": year}
+            assert filter_post_1928(dod_meta)
+            # Passes regardless of date(s) in author_birth and edition_text fields
+            assert filter_post_1928(dod_meta | {"author_birth": "2000"})
+            assert filter_post_1928(dod_meta | {"edition_text": "2000"})
+
+    # 3. Check author birth year
+    for period in ["", "Twentieth-Century 1900-1999"]:
+        poem_meta = basic_meta | {"period": period}
+        # Passes if author_birth is before 1915
+        for year in {"1901", "B.C.40", "BC120", "cent.15th"}:
+            assert filter_post_1928(poem_meta | {"author_birth": year})
+            ## Passes regardless of date(s) in edition_fields
+            assert filter_post_1928(
+                poem_meta | {"author_birth": year, "edition_text": "2000"}
+            )
+
+        # Fails if author_birth is 1915 or later
+        for year in {"1915", "1916", "2000"}:
+            assert not filter_post_1928(poem_meta | {"author_birth": year})
+            ## Fails regardless of date(s) in edition_fields
+            assert not filter_post_1928(
+                poem_meta | {"author_birth": year, "edition_text": "1900"}
+            )
+
+    # 3. Check edition title
+    pass_titles = ["1915", "title [1928]", "poems 1901-1938 [1999]"]
+    fail_titles = ["2010", "title (1929)", "poems 1940-60 (1980)"]
+    for period in ["", "Twentieth-Century 1900-1999"]:
+        poem_meta = basic_meta | {"period": period}
+        # Passes if edition contains a date before 1929
+        for title in pass_titles:
+            assert filter_post_1928(poem_meta | {"edition_text": title})
+        # Fails if editions contains date that are >= 1929
+        for title in fail_titles:
+            assert not filter_post_1928(poem_meta | {"edition_text": title})
+
+    # 4. Catch-all
+    ## 20th century poems without additional metadata fail
+    assert not filter_post_1928(basic_meta | {"period": "Twentieth-Century 1900-1999"})
+    ## poems without tags or any other additional metadata pass
+    assert filter_post_1928(basic_meta)

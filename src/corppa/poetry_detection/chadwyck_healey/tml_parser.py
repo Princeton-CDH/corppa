@@ -292,6 +292,66 @@ def replace_entities(text: str, entity_map: dict[str, str] = CUSTOM_ENTITY_MAP) 
     return text
 
 
+def filter_post_1928(poem_meta: dict[str, str]) -> bool:
+    """
+    Determine if a poem was written in 1929 or later (i.e., post-1928) based on its
+    metadata (as possible). Only pre-1929 works are relevant to the PPA. If a poem
+    was written after 1928, then it should be excluded from the filtered working set.
+
+    Returns
+    - ``False`` if a poem was written post-1928
+    - ``True`` otherwise (i.e., written pre-1929 or a year cannot be determined)
+    """
+    # 1. Attempt to filter by period tag:
+    #    Pass: poems from periods before the 20th c. (all other tags)
+    if poem_meta["period"] and poem_meta["period"] != "Twentieth-Century 1900-1999":
+        return True
+
+    # 2. Attempt to filter by author birth year:
+    #    Pass: poem with authors who died before 1929
+    author_dod_year = re.search(r"\d\d\d\d", poem_meta["author_death"])
+    if author_dod_year:
+        if int(author_dod_year[0]) < 1929:
+            return True
+    else:
+        # BCE dates
+        if re.match(r"BC", poem_meta["author_death"]):
+            return True
+
+    # 3. Attempt to filter by author birth year:
+    #    Pass: poems with authors born before 1915
+    #    Fail: poems with authors born after 1915
+    ## Try extracting 4-digit year
+    author_dob_year = re.search(r"\d\d\d\d", poem_meta["author_birth"])
+    if author_dob_year:
+        if int(author_dob_year[0]) < 1915:
+            return True
+        else:
+            return False
+    else:
+        ## BCE dates
+        if re.match(r"B\.?C\.?\d+", poem_meta["author_birth"]):
+            return True
+        ## Specifies century
+        if re.match(r"cent.1\dth", poem_meta["author_birth"]):
+            return True
+
+    # 4. Attempt to filter by dates in edition title
+    #    Pass: poems whose edition titles include a date before 1929
+    #    Fail: poems whose editions titles include only dates 1929+
+    matches = re.findall(r"\d\d\d\d", poem_meta["edition_text"])
+    if matches:
+        for match in matches:
+            if int(match) < 1929:
+                return True
+        return False
+
+    # 5. Finally, conservatively filter out remaining 20th c. poems
+    #    Pass: poems without period tag
+    #    Fail: poems with 20th century period tag
+    return not poem_meta["period"]
+
+
 class TMLPoetryParser:
     """
     Parser object for parsing Chadwyck-Healey poem .TML files
@@ -326,6 +386,7 @@ class TMLPoetryParser:
         output_csv: Path,
         check_encodings: bool = False,
         metadata_only: bool = False,
+        filter_results: bool = False,
         show_progress: bool = True,
         verbose: bool = False,
     ):
@@ -334,6 +395,7 @@ class TMLPoetryParser:
         self.metadata_file = output_csv
         self.check_encodings = check_encodings
         self.metadata_only = metadata_only
+        self.filter_results = filter_results
         self.show_progress = show_progress
         self.verbose = verbose
 
@@ -694,6 +756,11 @@ class TMLPoetryParser:
             metadata = self.extract_metadata(soup)
             metadata["id"] = file_path.stem
 
+            # if filtering is set, return null objects if metadata fails filter
+            if self.filter_results and not filter_post_1928(metadata):
+                ## Treat empty dict as "skip" signal
+                return [], None
+
             # in metadata-only mode, bail out before text extraction logic, returning None for poetry_text
             if self.metadata_only:
                 return metadata, None
@@ -753,18 +820,25 @@ class TMLPoetryParser:
             bar_format = (
                 "{desc}: {n:,} files processed | elapsed: {elapsed}, {rate_fmt}"
             )
-            file_progress = tqdm(tml_gen, desc=desc, disable=not self.show_progress)
+            file_progress = tqdm(
+                tml_gen,
+                desc=desc,
+                bar_format=bar_format,
+                disable=not self.show_progress,
+            )
 
         n_attempted = 0
         n_processed = 0
+        n_skipped = 0
         failed_files = []
         # open CSV file for writing metadata
         with open(self.metadata_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=self.metadata_fields)
             writer.writeheader()
 
-            processed = False
             for i, file_path in enumerate(file_progress):
+                processed = False
+                skipped = False
                 if num_files and i == num_files:
                     # Exit early if limit reached
                     break
@@ -775,6 +849,10 @@ class TMLPoetryParser:
                     writer.writerow(metadata)
                     # Set flag if we're in metadata only mode
                     processed = self.metadata_only
+                # If we're filtering results, check if poem was filtered out
+                elif self.filter_results:
+                    ## Empty dict means skipped
+                    skipped = metadata is not None
 
                 # If we're expecting text (i.e., not running in metadata only mode) and have successfully extract it
                 if not self.metadata_only and poetry_text:
@@ -788,14 +866,22 @@ class TMLPoetryParser:
                 n_attempted += 1
                 if processed:
                     n_processed += 1
+                elif skipped:
+                    n_skipped += 1
                 else:
                     # If we don't have data for the mode we expect, consider it failed
                     failed_files.append(file_path.name)
 
-        print(
-            f"\nProcessing complete!\nSuccessfully processed {n_processed} "
-            + f"out of {n_attempted} files"
+        # Report stats on file processing
+        stats_msg = (
+            f"\nProcessing complete!\nSuccessfully processed {n_processed} files "
         )
+        if self.filter_results:
+            stats_msg += f"and skipped {n_skipped} files "
+        stats_msg += f"out of {n_attempted} total files"
+        print(stats_msg)
+
+        # List failed files
         if failed_files:
             print(f"Failed to process {len(failed_files)} files:")
             for fname in failed_files:
@@ -807,7 +893,7 @@ class TMLPoetryParser:
             for f in self.figure_only:
                 print("  -", f)
 
-    def extract_metadata(self, soup: Tag):
+    def extract_metadata(self, soup: Tag) -> dict[str, str]:
         """
         Extract metadata from the TML file's head section.
         Handles multiple authors (original and translator) as well as special cases
@@ -858,6 +944,13 @@ class TMLPoetryParser:
                     "death": death,
                     "period": "",  # special handling for "Anon." cases with a period in fname...
                 }
+
+                # special case: check if birth year is actually death year
+                if re.match(r"\d\d\d\d.+d\.", birth) and not death:
+                    # move birth field to death field
+                    author_info[death] = birth
+                    # nullify birth field
+                    author_info[birth] = ""
 
                 # special handling: if the last name is "Anon." and the first name is actually a time range.
                 if lname == "Anon." and re.match(r"^\d{3,4}(-\d{3,4})?$", fname):
@@ -968,6 +1061,11 @@ def main():
         action="store_true",
     )
     parser_arg.add_argument(
+        "--filter-results",
+        help="Filter results to pre-1929 works as possible by metadata",
+        action="store_true",
+    )
+    parser_arg.add_argument(
         "--progress",
         help="Show progress",
         action=argparse.BooleanOptionalAction,
@@ -992,6 +1090,7 @@ def main():
         output_csv=args.output_csv,
         check_encodings=args.check_encodings,
         metadata_only=args.metadata_only,
+        filter_results=args.filter_results,
         show_progress=args.progress,
         verbose=args.verbose,
     )
