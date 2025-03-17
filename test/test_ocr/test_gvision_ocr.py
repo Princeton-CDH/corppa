@@ -32,7 +32,7 @@ def test_ocr_images_no_gvision(capsys):
 def test_ocr_images(
     mock_gvision, mock_ocr_image, mock_find_relative_paths, tmp_path, capsys
 ):
-    # Setup up mock clientp
+    # Setup up mock client
     mock_client = mock_gvision.ImageAnnotatorClient
     img_dir = tmp_path.joinpath("images")
     img_dir.mkdir()

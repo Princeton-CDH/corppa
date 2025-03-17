@@ -18,14 +18,11 @@ Filter methods can be run via command-line or python code. Filtering takes a jso
 The input and output filenames can use any extension supported by any extension supported
 by :mod:`orjsonl`, with or without compression; e.g. `.jsonl`, `.jsonl.gz`, `.jsonl.bz2`, etc.
 
-Example command line usages:
-```
-corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --idfile my_ids.txt
-```
+Example command line usages: ::
 
-```
-corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --pg-file pages.csv --include key=value
-```
+    corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --idfile my_ids.txt
+
+    corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --pg-file pages.csv --include key=value
 """
 
 import argparse

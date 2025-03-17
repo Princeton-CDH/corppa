@@ -35,6 +35,7 @@ type-checking = [
   "mypy",
   "types-tqdm",
 ]
+doc = ["sphinx"]
 ocr = ["google-cloud-vision"]
 poem_id = [
   "pyarrow",
@@ -55,6 +56,7 @@ dev = [
   "corppa[poem_id]",
   "corppa[passim]",
   "corppa[chadwyck_healey]",
+  "corppa[doc]",
 ]
 test = [
   "pytest",
