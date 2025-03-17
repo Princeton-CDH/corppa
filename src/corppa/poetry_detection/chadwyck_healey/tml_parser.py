@@ -292,14 +292,15 @@ def replace_entities(text: str, entity_map: dict[str, str] = CUSTOM_ENTITY_MAP) 
     return text
 
 
-def ppa_relevant(poem_meta: dict[str, str]) -> bool:
+def filter_post_1928(poem_meta: dict[str, str]) -> bool:
     """
-    Determine if a poem is relevant to the PPA which is currently limited to works
-    written before 1929. If a poem's metadata indicates that a poem is too recent,
-    it will be excluded form teh resulting working set.
+    Determine if a poem was written in 1929 or later (i.e., post-1928) based on its
+    metadata (as possible). Only pre-1929 works are relevant to the PPA. If a poem
+    was written after 1928, then it should be excluded from the filtered working set.
 
-    Returns ``True`` if the poem's metadata should be included, and ``False`` if
-    the poem should be excluded.
+    Returns
+    - ``False`` if a poem was written post-1928
+    - ``True`` otherwise (i.e., written pre-1929 or a year cannot be determined)
     """
     # 1. Attempt to filter by period tag:
     #    Pass: poems from periods before the 20th c. (all other tags)
@@ -756,7 +757,7 @@ class TMLPoetryParser:
             metadata["id"] = file_path.stem
 
             # if filtering is set, return null objects if metadata fails filter
-            if self.filter_results and not ppa_relevant(metadata):
+            if self.filter_results and not filter_post_1928(metadata):
                 ## Treat empty dict as "skip" signal
                 return [], None
 
