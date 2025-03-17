@@ -755,7 +755,8 @@ class TMLPoetryParser:
 
             # if filtering is set, return null objects if metadata fails filter
             if self.filter_results and not passes_filter(metadata):
-                return None, None
+                ## Treat empty dict as "skip" signal
+                return [], None
 
             # in metadata-only mode, bail out before text extraction logic, returning None for poetry_text
             if self.metadata_only:
@@ -820,6 +821,7 @@ class TMLPoetryParser:
 
         n_attempted = 0
         n_processed = 0
+        n_skipped = 0
         failed_files = []
         # open CSV file for writing metadata
         with open(self.metadata_file, "w", newline="", encoding="utf-8") as csvfile:
@@ -828,6 +830,7 @@ class TMLPoetryParser:
 
             for i, file_path in enumerate(file_progress):
                 processed = False
+                skipped = False
                 if num_files and i == num_files:
                     # Exit early if limit reached
                     break
@@ -838,6 +841,10 @@ class TMLPoetryParser:
                     writer.writerow(metadata)
                     # Set flag if we're in metadata only mode
                     processed = self.metadata_only
+                # If we're filtering results, check if poem was filtered out
+                elif self.filter_results:
+                    ## Empty dict means skipped
+                    skipped = metadata is not None
 
                 # If we're expecting text (i.e., not running in metadata only mode) and have successfully extract it
                 if not self.metadata_only and poetry_text:
@@ -851,14 +858,22 @@ class TMLPoetryParser:
                 n_attempted += 1
                 if processed:
                     n_processed += 1
+                elif skipped:
+                    n_skipped += 1
                 else:
                     # If we don't have data for the mode we expect, consider it failed
                     failed_files.append(file_path.name)
 
-        print(
-            f"\nProcessing complete!\nSuccessfully processed {n_processed} "
-            + f"out of {n_attempted} files"
+        # Report stats on file processing
+        stats_msg = (
+            f"\nProcessing complete!\nSuccessfully processed {n_processed} files "
         )
+        if self.filter_results:
+            stats_msg += f"and skipped {n_skipped} files "
+        stats_msg += f"out of {n_attempted} total files"
+        print(stats_msg)
+
+        # List failed files
         if failed_files:
             print(f"Failed to process {len(failed_files)} files:")
             for fname in failed_files:
