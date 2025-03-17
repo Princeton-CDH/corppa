@@ -11,9 +11,9 @@ This means that in most cases, the output will likely be a mix of labeled
 and unlabeled excerpts.
 
 Merging logic is as follows:
-- Excerpts are merged on the combination of page id and excerpt id
-- When working with two sets of labeled excerpts, records are merged on the
-  combination of page id, excerpt id, and poem id
+- Excerpts are grouped on the combination of page id and excerpt id and then
+  merged if all reference fields match exactly, or where reference fields are
+  present in one excerpt and null in the other.
     - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
     - If the same excerpt has duplicate labels (i.e., the same `poem_id` from two
@@ -21,18 +21,9 @@ Merging logic is as follows:
       into a single labeled excerpt; the `identification_methods` in the
       resulting labeled excerpt will be the union of methods in the merged excerpts
 - When merging excerpts where both records have notes, the notes content
-  will be combined. (Combined notes order follows input file order.)
-
-After all input files are combined, the script checks for duplicate
-excerpt idenfications that can be consolidated. This currently only handles
-these simple cases:
-- All poem identification and reference fields match (poem_id, ref_span_start, ref_span_text, ref_span_end)
-- Poem identification matches and reference fields are null in one set
-    (e.g. manual identification, which does not include reference fields, and
-    refmatcha identification)
+  will be combined.
 
 Limitations:
-- Generally assumes excerpts do not require merging within a single input file
 - Merging based on poem_id does not compare or consolidate reference span indices
   and text fields; supporting multiple identification methods that output
   span information will require revision
@@ -82,16 +73,18 @@ def combine_duplicate_methods_notes(repeats_df: pl.DataFrame) -> pl.DataFrame:
 
 
 def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
-    """Takes a polars Dataframe that includes labeled excerpts and merges:
-    - unlabeled excerpts with matching labeled excerpts (merge based on
-      page id and excerpt id)
-    - labeled excerpts with other labeled excerpts with the same label
-      (merge based on combination of page id, excerpt id, and poem id)
-
-    Returns the a dataframe with duplicate excerpts merged.
+    """Takes a polars Dataframe that includes labeled excerpts and merges.
     For now, merging is only done on the simple cases where reference
     fields match exactly, or where reference fields are present in one labeled
-    excerpt and unset in the other.
+    excerpt and unset in the other:
+    - unlabeled excerpts with matching labeled excerpts
+    - multiple labeled excerpts with the same label
+
+    When excerpts are merged, the detection_methods, identification_methods,
+    and notes fields are all combined to preserve all information.
+
+    Returns the a dataframe with duplicate excerpts merged.
+
     """
 
     # copy the df and add a row index for removal
@@ -134,34 +127,6 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
                 ~pl.col("index").is_in(repeats.select(pl.col("index")))
             )
             # add the consolidated row with combined values to the merged df
-            merged_excerpts.extend(repeats[:1])
-
-    # merge labeled excerpts with matching labels
-    # group by page id, excerpt id, and poem id to find repeated identifications
-    for group, data in updated_df.group_by(["page_id", "excerpt_id", "poem_id"]):
-        # group is a tuple of values for page id, excerpt id, poem id
-        # data is a df of the grouped rows for this set
-
-        # sort so any empty values for optional fields are last,
-        # then fill values forward - i.e., treat nulls as duplicates
-        data = data.sort(
-            "ref_span_start", "ref_span_end", "ref_span_text", nulls_last=False
-        ).select(pl.all().backward_fill())
-
-        # identify repeats where reference values all agree
-        # (either same values or don't conflict because unset)
-        repeats = data.filter(
-            data.drop("identification_methods", "notes", "index").is_duplicated()
-        )
-
-        if not repeats.is_empty():
-            repeats = combine_duplicate_methods_notes(repeats)
-            # remove the repeats from the main dataframe
-            updated_df = updated_df.filter(
-                ~pl.col("index").is_in(repeats.select(pl.col("index")))
-            )
-            # add the consolidated row with combined values to the merged df
-            merged_excerpts.extend(repeats[:1])
             merged_excerpts.extend(repeats[:1])
 
     # combine and return
