@@ -292,10 +292,12 @@ def replace_entities(text: str, entity_map: dict[str, str] = CUSTOM_ENTITY_MAP) 
     return text
 
 
-def passes_filter(poem_meta: dict[str, str]) -> bool:
+def ppa_relevant(poem_meta: dict[str, str]) -> bool:
     """
-    Determine if a poem should be included in results based on its metadata.
-    Works too recent (written ~1929 or later) are excluded from the working set.
+    Determine if a poem is relevant to the PPA which is currently limited to works
+    written before 1929. If a poem's metadata indicates that a poem is too recent,
+    it will be excluded form teh resulting working set.
+
     Returns ``True`` if the poem's metadata should be included, and ``False`` if
     the poem should be excluded.
     """
@@ -754,7 +756,7 @@ class TMLPoetryParser:
             metadata["id"] = file_path.stem
 
             # if filtering is set, return null objects if metadata fails filter
-            if self.filter_results and not passes_filter(metadata):
+            if self.filter_results and not ppa_relevant(metadata):
                 ## Treat empty dict as "skip" signal
                 return [], None
 
@@ -817,7 +819,12 @@ class TMLPoetryParser:
             bar_format = (
                 "{desc}: {n:,} files processed | elapsed: {elapsed}, {rate_fmt}"
             )
-            file_progress = tqdm(tml_gen, desc=desc, disable=not self.show_progress)
+            file_progress = tqdm(
+                tml_gen,
+                desc=desc,
+                bar_format=bar_format,
+                disable=not self.show_progress,
+            )
 
         n_attempted = 0
         n_processed = 0
