@@ -57,6 +57,7 @@ CHADWYCK_HEALEY_CSV = REF_DATA_DIR / "chadwyck_healey_metadata.csv"
 SOURCE_ID = {
     "Poetry Foundation": "poetry-foundation",
     "Chadwyck-Healey": "chadwyck-healey",
+    "internet-poems": "internet_poems",
 }
 
 
@@ -174,7 +175,7 @@ def compile_metadata(data_dir, output_file):
     authors = [p.stem.split("_", 1)[0].replace("-", " ") for p in poem_files]
     # title: same as author for the text after the _
     titles = [p.stem.split("_", 1)[1].replace("-", " ") for p in poem_files]
-    source = ["internet-poems"] * len(ids)
+    source = [SOURCE_ID["internet-poems"]] * len(ids)
 
     # create a record batch to write out
     record_batch = pa.RecordBatch.from_arrays(
