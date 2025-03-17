@@ -41,16 +41,15 @@ Limitations:
 """
 
 import argparse
+import itertools
 import pathlib
 import sys
 
 import polars as pl
 
-from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
+from corppa.poetry_detection.core import MULTIVAL_DELIMITER
 from corppa.poetry_detection.polars_utils import (
-    FIELD_TYPES,
     LABELED_EXCERPT_FIELDS,
-    REQ_LABELED_EXCERPT_FIELDS,
     has_poem_ids,
     load_excerpts_df,
     standardize_dataframe,
@@ -101,23 +100,46 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
         ).drop("notes_right")
 
     if "identification_methods_right" in merged.columns:
-        # use list set union method to merge values, ignoring nulls
-        # - if left value is null, use right side
-        # - if right value is null, use left
-        # - if both are non-null, combine
-        # NOTE: null check is required to avoid null + value turning into a null
-        # although there may be a more elegant polars way to handle this
-        merged = merged.with_columns(
-            identification_methods=pl.when(pl.col("identification_methods").is_null())
-            .then(pl.col("identification_methods_right"))
-            .when(pl.col("identification_methods_right").is_null())
-            .then(pl.col("identification_methods"))
-            .otherwise(
-                pl.col("identification_methods").list.set_union(
-                    pl.col("identification_methods_right")
+        # if ANY values are not null, then we need to merge
+        # TODO: if we can fill null with empty list, maybe set union
+        # doesn't require conditionals here
+
+        if merged["identification_methods_right"].count():
+            # use list set union method to merge values, ignoring nulls
+            # - if left value is null, use right side
+            # - if right value is null, use left
+            # - if both are non-null, combine
+            # NOTE: null check is required to avoid null + value turning into a null
+            # although there may be a more elegant polars way to handle this
+            # print(merged.filter(pl.col('identification_methods_right').is_not_null())[['identification_methods', 'identification_methods_right']])
+            merged = merged.with_columns(pl.col("identification_methods").fill_null([]))
+            print(
+                merged.filter(pl.col("identification_methods").is_not_null())[
+                    [
+                        "identification_methods",
+                        "identification_methods_right",
+                    ]
+                ]
+            )
+            merged = merged.with_columns(
+                identification_methods=pl.when(
+                    pl.col("identification_methods").is_null()
+                )
+                .then(pl.col("identification_methods_right"))
+                .when(pl.col("identification_methods_right").is_null())
+                .then(pl.col("identification_methods"))
+                .when(
+                    pl.col("identification_methods").is_not_null()
+                    & pl.col("identification_methods_right").is_not_null()
+                )
+                .then(
+                    pl.col("identification_methods").list.set_union(
+                        pl.col("identification_methods_right")
+                    )
                 )
             )
-        ).drop("identification_methods_right")
+        # then drop the right side
+        merged = merged.drop("identification_methods_right")
 
     # the left join omits any excerpts in other_df that are not in the main df
     # use an "anti" join starting with the other df to get all the rows
@@ -130,11 +152,10 @@ def combine_excerpts(df: pl.DataFrame, other_df: pl.DataFrame) -> pl.DataFrame:
         merged = merged.select(LABELED_EXCERPT_FIELDS).extend(
             standardize_dataframe(right_df)
         )
-
     return merged
 
 
-def merge_labeled_excerpts(df: pl.DataFrame) -> pl.DataFrame:
+def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
     """Takes a polars Dataframe that includes labeled excerpts and attempts to
     merges excerpts with same page id, excerpt id, and poem id. Returns the resulting
     dataframe, with any duplicate excerpts merged.
@@ -148,7 +169,76 @@ def merge_labeled_excerpts(df: pl.DataFrame) -> pl.DataFrame:
     # create a df with the same schema but no data to collect merged excerpts
     merged_excerpts = updated_df.clear()
 
-    # group by page id, excerpt id, and poem id to find repeated identificatins
+    # first group by page id and excerpt id without poem id
+    # to merge corresponding labeled and unlabeled excerpts
+    # OR excerpt with and without notes
+    for group, data in updated_df.group_by(["page_id", "excerpt_id"]):
+        # group is a tuple of values for page id, excerpt id, poem id
+        # data is a df of the grouped rows for this set
+
+        # sort so any empty values for optional fields are first,
+        # then fill values backward - i.e., treat nulls as duplicates,
+        # but keep unlabeled excerpts first
+        data = data.sort(
+            "poem_id",
+            "ref_corpus",
+            "ref_span_start",
+            "ref_span_end",
+            "ref_span_text",
+            nulls_last=False,
+        ).select(pl.all().backward_fill())
+
+        # identify repeats where everything is the same but the row index,
+        # methods, and notes
+        # (other values must either be the same or don't conflict because they were unset)
+        repeats = data.filter(
+            data.drop(
+                "index", "detection_methods", "identification_methods", "notes"
+            ).is_duplicated()
+        )
+
+        if not repeats.is_empty():
+            # combine id methods across all rows
+            # get id methods as a list of lists, use itertools to unwrap
+            # the lists; consume the itertools generator and use set to uniquify,
+            # then convert back to list to put back in the polars dataframe
+            combined_detect_methods = list(
+                set(
+                    list(
+                        itertools.chain.from_iterable(
+                            repeats["detection_methods"].to_list()
+                        )
+                    )
+                )
+            )
+            combined_id_methods = list(
+                set(
+                    list(
+                        itertools.chain.from_iterable(
+                            repeats["identification_methods"].to_list()
+                        )
+                    )
+                )
+            )
+            # join all unique notes within this group; don't repeat duplicate notes
+            # preserve order, which puts unlabeled excerpt first
+            combined_notes = "\n".join(repeats["notes"].unique(maintain_order=True))
+
+            repeats = repeats.with_columns(
+                detection_methods=pl.lit(combined_detect_methods),
+                identification_methods=pl.lit(combined_id_methods),
+                notes=pl.lit(combined_notes),
+            )
+            # remove the repeats from the main dataframe
+            updated_df = updated_df.filter(
+                ~pl.col("index").is_in(repeats.select(pl.col("index")))
+            )
+            # add the consolidated row to the merged df
+            merged_excerpts.extend(repeats[:1])
+
+            # TODO: need similar logic for detection methods (potentially) and notes
+
+    # group by page id, excerpt id, and poem id to find repeated identifications
     for group, data in updated_df.group_by(["page_id", "excerpt_id", "poem_id"]):
         # group is a tuple of values for page id, excerpt id, poem id
         # data is a df of the grouped rows for this set
@@ -256,7 +346,7 @@ def main():
             # merging with the new input file
             excerpts = combine_excerpts(excerpts, merge_df)
 
-    excerpts = merge_labeled_excerpts(excerpts)
+    excerpts = merge_excerpts(excerpts)
 
     # write the merged data to the requested output file
     # (in future, support multiple formats - at least csv/jsonl)
