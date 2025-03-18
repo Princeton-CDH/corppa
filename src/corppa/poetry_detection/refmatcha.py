@@ -1,18 +1,27 @@
 #!/usr/bin/env python
 """
 
-🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵
+*🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵*
 
-refmatcha is a script to identify poem excerpts by matching against a local
-collection of reference poems.  It takes in a CSV of excerpts
-and outputs a CSV of labeled excerpts for those excerpts it is able to identify.
+refmatcha identifies poem excerpts by matching against a local collection of
+reference poems.  It takes in a CSV of excerpts and outputs a CSV of
+labeled excerpts for those excerpts it is able to identify.
+By default, the output file is created in the same directory as the input
+with the same name plus `_matches`; i.e., given an input file `round1_excerpts.csv`,
+refmatcha will output identified excerpts to `round1_excerpts_matches.csv`.
+To override this, specify an output filename with `--output` or `-o`.
 
 Setup:
 
-Download and extract poetry-ref-data.tar.bz2 from /tigerdata/cdh/prosody/poetry-detection
+Download and extract `poetry-ref-data.tar.bz2` from `/tigerdata/cdh/prosody/poetry-detection`.
 You should extract it in the same directory where you plan to run this script.
-The script will compile reference content into full-text and metadata parquet files;
-to recompile, rename or remove the parquet files.
+The script will compile reference content into full-text and metadata parquet files
+on the first run; to force recompilation, rename or remove the parquet files.
+
+Example usage: ::
+
+    refmatcha round1_excerpts.csv
+    refmatcha round1_excerpts.csv --output round1_matches.csv
 
 """
 

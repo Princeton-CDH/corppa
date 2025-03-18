@@ -22,3 +22,15 @@ Path Utilities
 .. automodule:: corppa.utils.path_utils
   :members:
 
+
+Poetry Detection
+================
+
+Scripts
+-------
+
+refmatcha
+^^^^^^^^^
+
+.. automodule:: corppa.poetry_detection.refmatcha
+.. Note: not including members for method docs, only top-level script usage
