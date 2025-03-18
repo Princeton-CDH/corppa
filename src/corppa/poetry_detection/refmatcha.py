@@ -553,7 +553,6 @@ def _find_reference_poem_OLD(input_row, ref_df, meta_df):  # pragma: no cover
 
 
 def process(input_file, output_file):
-    logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
     # if the parquet files aren't present, generate them
     # (could add an option to recompile in future)
     if not TEXT_PARQUET_FILE.exists():
@@ -681,7 +680,6 @@ def main():
         type=pathlib.Path,
         required=False,
     )
-    # TODO: add arg for output file
     args = parser.parse_args()
     if not args.input.is_file():
         print(f"Error: input file {args.input} does not exist", file=sys.stderr)
@@ -697,6 +695,7 @@ def main():
         )
         sys.exit(1)
 
+    logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
     process(args.input, args.output)
 
 

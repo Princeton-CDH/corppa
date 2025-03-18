@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 import polars as pl
@@ -5,11 +6,14 @@ import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.refmatcha import (
+    POETRY_FOUNDATION_CSV,
     SCRIPT_ID,
+    compile_text,
     generate_search_text,
     identify_excerpt,
     main,
     multiple_matches,
+    process,
     searchable_text,
 )
 
@@ -291,6 +295,46 @@ def test_multiple_matches():
     match, reason = multiple_matches(pl.from_dicts(reference_data))
     assert reason == "duplicate author but not title; excluding Poetry Foundation"
     assert match["source"][0] == "internet-poems"
+
+
+def test_compile_text(tmp_path):
+    os.chdir(tmp_path)
+    # output file to be created
+    text_file = tmp_path / "text.parquet"
+    # create some test input data
+    internet_poem = tmp_path / "internet-poems" / "Virgil_Aeneid.txt"
+    internet_poem.parent.mkdir()
+    internet_poem.write_text(
+        "ARMA virumque cano, Troiae qui primus ab oris\nItaliam, fato profugus, Laviniaque venit"
+    )
+    ch_poem = tmp_path / "chadwyck-healey" / "Z200437771.txt"
+    ch_poem.parent.mkdir()
+    ch_poem.write_text(
+        "Thou Spirit who ledst this glorious Eremite\nInto the Desert, his Victorious Field"
+    )
+    # poetry foundation text & metadata is in a csv
+    pfound_csv = tmp_path / POETRY_FOUNDATION_CSV
+    pfound_csv.parent.mkdir()
+    pfound_csv.write_text(""",Author,Title,Poetry Foundation ID,Content
+0,Wendy Videlock,!,55489,"Dear Writers, I’m compiling the first in what I hope ...\"""")
+
+    compile_text(tmp_path, text_file)
+
+    assert text_file.exists()
+    text_df = pl.read_parquet(text_file)
+    assert text_df.height == 3
+    text_row = text_df.row(0, named=True)
+    assert text_row["id"] == "Virgil_Aeneid"
+    assert text_row["text"].startswith("ARMA virumque cano")
+    assert text_row["source"] == "internet-poems"
+    text_row = text_df.row(1, named=True)
+    assert text_row["id"] == "Z200437771"
+    assert text_row["text"].startswith("Thou Spirit who ledst")
+    assert text_row["source"] == "chadwyck-healey"
+    text_row = text_df.row(2, named=True)
+    assert text_row["id"] == "55489"
+    assert text_row["text"].startswith("Dear Writers, I’m compiling")
+    assert text_row["source"] == "poetry-foundation"
 
 
 @patch("corppa.poetry_detection.refmatcha.process")
