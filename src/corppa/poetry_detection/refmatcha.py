@@ -556,7 +556,7 @@ def save_to_csv(excerpts_df, outfile):
     ).sort("page_id", "excerpt_id").write_csv(outfile)
 
 
-def process(input_file):
+def process(input_file, output_file):
     logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
     # if the parquet files aren't present, generate them
     # (could add an option to recompile in future)
@@ -607,8 +607,6 @@ def process(input_file):
     input_df = generate_search_text(
         input_df, field="ppa_span_text", output_field="search_text"
     )
-    # output file will be created adjacent to input file
-    output_file = input_file.with_name(f"{input_file.stem}_matched.csv")
 
     # split out first/last lines for multiline text
     input_df = (
@@ -677,17 +675,33 @@ def main():
     )
     parser.add_argument(
         "input",
-        help="csv or tsv file with poem excerpts",
+        help="csv or tsv file with poem excerpts to match",
         type=pathlib.Path,
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Filename where labeled excerpts should be saved (CSV); defaults to input file + _matched.csv",
+        type=pathlib.Path,
+        required=False,
     )
     # TODO: add arg for output file
     args = parser.parse_args()
-
     if not args.input.is_file():
         print(f"Error: input file {args.input} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    process(args.input)
+    # if not specified, create output file adjacent to input file
+    if args.output is None:
+        args.output = args.input.with_name(f"{args.input.stem}_matched.csv")
+    if args.output.exists():
+        print(
+            f"Error: output file {args.output} already exists, not overwriting",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    process(args.input, args.output)
 
 
 if __name__ == "__main__":

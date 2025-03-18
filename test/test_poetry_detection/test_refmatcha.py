@@ -222,13 +222,41 @@ def test_main(mock_process, capsys, tmp_path):
     input_file = tmp_path / "excerpts.csv"
     # call with non-existent input file
     with patch("sys.argv", ["refmatcha", str(input_file)]):
-        # at least one filter is required
         with pytest.raises(SystemExit):
             main()
         captured = capsys.readouterr()
         assert f"Error: input file {str(input_file)} does not exist" in captured.err
 
-        # file exists now
+        # input file exists now; default output file
         input_file.touch()
+        expected_output = input_file.with_name(f"{input_file.stem}_matched.csv")
         main()
-        mock_process.assert_called_with(input_file)
+        mock_process.assert_called_with(input_file, expected_output)
+
+        # if output file exists, complain
+        expected_output.touch()
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert (
+            f"Error: output file {str(expected_output)} already exists, not overwriting"
+            in captured.err
+        )
+
+    # specify output file
+    output_file = tmp_path / "matches.csv"
+    with patch(
+        "sys.argv", ["refmatcha", str(input_file), "--output", str(output_file)]
+    ):
+        main()
+        mock_process.assert_called_with(input_file, output_file)
+
+        # still complains if output file already exists
+        output_file.touch()
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert (
+            f"Error: output file {str(output_file)} already exists, not overwriting"
+            in captured.err
+        )
