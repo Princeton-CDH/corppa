@@ -39,7 +39,11 @@ from tqdm import tqdm
 from unidecode import unidecode
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
-from corppa.poetry_detection.merge_excerpts import fix_data_types
+from corppa.poetry_detection.polars_utils import (
+    EXCERPT_FIELDS,
+    LABELED_EXCERPT_FIELDS,
+    fix_data_types,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -351,9 +355,10 @@ def identify_excerpt(
     identification and reference information if found."""
     # can we use excerpt objects to simplify?
     excerpt = Excerpt.from_dict(
-        {k: v for k, v in excerpt_row.items() if k in Excerpt.fieldnames()}
+        {k: v for k, v in excerpt_row.items() if k in EXCERPT_FIELDS}
     )
-    id_info = {}
+    match_info = None
+    result = None
     # preserve any notes on the incoming excerpt
     # (is this what we want? notes might get duplicated if/when we merge...)
     note_lines = [excerpt_row["notes"]] if excerpt.notes is not None else []
@@ -397,7 +402,7 @@ def identify_excerpt(
         print(f"Error searching: {err}")
 
     # if anything matched search text, determine if results are useful
-    if not result.is_empty():
+    if result is not None and not result.is_empty():
         num_matches = result.height  # height = number of rows
         match_df = None
 
@@ -413,6 +418,11 @@ def identify_excerpt(
                 id_note = f"{num_matches} matches on {search_field_label}: {reason}"
 
         if match_df is not None:
+            # rename columns for export
+            match_df = match_df.rename({"id": "poem_id", "source": "ref_corpus"})
+            # get the first row as a dictionary
+            match_info = match_df.row(0, named=True)
+
             # if the match was found based on first or last line,
             # adjust reference start/end/text to describe the full span
             # (as much as possible, may not be exact)
@@ -420,54 +430,46 @@ def identify_excerpt(
                 # use search text length as basis for reference span length
                 search_text_length = len(excerpt_row["search_text"])
 
-                # TODO: don't use polars for this! just calculate directly
-
                 if search_field == "search_first_line":
                     # if matched on first line, start is correct;
                     # recalculate end based on the length of the input search text
-                    match_df = match_df.with_columns(
-                        ref_span_end=pl.col("ref_span_start").add(search_text_length)
+                    match_info["ref_span_end"] = (
+                        match_info["ref_span_start"] + search_text_length
                     )
+
                 # and use slice to get the substring for that content
                 elif search_field == "search_last_line":
                     # if matched on last line, end is correct; adjust start
-                    match_df = match_df.with_columns(
-                        ref_span_start=pl.col("ref_span_end").add(-search_text_length)
-                    ).with_columns(
-                        # dont' allow span start to be smaller than zero
-                        ref_span_start=pl.when(pl.col("ref_span_start") < 0)
-                        .then(0)
-                        .otherwise(pl.col("ref_span_start"))
+                    # but don't allow span start to be smaller than zero
+                    match_info["ref_span_start"] = max(
+                        0, match_info["ref_span_end"] - search_text_length
                     )
-                # then extract full reference text for adjusted indices
-                match_df = match_df.with_columns(
-                    ref_span_text=pl.col("search_text").str.slice(
-                        pl.col("ref_span_start"), search_text_length
-                    )
-                )
 
-            # rename columns and limit to the fields we to return
-            match_df = match_df.rename({"id": "poem_id", "source": "ref_corpus"})[
-                [
-                    "poem_id",
-                    "ref_corpus",
-                    "ref_span_start",
-                    "ref_span_end",
-                    "ref_span_text",
+                # adjust reference text based on updated indices
+                ref_start, ref_end = (
+                    match_info["ref_span_start"],
+                    match_info["ref_span_end"],
+                )
+                # must index into the search_text of the *match* row, from the reference data
+                # (not the seach text for the excerpt we're trying tom atch)
+                match_info["ref_span_text"] = match_info["search_text"][
+                    ref_start:ref_end
                 ]
-            ]
-            # update identification dict with first row in dict format
-            id_info.update(match_df.row(0, named=True))
+
             # add note about how the match was determined
             # return as new field; must be merged with notes in calling code
             note_lines.append(f"{SCRIPT_ID}: {id_note}")
-            id_info["notes"] = "\n".join(note_lines).strip()
+            match_info["notes"] = "\n".join(note_lines).strip()
             # set id method
-            id_info["identification_methods"] = {SCRIPT_ID}
+            match_info["identification_methods"] = {SCRIPT_ID}
 
     # if the excerpt was identified, return a labeled excerpt
-    if id_info.get("poem_id"):
-        return LabeledExcerpt.from_excerpt(excerpt, **id_info)
+    if match_info is not None:
+        # limit dictionary to labeled excerpt fields
+        match_info = {
+            k: v for k, v in match_info.items() if k in LABELED_EXCERPT_FIELDS
+        }
+        return LabeledExcerpt.from_excerpt(excerpt, **match_info)
     # otherwise, no match found
     return None
 
@@ -592,7 +594,7 @@ def process(input_file):
 
     # load csv with excerpt fieldnames
     try:
-        input_df = fix_data_types(pl.read_csv(input_file, columns=Excerpt.fieldnames()))
+        input_df = fix_data_types(pl.read_csv(input_file, columns=EXCERPT_FIELDS))
     except pl.exceptions.ColumnNotFoundError as err:
         # if any excerpt fields are missing, report and exit
         print(f"Input file does not have expected excerpt fields: {err}")
@@ -632,7 +634,7 @@ def process(input_file):
         # output matched excerpts as labeled excerpts
         csvwriter = csv.DictWriter(
             outfile,
-            fieldnames=LabeledExcerpt.fieldnames(),
+            fieldnames=LABELED_EXCERPT_FIELDS,
         )
         csvwriter.writeheader()
 

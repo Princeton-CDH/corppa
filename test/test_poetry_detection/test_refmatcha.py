@@ -73,6 +73,24 @@ def reference_df():
     return generate_search_text(pl.from_dicts(ref_poetry_data))
 
 
+def test_generate_search_text():
+    df = pl.from_dicts(ref_poetry_data)
+    # default text and search field
+    searchable_df = generate_search_text(df)
+    assert "search_text" in searchable_df.columns
+
+    # specify name for the output field
+    named_output_field = "search_me"
+    searchable_df = generate_search_text(df, output_field=named_output_field)
+    assert named_output_field in searchable_df.columns
+
+    # specify name for the input field
+    searchable_df = generate_search_text(
+        df.with_columns(pl.col("text").alias("first_line")), "first_line"
+    )
+    assert "search_first_line" in searchable_df.columns
+
+
 reference_fields = [
     "poem_id",
     "ref_corpus",

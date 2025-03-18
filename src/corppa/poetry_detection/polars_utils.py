@@ -14,6 +14,8 @@ REQ_EXCERPT_FIELDS = set(Excerpt.fieldnames(required_only=True))
 REQ_LABELED_EXCERPT_FIELDS = set(LabeledExcerpt.fieldnames(required_only=True))
 #: All fields for labeled excerpts, in the expected order
 LABELED_EXCERPT_FIELDS = LabeledExcerpt.fieldnames()
+#: All fields for excerpts, in the expected order
+EXCERPT_FIELDS = Excerpt.fieldnames()
 
 #: dictionary of excerpt field names with associated data types
 FIELD_TYPES = LabeledExcerpt.field_types()
