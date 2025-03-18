@@ -22,6 +22,7 @@ import csv
 import logging
 import pathlib
 import re
+import sys
 from glob import iglob
 
 try:
@@ -399,7 +400,8 @@ def identify_excerpt(
         )
 
     except pl.exceptions.ComputeError as err:
-        print(f"Error searching: {err}")
+        print(f"Error searching: {err}", file=sys.stderr)
+        return None
 
     # if anything matched search text, determine if results are useful
     if result is not None and not result.is_empty():
@@ -680,6 +682,10 @@ def main():
     )
     # TODO: add arg for output file
     args = parser.parse_args()
+
+    if not args.input.is_file():
+        print(f"Error: input file {args.input} does not exist", file=sys.stderr)
+        sys.exit(1)
 
     process(args.input)
 

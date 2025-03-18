@@ -8,6 +8,7 @@ from corppa.poetry_detection.refmatcha import (
     SCRIPT_ID,
     generate_search_text,
     identify_excerpt,
+    main,
     searchable_text,
 )
 
@@ -33,6 +34,8 @@ His might and deprecate his power""",
         "nearly napping, | sudden | -ly there came a | tapping ... some visit | -or",
         "nearly napping suddenly there came a tapping some visitor",
     ),
+    # remove regex characters
+    ("* The earth is the Lord's", "The earth is the Lords"),
 ]
 
 
@@ -131,6 +134,17 @@ def test_identify_excerpt(reference_df):
     assert identify_excerpt(excerpt_row, reference_df) is None
 
 
+def test_identify_excerpt_special_characters(reference_df, capsys):
+    # test identify_excerpt method directly
+    excerpt_row = excerpt_earth.to_dict()
+    # characters that look like malformed regex cause problems
+    excerpt_row["search_text"] = "* The earth is the Lords"
+    assert identify_excerpt(excerpt_row, reference_df) is None
+    captured = capsys.readouterr()
+    assert "Error searching: regex error" in captured.err
+    assert "error: repetition operator missing expression" in captured.err
+
+
 def test_identify_excerpt_first_line(reference_df):
     excerpt_row = excerpt_earth.to_dict()
     # manually set search text for now with multiline content
@@ -203,5 +217,18 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
     )
 
 
-# TODO: handle special characters like this
-# (?i)*[[:space:]]+me[[:space:]]+val[[:space:]]+The
+@patch("corppa.poetry_detection.refmatcha.process")
+def test_main(mock_process, capsys, tmp_path):
+    input_file = tmp_path / "excerpts.csv"
+    # call with non-existent input file
+    with patch("sys.argv", ["refmatcha", str(input_file)]):
+        # at least one filter is required
+        with pytest.raises(SystemExit):
+            main()
+        captured = capsys.readouterr()
+        assert f"Error: input file {str(input_file)} does not exist" in captured.err
+
+        # file exists now
+        input_file.touch()
+        main()
+        mock_process.assert_called_with(input_file)
