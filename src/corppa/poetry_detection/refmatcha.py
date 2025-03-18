@@ -39,7 +39,7 @@ import rapidfuzz
 from tqdm import tqdm
 from unidecode import unidecode
 
-from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
+from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.polars_utils import (
     EXCERPT_FIELDS,
     LABELED_EXCERPT_FIELDS,
@@ -550,18 +550,6 @@ def _find_reference_poem_OLD(input_row, ref_df, meta_df):  # pragma: no cover
 
     # no good match found
     return None
-
-
-def save_to_csv(excerpts_df, outfile):
-    # convert list fields for output to csv, sort, and write to file
-    excerpts_df.with_columns(
-        detection_methods=pl.col("detection_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-        identification_methods=pl.col("identification_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-    ).sort("page_id", "excerpt_id").write_csv(outfile)
 
 
 def process(input_file, output_file):
