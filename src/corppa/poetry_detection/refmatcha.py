@@ -167,7 +167,8 @@ def compile_metadata(data_dir, output_file):
             pqwriter.write_batch(batch)
     else:
         print(
-            f"Chadwyck-Healey csv file not found for metadata compilation (expected at {CHADWYCK_HEALEY_CSV})"
+            f"Chadwyck-Healey csv file not found for metadata compilation (expected at {CHADWYCK_HEALEY_CSV})",
+            file=sys.stderr,
         )
 
     # for the directory of internet poems, metadata is embedded in file name
@@ -212,7 +213,8 @@ def compile_metadata(data_dir, output_file):
             pqwriter.write_batch(batch)
     else:
         print(
-            f"Poetry Foundation csv file not found for metadata compilation (expected at {POETRY_FOUNDATION_CSV})"
+            f"Poetry Foundation csv file not found for metadata compilation (expected at {POETRY_FOUNDATION_CSV})",
+            file=sys.stderr,
         )
 
     # close the parquet file
@@ -575,7 +577,7 @@ def process(input_file, output_file):
     reference_df = reference_df.filter(pl.col("text_length").ge(min_length))
     print(f"  Omitting {short_texts.height} poems with text length < {min_length}")
 
-    print(f"Poetry reference metadata:  {meta_df.height:,} entries")
+    print(f"Poetry reference metadata: {meta_df.height:,} entries")
 
     # join metadata so we can work with one reference dataframe
     reference_df = reference_df.join(
@@ -593,9 +595,14 @@ def process(input_file, output_file):
     # load csv with excerpt fieldnames
     try:
         input_df = fix_data_types(pl.read_csv(input_file, columns=EXCERPT_FIELDS))
+    except pl.exceptions.NoDataError as err:
+        print(f"Input file does not have any data: {err}", file=sys.stderr)
+        raise SystemExit(1)
     except pl.exceptions.ColumnNotFoundError as err:
         # if any excerpt fields are missing, report and exit
-        print(f"Input file does not have expected excerpt fields: {err}")
+        print(
+            f"Input file does not have expected excerpt fields: {err}", file=sys.stderr
+        )
         raise SystemExit(1)
 
     print(f"Input file has {input_df.height:,} excerpts")

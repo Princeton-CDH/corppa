@@ -1,3 +1,4 @@
+import csv
 import os
 from unittest.mock import patch
 
@@ -7,8 +8,10 @@ import pytest
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.refmatcha import (
     CHADWYCK_HEALEY_CSV,
+    META_PARQUET_FILE,
     POETRY_FOUNDATION_CSV,
     SCRIPT_ID,
+    TEXT_PARQUET_FILE,
     compile_metadata,
     compile_text,
     generate_search_text,
@@ -404,6 +407,74 @@ def test_compile_metadata(
     assert poem_meta["source"] == "poetry-foundation"
     assert poem_meta["author"] == "Wendy Videlock"
     assert poem_meta["title"] == "!"
+
+    # when CSVs are not found, should see error messages
+    poetry_foundation_csv.unlink()
+    chadwyck_healey_csv.unlink()
+    compile_metadata(tmp_path, metadata_file)
+    captured = capsys.readouterr()
+    assert "Chadwyck-Healey csv file not found for metadata compilation" in captured.err
+    assert (
+        "Poetry Foundation csv file not found for metadata compilation" in captured.err
+    )
+
+
+def test_process(
+    tmp_path,
+    capsys,
+    internet_poem,
+    chadwyck_healey_poem,
+    poetry_foundation_csv,
+    chadwyck_healey_csv,
+):
+    # minimal test to run process code
+    # use fixture data and allow compile text/metadata methods to run
+    os.chdir(tmp_path)
+    input_file = tmp_path / "excerpts.csv"
+    # create minimal excerpt input file from fixture object
+    with input_file.open("w") as excerpts_csv:
+        csvwriter = csv.DictWriter(excerpts_csv, fieldnames=Excerpt.fieldnames())
+        csvwriter.writeheader()
+        csvwriter.writerow(excerpt_earth.to_csv())
+
+    output_file = tmp_path / "matches.csv"
+    with patch("corppa.poetry_detection.refmatcha.REF_DATA_DIR", new=tmp_path):
+        process(input_file, output_file)
+        # expect to create the parquet files
+        assert (tmp_path / TEXT_PARQUET_FILE).exists()
+        assert (tmp_path / META_PARQUET_FILE).exists()
+
+    captured = capsys.readouterr()
+    # inspect summary output
+    assert "Poetry reference text data: 3 entries" in captured.out
+    assert "Omitting 0 poems with text length < 15" in captured.out
+    assert "Poetry reference metadata: 3 entries" in captured.out
+    assert "Input file has 1 excerpt" in captured.out
+    assert "0 excerpts with matches" in captured.out
+
+    # should error on invalid input file
+    with input_file.open("w") as excerpts_csv:
+        csvwriter = csv.writer(excerpts_csv)
+        csvwriter.writerows([["foo", "bar", "baz"], ["a", "b", "c"]])
+
+    with patch("corppa.poetry_detection.refmatcha.REF_DATA_DIR", new=tmp_path):
+        with pytest.raises(SystemExit):
+            process(input_file, output_file)
+
+        captured = capsys.readouterr()
+        assert "Input file does not have expected excerpt fields" in captured.err
+        assert 'unable to find column "page_id"' in captured.err
+
+    # should error on empty input file
+    input_file.unlink()
+    input_file.touch()
+    with patch("corppa.poetry_detection.refmatcha.REF_DATA_DIR", new=tmp_path):
+        with pytest.raises(SystemExit):
+            process(input_file, output_file)
+
+        captured = capsys.readouterr()
+        assert "Input file does not have any data" in captured.err
+        assert "empty CSV" in captured.err
 
 
 @patch("corppa.poetry_detection.refmatcha.process")
