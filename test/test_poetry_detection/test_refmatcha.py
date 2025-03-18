@@ -6,8 +6,10 @@ import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.refmatcha import (
+    CHADWYCK_HEALEY_CSV,
     POETRY_FOUNDATION_CSV,
     SCRIPT_ID,
+    compile_metadata,
     compile_text,
     generate_search_text,
     identify_excerpt,
@@ -320,10 +322,21 @@ def chadwyck_healey_poem(tmp_path):
 
 
 @pytest.fixture
+def chadwyck_healey_csv(tmp_path):
+    "fixture to create a test version of the chadwyck-healey metadata csv file"
+    ch_meta_csv = tmp_path / CHADWYCK_HEALEY_CSV
+    ch_meta_csv.parent.mkdir(exist_ok=True)
+    # old version for now
+    ch_meta_csv.write_text("""_id,author_dob,author_dob_valid,author_dod,author_dod_valid,author_fname,author_lname,author_role,id,id_link,meta_genre,meta_period,meta_rhymes,num_lines,title_edition,title_figure,title_hi,title_main,title_sub
+5163205e1177fb6b57000000,1928,TRUE,,FALSE,Donald,Hall,orig.,Z200132299,http://lilaserver.stanford.edu:8080/poetry/Z200132299,,Twentieth-Century 1900-1999,,271,Sappho's Gymnasium (1994),,,The Night of the Day,""")
+    return ch_meta_csv
+
+
+@pytest.fixture
 def poetry_foundation_csv(tmp_path):
-    "test fixture to create a test version of the poetry foundation csv file"
+    "fixture to create a test version of the poetry foundation csv file"
     pfound_csv = tmp_path / POETRY_FOUNDATION_CSV
-    pfound_csv.parent.mkdir()
+    pfound_csv.parent.mkdir(exist_ok=True)
     pfound_csv.write_text(""",Author,Title,Poetry Foundation ID,Content
 0,Wendy Videlock,!,55489,"Dear Writers, I’m compiling the first in what I hope ...\"""")
     return pfound_csv
@@ -339,15 +352,16 @@ def test_compile_text(
     compile_text(tmp_path, text_file)
     assert text_file.exists()
     text_df = pl.read_parquet(text_file)
+    # we expect three rows based on fixture data
     assert text_df.height == 3
-    # sort so order is reliable
+    # sort so test order is reliable
     text_df = text_df.sort(pl.col("source"))
     text_row = text_df.row(0, named=True)
     assert text_row["id"] == chadwyck_healey_poem.stem
     assert text_row["text"].startswith("Thou Spirit who ledst")
     assert text_row["source"] == "chadwyck-healey"
     text_row = text_df.row(1, named=True)
-    assert text_row["id"] == internet_poem.stem  # i"Virgil_Aeneid"
+    assert text_row["id"] == internet_poem.stem
     assert text_row["text"].startswith("ARMA virumque cano")
     assert text_row["source"] == "internet-poems"
     text_row = text_df.row(2, named=True)
@@ -360,6 +374,36 @@ def test_compile_text(
     compile_text(tmp_path, text_file)
     captured = capsys.readouterr()
     assert "Poetry Foundation csv file not found for text compilation" in captured.err
+
+
+def test_compile_metadata(
+    tmp_path, capsys, internet_poem, poetry_foundation_csv, chadwyck_healey_csv
+):
+    os.chdir(tmp_path)
+    # output file to be created
+    metadata_file = tmp_path / "metadata.parquet"
+    # using fixtures to simulate reference data to be compiled
+    compile_metadata(tmp_path, metadata_file)
+    assert metadata_file.exists()
+    meta_df = pl.read_parquet(metadata_file)
+    assert meta_df.height == 3
+    # sort so test order is reliable
+    meta_df = meta_df.sort(pl.col("source"))
+    poem_meta = meta_df.row(0, named=True)
+    assert poem_meta["id"] == "Z200132299"
+    assert poem_meta["source"] == "chadwyck-healey"
+    assert poem_meta["author"] == "Donald Hall"
+    assert poem_meta["title"] == "The Night of the Day"
+    poem_meta = meta_df.row(1, named=True)
+    assert poem_meta["id"] == internet_poem.stem
+    assert poem_meta["author"] == "Virgil"
+    assert poem_meta["title"] == "Aeneid"
+    assert poem_meta["source"] == "internet_poems"
+    poem_meta = meta_df.row(2, named=True)
+    assert poem_meta["id"] == "55489"
+    assert poem_meta["source"] == "poetry-foundation"
+    assert poem_meta["author"] == "Wendy Videlock"
+    assert poem_meta["title"] == "!"
 
 
 @patch("corppa.poetry_detection.refmatcha.process")
