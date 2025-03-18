@@ -27,7 +27,7 @@ from glob import iglob
 try:
     from itertools import batched
 except ImportError:
-    from more_itertools import batched
+    from more_itertools import batched  # type: ignore[no-redef]
 
 from time import perf_counter
 
@@ -35,10 +35,11 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import rapidfuzz
+from tqdm import tqdm
 from unidecode import unidecode
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
-from corppa.poetry_detection.merge_excerpts import fix_columns, fix_data_types
+from corppa.poetry_detection.merge_excerpts import fix_data_types
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +325,8 @@ def multiple_matches(filtered_ref_df):
     return None, None
 
 
-def fuzzy_partial_ratio(series, search_text):
+# disabled for now
+def fuzzy_partial_ratio(series, search_text):  # pragma: no cover
     """Calculate rapidfuzz partial_ratio score for a single input
     search text across a whole series of potentially matching texts.
     Returns a list of scores."""
@@ -340,33 +342,27 @@ def fuzzy_partial_ratio(series, search_text):
     return scores[0]
 
 
-# new version of simplified fiend_reference_poem method
-
-
 def identify_excerpt(
-    excerpt: dict, reference_df: pl.DataFrame, search_text: str = "text"
-) -> dict:
+    excerpt_row: dict, reference_df: pl.DataFrame, search_text: str = "text"
+) -> LabeledExcerpt | None:
     """Given an unlabeled excerpt as a dict from a polars dataframe and a
     reference poetry data frame, attempt to identify the excerpt. Returns
-    a dictionary of labeled excerpt fields with poem identification and
-    reference information filled in if found."""
+    a :class:`~corppa.poetry_detection.core.LabeledExcerpt` with poem
+    identification and reference information if found."""
     # can we use excerpt objects to simplify?
-    # labeled_ex = LabeledExcerpt.from_excerpt(Excerpt.from_dict(excerpt))
-    id_info = {
-        "poem_id": None,
-        "ref_corpus": None,
-        "ref_span_start": None,
-        "ref_span_end": None,
-        "ref_span_text": None,
-        "identification_methods": None,  # empty unless we are able to id
-        "id_notes": None,
-    }
+    excerpt = Excerpt.from_dict(
+        {k: v for k, v in excerpt_row.items() if k in Excerpt.fieldnames()}
+    )
+    id_info = {}
+    # preserve any notes on the incoming excerpt
+    # (is this what we want? notes might get duplicated if/when we merge...)
+    note_lines = [excerpt_row["notes"]] if excerpt.notes is not None else []
 
     search_field = f"search_{search_text}"
     search_field_label = search_text.replace("_", " ")
     # get the searchable version of the text to use for attempted identification
     # use unidecode to drop accents (often used to indicate meter)
-    search_text = unidecode(excerpt[search_field])
+    search_text = unidecode(excerpt_row[search_field])
     try:
         # do a case-insensitive, whitespace-insensitive search
         # convert one or more whitespace of any kind to match any whitespace
@@ -422,7 +418,9 @@ def identify_excerpt(
             # (as much as possible, may not be exact)
             if search_field != "search_text":
                 # use search text length as basis for reference span length
-                search_text_length = len(excerpt["search_text"])
+                search_text_length = len(excerpt_row["search_text"])
+
+                # TODO: don't use polars for this! just calculate directly
 
                 if search_field == "search_first_line":
                     # if matched on first line, start is correct;
@@ -462,11 +460,16 @@ def identify_excerpt(
             id_info.update(match_df.row(0, named=True))
             # add note about how the match was determined
             # return as new field; must be merged with notes in calling code
-            id_info["id_notes"] = f"{SCRIPT_ID}: {id_note}"
+            note_lines.append(f"{SCRIPT_ID}: {id_note}")
+            id_info["notes"] = "\n".join(note_lines).strip()
             # set id method
-            id_info["identification_methods"] = [SCRIPT_ID]
+            id_info["identification_methods"] = {SCRIPT_ID}
 
-    return id_info
+    # if the excerpt was identified, return a labeled excerpt
+    if id_info.get("poem_id"):
+        return LabeledExcerpt.from_excerpt(excerpt, **id_info)
+    # otherwise, no match found
+    return None
 
 
 # NOTE: disabling code coverage since this code is skipped for now
@@ -567,7 +570,7 @@ def process(input_file):
     # some texts from poetry foundation and maybe Chadwyck-Healey are truncated
     # discard them to avoid bad partial/fuzzy matches
     reference_df = reference_df.with_columns(text_length=pl.col("text").str.len_chars())
-    min_length = 30
+    min_length = 15
     short_texts = reference_df.filter(pl.col("text_length").lt(min_length))
     reference_df = reference_df.filter(pl.col("text_length").ge(min_length))
     print(f"  Omitting {short_texts.height} poems with text length < {min_length}")
@@ -596,152 +599,33 @@ def process(input_file):
         raise SystemExit(1)
 
     print(f"Input file has {input_df.height:,} excerpts")
-
     # convert input text to search text using the same rules applied to reference df
     input_df = generate_search_text(
         input_df, field="ppa_span_text", output_field="search_text"
     )
-
-    print("Looking for matches for on full text of excerpt")
-    # first pass - match on full text of ppa span text
-    # temporarily limit for testing
-    # input_df = input_df.limit(20)
-    labeled_excerpts = (
-        input_df.with_columns(
-            pl.struct(pl.all())
-            .map_elements(
-                lambda row: identify_excerpt(row, reference_df), return_dtype=pl.Struct
-            )
-            .alias("t_struct")
-        )
-        .unnest("t_struct")
-        .filter(pl.col("poem_id").is_not_null())
-    )
-    # merge notes
-    # update notes field by combining left and right notes with a newline,
-    # and then strip any outer newlines
-    print(labeled_excerpts[["excerpt_id", "poem_id", "notes", "id_notes"]])
-    # todo: make utility function, merge notes
-    labeled_excerpts = labeled_excerpts.with_columns(
-        notes=pl.col("notes")
-        .fill_null("")
-        .str.strip_chars()
-        .add(pl.lit("\n"))
-        .add(pl.col("id_notes").str.strip_chars())
-        .str.strip_chars("\n")
-    ).drop("id_notes")
-    print(labeled_excerpts[["excerpt_id", "poem_id", "notes"]])
-
-    labeled_excerpts = fix_columns(labeled_excerpts)
-    print(labeled_excerpts)
-    print(f"Matched {labeled_excerpts.height}")
+    # output file will be created adjacent to input file
     output_file = input_file.with_name(f"{input_file.stem}_matched.csv")
-    # save the results so far
-    save_to_csv(labeled_excerpts, output_file)
 
-    # use an "anti" join to filter input df to excerpts not labeled in the first round
-    input_df = input_df.join(labeled_excerpts, on=["page_id", "excerpt_id"], how="anti")
-    print(f"{input_df.height} unlabeled excerpts remain")
-
-    # for multiline excerpts, try matching on first line, then last line
-    multiline_input = input_df.filter(pl.col("ppa_span_text").str.contains("\n"))
-    print(f"{multiline_input.height} excerpts with multiple lines")
-
-    # split out text to isolate first and last lines find based on
-    multiline_input = multiline_input.with_columns(
-        text_lines=pl.col("ppa_span_text").str.strip_chars().str.split("\n")
-    ).with_columns(
-        first_line=pl.col("text_lines").list.first(),
-        last_line=pl.col("text_lines").list.last(),
+    # split out first/last lines for multiline text
+    input_df = (
+        input_df.with_columns(
+            text_lines=pl.col("ppa_span_text").str.strip_chars().str.split("\n"),
+        )
+        .with_columns(multiline=pl.col("text_lines").list.len().gt(1))
+        .with_columns(
+            first_line=pl.when(pl.col("multiline"))
+            .then(pl.col("text_lines").list.first())
+            .otherwise(None),
+            last_line=pl.when(pl.col("multiline"))
+            .then(pl.col("text_lines").list.last())
+            .otherwise(None),
+        )
     )
     # generate searchable versions of first and last lines
-    multiline_input = generate_search_text(multiline_input, "first_line")
-
-    print("Looking for matches for on first line of excerpt")
-    new_labeled_excerpts = (
-        multiline_input.with_columns(
-            pl.struct(pl.all())
-            .map_elements(
-                lambda row: identify_excerpt(row, reference_df, "first_line"),
-                return_dtype=pl.Struct,
-            )
-            .alias("t_struct")
-        )
-        .unnest("t_struct")
-        .filter(pl.col("poem_id").is_not_null())
-    )
-    # merge notes
-    new_labeled_excerpts = new_labeled_excerpts.with_columns(
-        notes=pl.col("notes")
-        .fill_null("")
-        .str.strip_chars()
-        .add(pl.lit("\n"))
-        .add(pl.col("id_notes").str.strip_chars())
-        .str.strip_chars("\n")
-    ).drop("id_notes")
-    new_labeled_excerpts = fix_columns(new_labeled_excerpts)
-    print(new_labeled_excerpts)
-    print(f"Matched {new_labeled_excerpts.height}")
-
-    labeled_excerpts = labeled_excerpts.extend(new_labeled_excerpts)
-    # save the updated results
-    save_to_csv(labeled_excerpts, output_file)
-
-    # filter out any identified by first line
-    multiline_input = multiline_input.join(
-        labeled_excerpts, on=["page_id", "excerpt_id"], how="anti"
-    )
-    print(
-        f"Looking for matches for {multiline_input.height} unlabeled multiline excerpts by last line"
-    )
-    multiline_input = generate_search_text(multiline_input, "last_line")
-    new_labeled_excerpts = (
-        multiline_input.with_columns(
-            pl.struct(pl.all())
-            .map_elements(
-                lambda row: identify_excerpt(row, reference_df, "last_line"),
-                return_dtype=pl.Struct,
-            )
-            .alias("t_struct")
-        )
-        .unnest("t_struct")
-        .filter(pl.col("poem_id").is_not_null())
-    )
-    new_labeled_excerpts = new_labeled_excerpts.with_columns(
-        notes=pl.col("notes")
-        .fill_null("")
-        .str.strip_chars()
-        .add(pl.lit("\n"))
-        .add(pl.col("id_notes").str.strip_chars())
-        .str.strip_chars("\n")
-    ).drop("id_notes")
-    new_labeled_excerpts = fix_columns(new_labeled_excerpts)
-    print(new_labeled_excerpts)
-    print(f"Matched {new_labeled_excerpts.height}")
-
-    labeled_excerpts = labeled_excerpts.extend(new_labeled_excerpts)
-    # save the updated results
-    save_to_csv(labeled_excerpts, output_file)
-
-    input_df = input_df.join(labeled_excerpts, on=["page_id", "excerpt_id"], how="anti")
-    print(f"{input_df.height} unlabeled excerpts remain")
-
-    return
-    # number of matches found
-    match_found = 0
-
-    # NOTE: this is slow... there is almost certainly a more polars-ish way to
-    # approach it
-    # probably best option is to use map_batches
-    # needs to return poem id, corpus id, span start/end, text
-    # - can we do in waves, simplest first?
-    #       figure out: full text match; how to get span in original from search text
-    #    - if a match is found, it's removed from the next batch
-    # ... how to get start/end/text?
-
-    # notes could include rapidfuzz partial_ratio_alignment score
-    # once we have the two sets
-
+    input_df = generate_search_text(input_df, "first_line")
+    input_df = generate_search_text(input_df, "last_line")
+    # keep track of number of matches found
+    matches_found = 0
     with output_file.open("w", encoding="utf-8") as outfile:
         # add byte-order-mark to indicate unicode
         outfile.write(codecs.BOM_UTF8.decode())
@@ -752,46 +636,34 @@ def process(input_file):
         )
         csvwriter.writeheader()
 
-        for row in input_df.iter_rows(named=True):
-            match_poem = find_reference_poem(row, df, meta_df)
+        # iterate dataframe by named rows (i.e., dictionary); wrap with tqdm
+        # so we have a progress indicator
+        progress_rows = tqdm(
+            input_df.iter_rows(named=True),
+            desc="Matching",
+            total=input_df.height,
+        )
 
-            # if a match was found, generate and output
-            # a LabeledExcerpt based on the original Excerpt
-            if match_poem:
-                # the dataframe row now includes search text fields;
-                # filter to just excerpt fields
-                excerpt_fields = {
-                    k: v for k, v in row.items() if k in Excerpt.fieldnames()
-                }
-                # initialize as an excerpt object to use as basis
-                # for creating labeled excerpt
-                excerpt = Excerpt.from_dict(excerpt_fields)
-                notes = excerpt.notes or ""
-                notes += f"refmatcha: {match_poem['notes']}"
-
-                # create labeled excerpt from original excerpt
-                # with poem id and reference span information
-
-                # NOTE: if identification logic results in a bad span, this will
-                # raise a value error
-                excerpt = LabeledExcerpt.from_excerpt(
-                    excerpt,
-                    # labeled excerpt fields - reference poem information
-                    poem_id=match_poem["id"],
-                    ref_corpus=match_poem["source"],
-                    ref_span_start=match_poem["ref_span_start"],
-                    ref_span_end=match_poem["ref_span_end"],
-                    ref_span_text=match_poem["ref_span_text"],
-                    identification_methods={"refmatcha"},
-                    notes=notes,
+        for n, row in enumerate(progress_rows, start=1):
+            labeled_excerpt = identify_excerpt(row, reference_df)
+            # if excerpt was not identified and excerpt text is multiline,
+            # try identifying based on first and last lines
+            if labeled_excerpt is None and row["multiline"]:
+                labeled_excerpt = identify_excerpt(row, reference_df, "first_line")
+                if labeled_excerpt is None:
+                    labeled_excerpt = identify_excerpt(row, reference_df, "last_line")
+            # if a match was found, add to the output and count
+            if labeled_excerpt is not None:
+                matches_found += 1
+                progress_pct = (matches_found / n) * 100
+                progress_rows.set_postfix_str(
+                    f"matched {matches_found:,}/{n} ({progress_pct:.1f}%)"
                 )
-                match_found += 1
-                # write out as csv
-                csvwriter.writerow(excerpt.to_csv())
+                csvwriter.writerow(labeled_excerpt.to_csv())
 
     print(f"Poems with match information saved to {output_file}")
     print(
-        f"{match_found} excerpts with matches ({match_found / input_df.height * 100:.2f}% of {input_df.height} rows processed)"
+        f"{matches_found} excerpts with matches ({matches_found / input_df.height * 100:.2f}% of {input_df.height} rows processed)"
     )
 
 

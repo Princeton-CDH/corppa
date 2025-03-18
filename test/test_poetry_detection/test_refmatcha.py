@@ -3,7 +3,7 @@ from unittest.mock import patch
 import polars as pl
 import pytest
 
-from corppa.poetry_detection.core import Excerpt
+from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.refmatcha import (
     SCRIPT_ID,
     generate_search_text,
@@ -91,29 +91,26 @@ def test_identify_excerpt(reference_df):
 
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df)
-    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
-    assert id_result["ref_corpus"] == ref_poetry_data[0]["source"]
+    assert isinstance(id_result, LabeledExcerpt)
+    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.ref_corpus == ref_poetry_data[0]["source"]
     # these are from the searchable version of the input text
-    assert id_result["ref_span_start"] == 50
-    assert id_result["ref_span_end"] == 97
-    assert (
-        id_result["ref_span_text"] == "the earth is the Lords and the fullness thereof"
-    )
-    assert id_result["id_notes"] == "refmatcha: single match on text"
-    assert id_result["identification_methods"] == [SCRIPT_ID]
+    assert id_result.ref_span_start == 50
+    assert id_result.ref_span_end == 97
+    assert id_result.ref_span_text == "the earth is the Lords and the fullness thereof"
+    assert id_result.notes == "refmatcha: single match on text"
+    assert id_result.identification_methods == {SCRIPT_ID}
 
     # single match, whitespace agnostic
     excerpt_row["search_text"] = (
         "The earth    is the\nLords\t\tand the fullness thereof"
     )
     id_result = identify_excerpt(excerpt_row, reference_df)
-    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
+    assert id_result.poem_id == ref_poetry_data[0]["id"]
 
     # no match
     excerpt_row["search_text"] = "Disdain forbids me and my dread of shame"
-    id_result = identify_excerpt(excerpt_row, reference_df)
-    for ref_field in reference_fields:
-        assert id_result[ref_field] is None
+    assert identify_excerpt(excerpt_row, reference_df) is None
 
 
 def test_identify_excerpt_first_line(reference_df):
@@ -126,12 +123,13 @@ def test_identify_excerpt_first_line(reference_df):
 
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df, "first_line")
-    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
-    assert id_result["ref_span_start"] == 50
+    assert isinstance(id_result, LabeledExcerpt)
+    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.ref_span_start == 50
     # end and text adjusted based on length of search text
-    assert id_result["ref_span_end"] == 142
+    assert id_result.ref_span_end == 142
     assert (
-        id_result["ref_span_text"]
+        id_result.ref_span_text
         == "the earth is the Lords and the fullness thereof \nWhen hungry and thirsty were ready to faint"
     )
 
@@ -146,12 +144,12 @@ def test_identify_excerpt_last_line(reference_df):
 
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df, "last_line")
-    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
+    assert id_result.poem_id == ref_poetry_data[0]["id"]
     # start and text adjusted based on length of search text
-    assert id_result["ref_span_start"] == 50
-    assert id_result["ref_span_end"] == 142
+    assert id_result.ref_span_start == 50
+    assert id_result.ref_span_end == 142
     assert (
-        id_result["ref_span_text"]
+        id_result.ref_span_text
         == "the earth is the Lords and the fullness thereof \nWhen hungry and thirsty were ready to faint"
     )
 
@@ -166,9 +164,7 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
 
     # duplicate results don't match
     mock_multimatch.return_value = (None, None)
-    id_result = identify_excerpt(excerpt_row, reference_df)
-    for ref_field in reference_fields:
-        assert id_result[ref_field] is None
+    assert identify_excerpt(excerpt_row, reference_df) is None
 
     reason = "all rows match author + title"
     # fill in values for reference span
@@ -179,42 +175,15 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
     )
     mock_multimatch.return_value = (ref_match_df.limit(1), reason)
     id_result = identify_excerpt(excerpt_row, reference_df)
-    assert id_result["poem_id"] == ref_poetry_data[0]["id"]
-    assert id_result["ref_corpus"] == ref_poetry_data[0]["source"]
-    assert id_result["ref_span_text"] == "matched text"
-    assert id_result["ref_span_start"] == 10
-    assert id_result["ref_span_end"] == 20
+    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.ref_corpus == ref_poetry_data[0]["source"]
+    assert id_result.ref_span_text == "matched text"
+    assert id_result.ref_span_start == 10
+    assert id_result.ref_span_end == 20
     assert (
-        id_result["id_notes"]
-        == "refmatcha: 2 matches on text: all rows match author + title"
+        id_result.notes == "refmatcha: 2 matches on text: all rows match author + title"
     )
 
 
 # TODO: handle special characters like this
 # (?i)*[[:space:]]+me[[:space:]]+val[[:space:]]+The
-
-
-def test_identify_excerpt_map_elements(reference_df):
-    # test identify_excerpt method as it will be called
-    # on a dataframe using map_elements
-
-    # load test excerpt as dataframe
-    input_df = pl.from_dicts([excerpt_earth.to_dict()])
-    # generate search text field from excerpt text
-    input_df = generate_search_text(
-        input_df, field="ppa_span_text", output_field="search_text"
-    )
-
-    result = input_df.with_columns(
-        pl.struct(pl.all())
-        .map_elements(
-            lambda row: identify_excerpt(row, reference_df), return_dtype=pl.Struct
-        )
-        .alias("t_struct")
-    ).unnest("t_struct")
-
-    row_dict = result.row(0, named=True)
-    # expect poem id to be set from reference poem
-    assert row_dict["poem_id"] == ref_poetry_data[0]["id"]
-    assert row_dict["ref_corpus"] == ref_poetry_data[0]["source"]
-    assert row_dict["id_notes"] == "refmatcha: single match on text"
