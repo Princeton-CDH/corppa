@@ -280,17 +280,25 @@ def multiple_matches(filtered_ref_df):
     """
     match_count = int(filtered_ref_df.height)
 
-    #  check if both author and title match (ignoring punctuation and case)
+    #  check if author and title match (ignoring punctuation, case, and outer whitespace)
     # TODO: could use rapidfuzz here to check author & title are sufficiently similar
     # e.g. these should be treated as matches but are not currently:
     #    Walter Scott      ┆ Coronach
     #    Walter, Sir Scott ┆ CCLXXVIII CORONACH
     df = filtered_ref_df.with_columns(
-        _author=pl.col("author").str.replace_all("[[:punct:]]", "").str.to_lowercase(),
-        _title=pl.col("title").str.replace_all("[[:punct:]]", "").str.to_lowercase(),
+        _author=pl.col("author")
+        .str.replace_all("[[:punct:]]", "")
+        .str.to_lowercase()
+        .str.strip_chars(),
+        _title=pl.col("title")
+        .str.replace_all("[[:punct:]]", "")
+        .str.to_lowercase()
+        .str.strip_chars(),
     )
-
-    dupe_df = df.filter(df.select(["_author", "_title"]).is_duplicated())
+    # identify duplicates
+    dupe_df = df.filter(
+        df.select(["_author", "_title"]).sort(pl.col("_title")).is_duplicated()
+    )
 
     match_df = None
     reason = None
@@ -318,7 +326,7 @@ def multiple_matches(filtered_ref_df):
     authordupe_df = df.filter(df.select(["_author"]).is_duplicated())
     if not authordupe_df.is_empty():
         # shakespeare shows up oddly in poetry foundation;
-        # if author matchnes assume the other source has the correct title
+        # if author matches, assume the other source has the correct title
         non_poetryfoundtn = authordupe_df.filter(
             pl.col("source") != SOURCE_ID["Poetry Foundation"]
         )

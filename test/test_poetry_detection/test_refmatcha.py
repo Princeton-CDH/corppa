@@ -9,6 +9,7 @@ from corppa.poetry_detection.refmatcha import (
     generate_search_text,
     identify_excerpt,
     main,
+    multiple_matches,
     searchable_text,
 )
 
@@ -215,6 +216,81 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
     assert (
         id_result.notes == "refmatcha: 2 matches on text: all rows match author + title"
     )
+
+
+def test_multiple_matches():
+    # title + author match (ignore case, punctuation)
+    reference_data = [
+        {"author": "James Thomson", "title": "Winter", "source": "internet-poems"},
+        {"author": "James Thomson", "title": "WINTER.", "source": "chadwyck-healey"},
+    ]
+    match, reason = multiple_matches(pl.from_dicts(reference_data))
+    assert reason == "all rows match author + title"
+    # first match is returned
+    assert match["source"][0] == "internet-poems"
+
+    # first source is prioritized when everything matches
+    reference_data.reverse()
+    match, reason = multiple_matches(pl.from_dicts(reference_data))
+    # first match is returned
+    assert match["source"][0] == "chadwyck-healey"
+
+    # similar title; current logic can't match this
+    reference_data = [
+        {
+            "author": "Robert Burns",
+            "title": "Stay My Charmer Can You Leave",
+            "source": "internet-poems",
+        },
+        {
+            "author": "Robert Burns",
+            "title": "STAY, MY CHARMER",
+            "source": "chadwyck-healey",
+        },
+    ]
+    match, reason = multiple_matches(pl.from_dicts(reference_data))
+    assert match is None
+    assert reason is None
+
+    # majority match
+    reference_data = [
+        {
+            "author": "James Hogg",
+            "title": "Mador of the Moor",
+            "source": "internet-poems",
+        },
+        {
+            "author": "James Hogg",
+            "title": "The Palmers Morning Hymn",
+            "source": "internet-poems",
+        },
+        {
+            "author": "James Hogg",
+            "title": "MADOR OF THE MOOR. ",
+            "source": "chadwyck-healey",
+        },
+    ]
+    match, reason = multiple_matches(pl.from_dicts(reference_data))
+    assert reason == "majority match author + title (2 out of 3)"
+    assert match["source"][0] == "internet-poems"
+
+    # poetry foundation title mismatch
+    # majority match
+    reference_data = [
+        {
+            "author": "William Shakespeare",
+            "title": "As You Like It",
+            "source": "internet-poems",
+        },
+        {
+            "author": "William Shakespeare",
+            "title": "Song: Blow, blow thou...",
+            "source": "poetry-foundation",
+        },
+    ]
+    match, reason = multiple_matches(pl.from_dicts(reference_data))
+    assert reason == "duplicate author but not title; excluding Poetry Foundation"
+    assert match["source"][0] == "internet-poems"
 
 
 @patch("corppa.poetry_detection.refmatcha.process")
