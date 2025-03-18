@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-This script merges detected poems excerpts (i.e. :class:~`corppa.poetry_detection.core.Excerpt`)
-with identified poem excerpts (i.e. :class:~`corppa.poetry_detection.core.LabeledExcerpt`);
+This script merges detected poems excerpts (:class:`~corppa.poetry_detection.core.Excerpt`)
+with identified poem excerpts (:class:`~corppa.poetry_detection.core.LabeledExcerpt`);
 it also handles merging duplicate poem identifications in simple cases.
 
 It takes two or more input files of excerpt or labeled excerpt data in CSV format,
@@ -11,9 +11,8 @@ This means that in most cases, the output will likely be a mix of labeled
 and unlabeled excerpts.
 
 Merging logic is as follows:
-- Excerpts are grouped on the combination of page id and excerpt id and then
-  merged if all reference fields match exactly, or where reference fields are
-  present in one excerpt and null in the other.
+
+- Excerpts are grouped on the combination of page id and excerpt id and then merged if all reference fields match exactly, or where reference fields are present in one excerpt and null in the other.
     - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
     - If the same excerpt has duplicate labels (i.e., the same `poem_id` from two
@@ -23,7 +22,12 @@ Merging logic is as follows:
 - When merging excerpts where both records have notes, the notes content
   will be combined.
 
+Example usage:
+
+``./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv labeled_excerpts.csv -o merged_excerpts.csv``
+
 Limitations:
+
 - Merging based on poem_id does not compare or consolidate reference span indices
   and text fields; supporting multiple identification methods that output
   span information will require revision
