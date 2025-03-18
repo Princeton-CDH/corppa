@@ -297,46 +297,69 @@ def test_multiple_matches():
     assert match["source"][0] == "internet-poems"
 
 
-def test_compile_text(tmp_path):
-    os.chdir(tmp_path)
-    # output file to be created
-    text_file = tmp_path / "text.parquet"
-    # create some test input data
-    internet_poem = tmp_path / "internet-poems" / "Virgil_Aeneid.txt"
-    internet_poem.parent.mkdir()
-    internet_poem.write_text(
+@pytest.fixture
+def internet_poem(tmp_path):
+    "test fixture to create an internet poem text file"
+    poem = tmp_path / "internet-poems" / "Virgil_Aeneid.txt"
+    poem.parent.mkdir()
+    poem.write_text(
         "ARMA virumque cano, Troiae qui primus ab oris\nItaliam, fato profugus, Laviniaque venit"
     )
-    ch_poem = tmp_path / "chadwyck-healey" / "Z200437771.txt"
-    ch_poem.parent.mkdir()
-    ch_poem.write_text(
+    return poem
+
+
+@pytest.fixture
+def chadwyck_healey_poem(tmp_path):
+    "test fixture to create a chadwyck-healey poem text file"
+    poem = tmp_path / "chadwyck-healey" / "Z200437771.txt"
+    poem.parent.mkdir()
+    poem.write_text(
         "Thou Spirit who ledst this glorious Eremite\nInto the Desert, his Victorious Field"
     )
-    # poetry foundation text & metadata is in a csv
+    return poem
+
+
+@pytest.fixture
+def poetry_foundation_csv(tmp_path):
+    "test fixture to create a test version of the poetry foundation csv file"
     pfound_csv = tmp_path / POETRY_FOUNDATION_CSV
     pfound_csv.parent.mkdir()
     pfound_csv.write_text(""",Author,Title,Poetry Foundation ID,Content
 0,Wendy Videlock,!,55489,"Dear Writers, I’m compiling the first in what I hope ...\"""")
+    return pfound_csv
 
+
+def test_compile_text(
+    tmp_path, capsys, internet_poem, chadwyck_healey_poem, poetry_foundation_csv
+):
+    os.chdir(tmp_path)
+    # output file to be created
+    text_file = tmp_path / "text.parquet"
+    # using fixtures to simulate reference data to be compiled
     compile_text(tmp_path, text_file)
-
     assert text_file.exists()
     text_df = pl.read_parquet(text_file)
     assert text_df.height == 3
     # sort so order is reliable
     text_df = text_df.sort(pl.col("source"))
     text_row = text_df.row(0, named=True)
-    assert text_row["id"] == "Z200437771"
+    assert text_row["id"] == chadwyck_healey_poem.stem
     assert text_row["text"].startswith("Thou Spirit who ledst")
     assert text_row["source"] == "chadwyck-healey"
     text_row = text_df.row(1, named=True)
-    assert text_row["id"] == "Virgil_Aeneid"
+    assert text_row["id"] == internet_poem.stem  # i"Virgil_Aeneid"
     assert text_row["text"].startswith("ARMA virumque cano")
     assert text_row["source"] == "internet-poems"
     text_row = text_df.row(2, named=True)
     assert text_row["id"] == "55489"
     assert text_row["text"].startswith("Dear Writers, I’m compiling")
     assert text_row["source"] == "poetry-foundation"
+
+    # should get a warning if poetry foundation csv is missing
+    poetry_foundation_csv.unlink()
+    compile_text(tmp_path, text_file)
+    captured = capsys.readouterr()
+    assert "Poetry Foundation csv file not found for text compilation" in captured.err
 
 
 @patch("corppa.poetry_detection.refmatcha.process")

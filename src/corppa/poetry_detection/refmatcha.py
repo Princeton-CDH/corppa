@@ -118,7 +118,8 @@ def compile_text(data_dir, output_file):
             pqwriter.write_batch(batch)
     else:
         print(
-            f"Poetry Foundation csv file not found for text compilation (expected at {POETRY_FOUNDATION_CSV})"
+            f"Poetry Foundation csv file not found for text compilation (expected at {POETRY_FOUNDATION_CSV})",
+            file=sys.stderr,
         )
 
     # close the parquet file
