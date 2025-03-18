@@ -323,14 +323,16 @@ def test_compile_text(tmp_path):
     assert text_file.exists()
     text_df = pl.read_parquet(text_file)
     assert text_df.height == 3
+    # sort so order is reliable
+    text_df = text_df.sort(pl.col("source"))
     text_row = text_df.row(0, named=True)
-    assert text_row["id"] == "Virgil_Aeneid"
-    assert text_row["text"].startswith("ARMA virumque cano")
-    assert text_row["source"] == "internet-poems"
-    text_row = text_df.row(1, named=True)
     assert text_row["id"] == "Z200437771"
     assert text_row["text"].startswith("Thou Spirit who ledst")
     assert text_row["source"] == "chadwyck-healey"
+    text_row = text_df.row(1, named=True)
+    assert text_row["id"] == "Virgil_Aeneid"
+    assert text_row["text"].startswith("ARMA virumque cano")
+    assert text_row["source"] == "internet-poems"
     text_row = text_df.row(2, named=True)
     assert text_row["id"] == "55489"
     assert text_row["text"].startswith("Dear Writers, I’m compiling")
