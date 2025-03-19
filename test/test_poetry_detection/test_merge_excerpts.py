@@ -82,7 +82,7 @@ def test_merge_excerpts_1ex_2labels():
     merged = merge_excerpts(df)
     # expect two rows with two different labels
     assert len(merged) == 2
-    # original orderis NOT preserved due to grouping and sorting
+    # original order is NOT preserved due to grouping and sorting
     # results should exactly match the labeled excerpts since all other fields are same
     assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label2
     assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label1

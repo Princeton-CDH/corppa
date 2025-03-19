@@ -43,9 +43,14 @@ def fix_data_types(df):
     for c, ctype in df_types.items():
         # For list (set) types, split strings on multival delimiter to convert to list
         if ctype is pl.List:
-            # only split if column is currently a string
+            # if excerpt content is loaded from csv, it will have an inferred
+            # type of string; split string content on our deliminter and
+            # convert to list of string
             if df.schema[c] == pl.String:
                 df = df.with_columns(pl.col(c).str.split(MULTIVAL_DELIMITER))
+            # if a list column is loaded with no data (i.e., identification_methods
+            # is present but has no content), it will have an inferred type of null
+            # convert to list of string
             elif df.schema[c] == pl.Null:
                 df = df.with_columns(pl.col(c).cast(pl.List(pl.String)))
         # For any other field type, cast the column to the expected type
