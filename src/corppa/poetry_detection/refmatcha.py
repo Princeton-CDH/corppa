@@ -427,7 +427,10 @@ def identify_excerpt(
         )
 
     except pl.exceptions.ComputeError as err:
-        print(f"Error searching: {err}", file=sys.stderr)
+        print(
+            f"Error searching on {excerpt_row['page_id']} {excerpt_row['excerpt_id']}: {err}",
+            file=sys.stderr,
+        )
         return None
 
     # if anything matched search text, determine if results are useful
