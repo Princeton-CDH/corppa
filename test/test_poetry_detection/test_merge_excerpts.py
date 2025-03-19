@@ -74,7 +74,7 @@ def test_merge_excerpts_1ex_1label():
     assert merged_excerpt == excerpt1_label1
 
 
-def test_merge_excerpts_1ex_2labels():
+def test_merge_excerpts_1ex_2labels(capsys):
     # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
     df = pl.from_dicts(
         [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label2.to_dict()]
@@ -82,10 +82,14 @@ def test_merge_excerpts_1ex_2labels():
     merged = merge_excerpts(df)
     # expect two rows with two different labels
     assert len(merged) == 2
-    # original order is NOT preserved due to grouping and sorting
+    # original order is not guaranteed, so check presence in list
+    result_excerpts = [
+        LabeledExcerpt.from_dict(row) for row in merged.iter_rows(named=True)
+    ]
     # results should exactly match the labeled excerpts since all other fields are same
-    assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label2
-    assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt1_label1
+    # input excerpts should both be present unchanged in the output
+    assert excerpt1_label1 in result_excerpts
+    assert excerpt1_label2 in result_excerpts
 
 
 def test_merge_excerpts_1ex_note_1label():
@@ -113,14 +117,15 @@ def test_merge_excerpts_1ex_different_label():
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
     assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
-    # the first row is our unlabeled excerpt
-    row = merged.row(0, named=True)
+    # the row with no poem_id is the unlabeled excerpt
+    row = merged.filter(pl.col("poem_id").is_null()).row(0, named=True)
     # filter out null values (unset labeled excerpt fields) and init as Excerpt
     row_subset = {k: v for k, v in row.items() if v is not None}
     merged_excerpt2 = Excerpt.from_dict(row_subset)
     assert merged_excerpt2 == excerpt2
-    # second row should be our labeled excerpt
-    merged_excerpt1_label1 = LabeledExcerpt.from_dict(merged.row(1, named=True))
+    # row with a poem_id set is the labeled excerpt
+    row = merged.filter(pl.col("poem_id").is_not_null()).row(0, named=True)
+    merged_excerpt1_label1 = LabeledExcerpt.from_dict(row)
     assert merged_excerpt1_label1 == excerpt1_label1
 
 
@@ -133,9 +138,33 @@ def test_merge_excerpts_two_different_labels():
     assert len(merged) == 2
     # should have all columns for labeled excerpt (order-agnostic)
     assert set(merged.columns) == set(LabeledExcerpt.fieldnames())
-    # order should match input labeled excerpts
-    assert LabeledExcerpt.from_dict(merged.row(0, named=True)) == excerpt1_label1
-    assert LabeledExcerpt.from_dict(merged.row(1, named=True)) == excerpt2_label1
+    # order is not guaranteed to match output, so check for presence
+    result_excerpts = [
+        LabeledExcerpt.from_dict(row) for row in merged.iter_rows(named=True)
+    ]
+    # input excerpts should both be present unchanged in the output
+    assert excerpt1_label1 in result_excerpts
+    assert excerpt2_label1 in result_excerpts
+
+
+def test_merge_excerpts_multiple_diff_labels(capsys):
+    # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
+    df = pl.from_dicts(
+        [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label2.to_dict()]
+    )
+    # add the dataframe to itself so we have two of everything
+    # = two labeled excerpts each for the two poem_ids in label 1 and label 2
+    df = df.extend(df)
+    merged = merge_excerpts(df)
+    # expect two rows with two different labels
+    assert len(merged) == 2
+    # order is not guaranteed to match output, so check for presence in output
+    result_excerpts = [
+        LabeledExcerpt.from_dict(row) for row in merged.iter_rows(named=True)
+    ]
+    # input excerpts should both be present unchanged in the output
+    assert excerpt1_label1 in result_excerpts
+    assert excerpt1_label2 in result_excerpts
 
 
 def test_merge_excerpts_1ex_2labels_diffmethod():
@@ -192,6 +221,26 @@ def test_merge_unlabeled_labeled_excerpts():
     assert excerpt_with_notes.notes in excerpt.notes
     assert excerpt1_label1.notes in excerpt.notes
     assert excerpt.notes == f"{excerpt_with_notes.notes}\n{excerpt1_label1.notes}"
+
+    # excerpt with notes and two labeled excerpts that can't be merged
+    # - notes are merged to the first matching labeled excerpt
+    excerpt_with_notes = replace(excerpt1, notes="could not identify")
+    df = pl.from_dicts(
+        [
+            excerpt_with_notes.to_dict(),
+            excerpt1_label1.to_dict(),
+            excerpt1_label2.to_dict(),
+        ]
+    )
+    merged = merge_excerpts(df)
+    # we expect two rows
+    assert len(merged) == 2
+    # order is not guaranteed; test against a list of merged note contents
+    merged_notes = merged["notes"].to_list()
+    # unlabeled excerpt and excerpt1 label 1 are combined
+    assert f"{excerpt_with_notes.notes}\n{excerpt1_label1.notes}" in merged_notes
+    # second labeled excerpt does not currently get unlabeled excerpt notes
+    assert excerpt1_label2.notes in merged_notes
 
 
 def test_merge_excerpts():

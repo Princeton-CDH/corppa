@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 """
 This script merges labeled and unlabeled poem excerpts, combining
-notes for any merged excerpts, and merging duplicate poem identifications 
+notes for any merged excerpts, and merging duplicate poem identifications
 in simple cases.
 
 It takes two or more input files of excerpt data (labeled or unlabeled) in CSV format,
-merges any excerpts that can be combined, and outputs a CSV with the updated excerpt data.  
-All excerpts in the input data files are preserved in the output, whether 
-they were merged with any other records or not. This means that in most cases, 
+merges any excerpts that can be combined, and outputs a CSV with the updated excerpt data.
+All excerpts in the input data files are preserved in the output, whether
+they were merged with any other records or not. This means that in most cases,
 the output will likely be a mix of labeled and unlabeled excerpts.
 
 Merging logic is as follows:
 
 - Excerpts are grouped on the combination of page id and excerpt id,
-  and then merged if all refence fields match exactly, or where 
+  and then merged if all refence fields match exactly, or where
   reference fields are present in one excerpt and unset in the other.
     - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
@@ -35,8 +35,9 @@ Limitations:
   will not be merged; supporting multiple identification methods that output
   span information will likely require more sophisticated merge logic
 - CSV input and output only (JSONL may be added in future)
-- Notes from an unlabeled excerpt are not currently merged to all corresponding
-  labeled excerpts (TODO: confirm with test case)
+- Notes are currently merged only with the first matching excerpt; if an 
+  unlabeled excerpt with notes has multiple labels, only the first match
+  will have combined notes
 
 """
 
@@ -46,6 +47,7 @@ import pathlib
 import sys
 
 import polars as pl
+from tqdm import tqdm
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER
 from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_dataframe
@@ -83,7 +85,9 @@ def combine_duplicate_methods_notes(repeats_df: pl.DataFrame) -> pl.DataFrame:
     return repeats_df
 
 
-def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
+def merge_excerpts(
+    df: pl.DataFrame, disable_progress=True, verbose=False
+) -> pl.DataFrame:
     """Takes a polars DataFrame that includes labeled or unlabeled excerpts,
     and merges excerpts based primarily on `page_id` and `excerpt_id`.
     For now, merging is only done on the simple cases where reference
@@ -100,15 +104,41 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
     versions of duplicated excerpts.
     """
 
-    # copy the df and add a row index for removal
-    updated_df = df.with_row_index()
-    # create a df with the same schema but no data to collect merged excerpts
-    merged_excerpts = updated_df.clear()
+    # group by page id and excerpt id to get potential matches
+    # use aggregation to get the count of excerpts in each group,
+    # then split input dataframe into singletons and merge candidates
+    grouped = df.group_by(["page_id", "excerpt_id"]).agg(pl.len().alias("group_size"))
+    # any excerpts with group size one will not be merged;
+    # add to output df and don't process further
+    output_df = (
+        df.join(grouped, on=["page_id", "excerpt_id"])
+        .filter(pl.col("group_size").eq(1))
+        .drop("group_size")
+    )
+    if output_df.is_empty():
+        output_df = df.clear()
 
-    # merge unlabeled excerpts with matching labeled excerpt
-    # OR any matching excerpts with or without notes
-    # group by page id and excerpt id only
-    for group, data in updated_df.group_by(["page_id", "excerpt_id"]):
+    # any excerpts with group size > 1 are candidates for merging
+    merge_candidates = (
+        df.join(grouped, on=["page_id", "excerpt_id"])
+        .filter(pl.col("group_size").gt(1))
+        .drop("group_size")
+    )
+
+    merge_groups = merge_candidates.group_by(["page_id", "excerpt_id"])
+    num_merge_groups = merge_groups.len().height
+    if verbose:
+        print(
+            f"Identified {merge_candidates.height:,} merge candidates in {num_merge_groups:,} groups.\n"
+        )
+
+    progress_groups = tqdm(
+        merge_groups,
+        total=num_merge_groups,
+        desc="Merging...",
+        disable=disable_progress,
+    )
+    for group, data in progress_groups:
         # group is a tuple of values for page id, excerpt id, poem id
         # data is a df of the grouped rows for this set
 
@@ -124,26 +154,34 @@ def merge_excerpts(df: pl.DataFrame) -> pl.DataFrame:
             nulls_last=False,
         ).select(pl.all().backward_fill())
 
-        # identify repeats where everything is the same but the row index,
-        # methods, and notes
-        # (other values must either be the same or don't conflict because they were unset)
-        repeats = data.filter(
-            data.drop(
-                "index", "detection_methods", "identification_methods", "notes"
-            ).is_duplicated()
-        )
+        # in case this set of excerpts has multiple different poem ids
+        # which should be merged with each other, group again on poem id
+        for poem_group, poem_data in data.group_by(["poem_id"]):
+            # group of 1 : no merge, add to the output
+            if poem_data.height == 1:
+                output_df.extend(poem_data)
+            # otherwise, look for repeats
+            else:
+                # combine if everything is the same but methods, and notes
+                # (other values must either be the same or don't conflict because they were unset)
+                repeat_counts = poem_data.with_columns(
+                    duplicate=poem_data.drop(
+                        "detection_methods", "identification_methods", "notes"
+                    ).is_duplicated()
+                )
+                # repeats will be consolidated
+                repeats = repeat_counts.filter(pl.col("duplicate")).drop("duplicate")
+                # any non-repeats should be included in output as-is
+                output_df.extend(
+                    repeat_counts.filter(~pl.col("duplicate")).drop("duplicate")
+                )
 
-        if not repeats.is_empty():
-            repeats = combine_duplicate_methods_notes(repeats)
-            # remove the repeats from the main dataframe
-            updated_df = updated_df.filter(
-                ~pl.col("index").is_in(repeats.select(pl.col("index")))
-            )
-            # add the consolidated row with combined values to the merged df
-            merged_excerpts.extend(repeats[:1])
+                if not repeats.is_empty():
+                    repeats = combine_duplicate_methods_notes(repeats)
+                    # add one copy of the consolidated information to the merge df
+                    output_df.extend(repeats[:1])
 
-    # combine and return
-    return updated_df.extend(merged_excerpts).drop("index")
+    return output_df
 
 
 def main():
@@ -212,7 +250,8 @@ def main():
     )
 
     # merge labeled + unlabeled excerpts AND duplicate labeled excerpts
-    excerpts = merge_excerpts(excerpts)
+    # display progress bar & output summary information
+    excerpts = merge_excerpts(excerpts, disable_progress=False, verbose=True)
     # standardize columns so we have all expected fields and no extras
     excerpts = standardize_dataframe(excerpts)
 
@@ -233,7 +272,7 @@ def main():
 
     # summary information about the content and what as done
     print(
-        f"{len(excerpts):,} excerpts after merging; {len(labeled_excerpts):,} labeled excerpts."
+        f"\n{len(excerpts):,} excerpts after merging; {len(labeled_excerpts):,} labeled excerpts."
     )
     detectmethod_counts = excerpts["detection_methods"].value_counts()
     idmethod_counts = labeled_excerpts["identification_methods"].value_counts()
