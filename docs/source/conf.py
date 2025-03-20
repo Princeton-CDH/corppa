@@ -21,8 +21,10 @@ extensions = [
     "sphinx.ext.coverage",
     #    "sphinx.ext.viewcode",
     "sphinx.ext.githubpages",
+    "myst_parser",
 ]
 
+source_suffix = [".rst", ".md"]
 templates_path = ["_templates"]
 exclude_patterns = []
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}

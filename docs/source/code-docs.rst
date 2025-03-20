@@ -76,3 +76,9 @@ Merge excerpts
 
 .. automodule:: corppa.poetry_detection.merge_excerpts
 .. Note: not including members for method docs, only top-level script usage
+
+refmatcha
+^^^^^^^^^
+
+.. automodule:: corppa.poetry_detection.refmatcha
+.. Note: not including members for method docs, only top-level script usage

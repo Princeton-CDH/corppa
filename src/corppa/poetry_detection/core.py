@@ -224,11 +224,7 @@ class Excerpt:
             cls_fields = [
                 f
                 for f in cls_fields
-                if (
-                    f.default == MISSING
-                    and f.default_factory == MISSING
-                    and f.init != False
-                )
+                if (f.default == MISSING and f.default_factory == MISSING and f.init)
             ]
 
         return [f.name for f in cls_fields]
