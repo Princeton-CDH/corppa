@@ -1,10 +1,24 @@
+"""
+This script adds image relative paths to the PPA full-text corpus. Optionally,
+a file extension (e.g., ``.jpg``) can be provided to be used for all relative
+image paths `instead` of defaulting to their source-level defaults.
+
+Example usage: ::
+
+   python add_image_relpaths.py ppa_corpus.jsonl ppa_with_images.jsonl
+
+   python add_image_relpaths.py ppa_corpus.jsonl ppa_with_images.jsonl --ext=.jpg
+
+"""
+
 import argparse
 import sys
 from pathlib import Path
 
 import orjsonl
-from path_utils import get_image_relpath
 from tqdm import tqdm
+
+from corppa.utils.path_utils import get_image_relpath
 
 
 def add_image_paths(in_jsonl, ext=None, show_progress=True):
@@ -73,7 +87,7 @@ def main():
         sys.exit(1)
     if args.ext:
         if args.ext[0] != ".":
-            print(f"Extension must start with '.'", file=sys.stderr)
+            print("Extension must start with '.'", file=sys.stderr)
             sys.exit(1)
 
     save_corpus_with_image_relpaths(
