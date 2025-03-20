@@ -104,6 +104,13 @@ def merge_excerpts(
     versions of duplicated excerpts.
     """
 
+    # TEMPORARY - make sure internet poem ref corpus ids match before merging
+    df = df.with_columns(
+        ref_corpus=pl.when(pl.col("ref_corpus").eq("internet-poems"))
+        .then(pl.lit("internet_poems"))
+        .otherwise(pl.col.ref_corpus)
+    )
+
     # group by page id and excerpt id to get potential matches
     # use aggregation to get the count of excerpts in each group,
     # then split input dataframe into singletons and merge candidates
@@ -138,6 +145,7 @@ def merge_excerpts(
         desc="Merging...",
         disable=disable_progress,
     )
+    merge_count = 0
     for group, data in progress_groups:
         # group is a tuple of values for page id, excerpt id, poem id
         # data is a df of the grouped rows for this set
@@ -180,6 +188,8 @@ def merge_excerpts(
                     repeats = combine_duplicate_methods_notes(repeats)
                     # add one copy of the consolidated information to the merge df
                     output_df.extend(repeats[:1])
+                    merge_count += 1
+                    progress_groups.set_postfix_str(f"Merged {merge_count:,}")
 
     return output_df
 
@@ -232,6 +242,8 @@ def main():
     # load files and combine into a single excerpt dataframe
     for input_file in args.input_files:
         try:
+            # NOTE: very important to standardize input so that
+            # extraneous columns do not prevent duplicate excerpts from merging
             input_dfs.append(load_excerpts_df(input_file))
         except ValueError as err:
             # if any input file does not have minimum required fields, bail out
@@ -240,13 +252,17 @@ def main():
 
     # combine input dataframes with a "diagonal" concat, which aligns
     # columns and fills in nulls for missing columns in any of the dataframes
-    excerpts = pl.concat(input_dfs, how="diagonal")
-    # get initial totals before merging
+    # NOTE: very important to standardize columns so that extraneous input
+    # columns do not prevent duplicate excerpts from merging
+    excerpts = standardize_dataframe(pl.concat(input_dfs, how="diagonal"))
+    # get initial totals before any uniquifying or merging
     total_excerpts = excerpts.height
+    # use unique to drop exact duplicates (passim results include exact dupes)
+    excerpts = excerpts.unique()
     initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
     # output summary information about input data
     print(
-        f"Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files ({initial_labeled_excerpts:,} labeled)."
+        f"Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files ({excerpts.height:,} unique; {initial_labeled_excerpts:,} labeled)."
     )
 
     # merge labeled + unlabeled excerpts AND duplicate labeled excerpts

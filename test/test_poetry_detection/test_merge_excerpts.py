@@ -410,7 +410,7 @@ def test_main_successful(capsys, tmp_path):
         captured = capsys.readouterr()
 
     # summary output
-    assert "Loaded 4 excerpts from 2 files (2 labeled)" in captured.out
+    assert "Loaded 4 excerpts from 2 files (4 unique; 2 labeled)" in captured.out
     assert "2 excerpts after merging; 1 labeled excerpts" in captured.out
 
     with output_file.open(encoding="utf-8") as merged_csv:
