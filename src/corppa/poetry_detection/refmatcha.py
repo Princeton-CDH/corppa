@@ -4,7 +4,7 @@
 *🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵*
 
 refmatcha identifies poem excerpts by matching against a local collection of
-reference poems.  It takes in a CSV of excerpts and outputs a CSV of
+reference poems.  It takes in a CSV of unidentified excerpts and outputs a CSV of
 labeled excerpts for those excerpts it is able to identify.
 By default, the output file is created in the same directory as the input
 with the same name plus `_matches`; i.e., given an input file `round1_excerpts.csv`,
@@ -378,7 +378,7 @@ def identify_excerpt(
     excerpt_row: dict, reference_df: pl.DataFrame, search_text: str = "text"
 ) -> LabeledExcerpt | None:
     """Given an unlabeled excerpt as a dict from a polars dataframe and a
-    reference poetry data frame, attempt to identify the excerpt. Returns
+    reference poetry dataframe, attempt to identify the excerpt. Returns
     a :class:`~corppa.poetry_detection.core.LabeledExcerpt` with poem
     identification and reference information if found."""
     # can we use excerpt objects to simplify?
@@ -448,6 +448,8 @@ def identify_excerpt(
             match_df, reason = multiple_matches(result)
             if match_df is not None:
                 id_note = f"{num_matches} matches on {search_field_label}: {reason}"
+        # more than 10 matches could be a useful note,
+        # but we only return labeled excerpts, so out of scope for now
 
         if match_df is not None:
             # rename columns for export
@@ -483,7 +485,7 @@ def identify_excerpt(
                     match_info["ref_span_end"],
                 )
                 # must index into the search_text of the *match* row, from the reference data
-                # (not the seach text for the excerpt we're trying tom atch)
+                # (not the search text for the excerpt we're trying to match)
                 match_info["ref_span_text"] = match_info["search_text"][
                     ref_start:ref_end
                 ]
