@@ -23,25 +23,32 @@ prodigy review_page_spans adjudicate poetry_spans -l POETRY -F annotation_recipe
 from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Iterable
 
-import spacy
-from intspan import intspan
-from prodigy import log, set_hashes
-from prodigy.components.db import connect
-from prodigy.components.preprocess import add_tokens
-from prodigy.components.preprocess import fetch_media as fetch_media_preprocessor
-from prodigy.components.stream import get_stream
-from prodigy.core import Arg, recipe
-from prodigy.errors import RecipeError
-from prodigy.types import LabelsType, RecipeSettingsType, StreamType, TaskType
-from prodigy.util import INPUT_HASH_ATTR, SESSION_ID_ATTR
+import spacy  # type: ignore
+from intspan import intspan  # type: ignore
+from prodigy import log, set_hashes  # type: ignore
+from prodigy.components.db import connect  # type: ignore
+from prodigy.components.preprocess import add_tokens  # type: ignore
+from prodigy.components.preprocess import (  # type: ignore
+    fetch_media as fetch_media_preprocessor,
+)
+from prodigy.components.stream import get_stream  # type: ignore
+from prodigy.core import Arg, recipe  # type: ignore
+from prodigy.errors import RecipeError  # type: ignore
+from prodigy.types import (  # type: ignore
+    LabelsType,
+    RecipeSettingsType,
+    StreamType,
+    TaskType,
+)
+from prodigy.util import INPUT_HASH_ATTR, SESSION_ID_ATTR  # type: ignore
 
 #: reference to current directory, for use as Prodigy CSS directory
 CURRENT_DIR = Path(__file__).parent.absolute()
 
 #: common prodigy configurations for both recipes; copy and add blocks and labels
-PRODIGY_COMMON_CONFIG = {
+PRODIGY_COMMON_CONFIG: dict[str, Any] = {
     "buttons": ["accept", "reject", "undo"],  # remove ignore button
     "show_flag": True,  # show flag button to mark weird/difficult examples
     "hide_newlines": False,  # ensure newlines are shown \n
@@ -72,7 +79,7 @@ PALETTE = [
 ]
 
 
-def add_image(example: TaskType, image_prefix: Optional[str] = None):
+def add_image(example: TaskType, image_prefix: str | None = None) -> TaskType:
     """
     Set an example's image field to its existing image_path with an optional prefix
 
@@ -88,7 +95,7 @@ def add_image(example: TaskType, image_prefix: Optional[str] = None):
     return example
 
 
-def add_images(examples: StreamType, image_prefix: Optional[str] = None) -> StreamType:
+def add_images(examples: StreamType, image_prefix: str | None = None) -> StreamType:
     """
     Set the image field for each example in the stream
 
@@ -99,8 +106,8 @@ def add_images(examples: StreamType, image_prefix: Optional[str] = None) -> Stre
 
 
 def remove_image_data(
-    examples: Iterable[TaskType], image_prefix: Optional[str] = None
-) -> List[TaskType]:
+    examples: Iterable[TaskType], image_prefix: str | None = None
+) -> Iterable[TaskType]:
     """
     For each example, replace base64 data URIs with image filepath or URL
 
@@ -134,7 +141,7 @@ def annotate_text_and_image(
     dataset: str,
     source: str,
     labels: LabelsType = [],
-    image_prefix: str = None,
+    image_prefix: str | None = None,
     fetch_media: bool = False,
 ) -> RecipeSettingsType:
     """Annotate text and image side by side: allows adding manual spans
@@ -203,7 +210,7 @@ def annotate_page_text(
     dataset: str,
     source: str,
     labels: LabelsType = [],
-    image_prefix: str = None,
+    image_prefix: str | None = None,
     fetch_media: bool = False,
 ) -> RecipeSettingsType:
     """Annotate text with manual spans; displays an image side by side
@@ -252,7 +259,7 @@ def annotate_page_text(
     return components
 
 
-def get_session_name(example: TaskType, suffix: Optional[str] = None) -> str:
+def get_session_name(example: TaskType, suffix: str | None = None) -> str:
     """
     Extract session name from task example. Session ids have the following form:
         [session id] = [db id]-[session name]
@@ -273,9 +280,7 @@ def remove_label_prefix(label: str) -> str:
     return label.rsplit(": ", maxsplit=1)[-1]
 
 
-def add_session_prefix(
-    example: TaskType, session_sfx: Optional[str] = None
-) -> TaskType:
+def add_session_prefix(example: TaskType, session_sfx: str | None = None) -> TaskType:
     """
     Add session name as prefix to text span labels
 
@@ -335,7 +340,7 @@ def has_span_overlap(example: TaskType, strip_label_pfx: bool = True) -> bool:
     return False
 
 
-def validate_review_answer(example: TaskType):
+def validate_review_answer(example: TaskType) -> None:
     """
     Validate the annotated example by checking that the following hold:
     * The example is not flagged (i.e. flagged field is not set)
@@ -359,8 +364,8 @@ class ReviewStream:
 
     def __init__(
         self,
-        data: Dict[int, List[TaskType]],
-        image_prefix: Optional[str] = None,
+        data: dict[int, list[TaskType]],
+        image_prefix: str | None = None,
         fetch_media: bool = False,
     ) -> None:
         """
@@ -380,7 +385,7 @@ class ReviewStream:
             yield example
 
     @staticmethod
-    def create_review_example(versions: List[TaskType]) -> TaskType:
+    def create_review_example(versions: list[TaskType]) -> TaskType:
         """
         Create review example from several annotated versions.
         """
@@ -403,7 +408,7 @@ class ReviewStream:
                 session_counts[session_name] = 1
             else:
                 # To differentiate duplicate session, add numerical suffix
-                numeric_suffix = session_counts[session_name]
+                numeric_suffix = f"{session_counts[session_name]}"
                 add_session_prefix(version, session_sfx=numeric_suffix)
                 session_counts[session_name] += 1
 
@@ -420,10 +425,10 @@ class ReviewStream:
 
     def get_data(
         self,
-        data: Dict[int, List[TaskType]],
-        image_prefix: Optional[str],
+        data: dict[int, list[TaskType]],
+        image_prefix: str | None,
         fetch_media: bool,
-    ) -> List[TaskType]:
+    ) -> list[TaskType]:
         """
         Build review examples from data. Add images to each example.
         """
@@ -439,7 +444,7 @@ class ReviewStream:
 
 def get_review_stream(
     examples: Iterable[TaskType],
-    image_prefix: Optional[str] = None,
+    image_prefix: str | None = None,
     fetch_media: bool = False,
 ) -> StreamType:
     # Group examples by input (page_id, text)
@@ -475,9 +480,9 @@ def review_page_spans(
     dataset: str,
     input_dataset: str,
     labels: LabelsType = [],
-    image_prefix: str = None,
+    image_prefix: str | None = None,
     fetch_media: bool = False,
-    sessions: List[str] = [],
+    sessions: list[str] = [],
 ) -> RecipeSettingsType:
     """
     Review input text span annotations and annotate with manual spans to create
@@ -498,7 +503,7 @@ def review_page_spans(
         {"view_id": "spans_manual", "labels": labels},
     ]
 
-    def before_db(examples):
+    def before_db(examples: Iterable[TaskType]) -> Iterable[TaskType]:
         """
         Modifies annotated examples before saving to the database:
             * Remove image spans (unneeded fields)
