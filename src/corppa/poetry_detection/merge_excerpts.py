@@ -26,10 +26,10 @@ Merging logic is as follows:
 - When merging excerpts where both records have notes, notes content
   will be combined.
 
-Example usage:
+Example usage: ::
 
-``./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
-    labeled_excerpts.csv -o merged_excerpts.csv``
+./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
+labeled_excerpts.csv -o merged_excerpts.csv
 
 Limitations:
 
