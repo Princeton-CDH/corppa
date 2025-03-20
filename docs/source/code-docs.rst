@@ -47,6 +47,11 @@ Annotation Recipes
 .. automodule:: corppa.poetry_detection.annotation.annotation_recipes
 .. Note: not including members for method docs, only top-level script usage
 
+Command Recipes
+---------------
+.. automodule:: corppa.poetry_detection.annotation.command_recipes
+.. Note: not including members for method docs, only top-level script usage
+
 
 Poetry Detection
 ================
