@@ -44,7 +44,7 @@ def fix_data_types(df):
         # For list (set) types, split strings on multival delimiter to convert to list
         if ctype is pl.List:
             # if excerpt content is loaded from csv, it will have an inferred
-            # type of string; split string content on our deliminter and
+            # type of string; split string content on our delimiter and
             # convert to list of string
             if df.schema[c] == pl.String:
                 df = df.with_columns(pl.col(c).str.split(MULTIVAL_DELIMITER))
