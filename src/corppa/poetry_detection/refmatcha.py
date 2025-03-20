@@ -509,7 +509,7 @@ def _find_reference_poem_OLD(input_row, ref_df, meta_df):  # pragma: no cover
     # which is now replaced by identify_excerpt
     # fuzzy matching will be updated and restored later
 
-    # TODO: add argparse to make it configurable whether to try fuzzy matchingd
+    # TODO: add argparse to make it configurable whether to try fuzzy matching
     # also consider truncating large excepts before running fuzzy matching
 
     # if no matches were found yet, try a fuzzy search on the full text
