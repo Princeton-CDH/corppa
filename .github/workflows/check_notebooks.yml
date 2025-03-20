@@ -1,0 +1,27 @@
+name: Check that jupyter notebooks run
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: '**/pyproject.toml'
+      - name: Install package with development dependencies
+        run: pip install -e ".[dev]"
+
+      # run treon to confirm that notebooks run with current code
+      - name: Check jupyter notebooks with treon
+        run: treon notebooks/
