@@ -242,8 +242,6 @@ def main():
     # load files and combine into a single excerpt dataframe
     for input_file in args.input_files:
         try:
-            # NOTE: very important to standardize input so that
-            # extraneous columns do not prevent duplicate excerpts from merging
             input_dfs.append(load_excerpts_df(input_file))
         except ValueError as err:
             # if any input file does not have minimum required fields, bail out
@@ -257,7 +255,7 @@ def main():
     excerpts = standardize_dataframe(pl.concat(input_dfs, how="diagonal"))
     # get initial totals before any uniquifying or merging
     total_excerpts = excerpts.height
-    # use unique to drop exact duplicates (passim results include exact dupes)
+    # use unique to drop exact duplicates
     excerpts = excerpts.unique()
     initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
     # output summary information about input data
