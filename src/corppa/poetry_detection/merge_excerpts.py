@@ -56,7 +56,7 @@ from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_d
 def combine_duplicate_methods_notes(repeats_df: pl.DataFrame) -> pl.DataFrame:
     """
     Takes a dataframe of repeated excerpts with duplicate information,
-    and updateds all rows with combined set of unique
+    and updates all rows with the combined set of unique
     detection_methods, identification_methods, and notes. Returns the
     updated dataframe with the combined fields.
 
