@@ -38,15 +38,14 @@ Annotation
 
 Add Metadata
 ------------
-
 .. automodule:: corppa.poetry_detection.annotation.add_metadata
 .. Note: not including members for method docs, only top-level script usage
 
 
-
-
 Annotation Recipes
 ------------------
+.. automodule:: corppa.poetry_detection.annotation.annotation_recipes
+.. Note: not including members for method docs, only top-level script usage
 
 
 Poetry Detection
