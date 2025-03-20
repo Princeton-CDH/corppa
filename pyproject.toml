@@ -35,7 +35,7 @@ type-checking = [
   "mypy",
   "types-tqdm",
 ]
-doc = ["sphinx"]
+doc = ["sphinx", "myst-parser"]
 ocr = ["google-cloud-vision"]
 poem_id = [
   "pyarrow",
