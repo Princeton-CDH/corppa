@@ -15,19 +15,21 @@ Merging logic is as follows:
 - Excerpts are grouped on the combination of page id and excerpt id,
   and then merged if all reference fields match exactly, or where
   reference fields are present in one excerpt and unset in the other.
+
     - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
     - If the same excerpt has duplicate labels (i.e., the same `poem_id` from two
       different identification methods), they will be merged
       into a single labeled excerpt; the `identification_methods` in the
       resulting labeled excerpt will be the union of methods in the merged excerpts
+
 - When merging excerpts where both records have notes, notes content
   will be combined.
 
-Example usage:
+Example usage: ::
 
-``./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
-    labeled_excerpts.csv -o merged_excerpts.csv``
+./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
+labeled_excerpts.csv -o merged_excerpts.csv
 
 Limitations:
 

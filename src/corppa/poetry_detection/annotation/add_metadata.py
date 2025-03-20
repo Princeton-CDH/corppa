@@ -1,11 +1,15 @@
 """
-This script is used to prep ppa corpus page jsonl data for use in
-Prodigy annotation. It adds work metadata (title, author, year) in the
-location that Prodigy requires for display, and allows adjusting image
-paths for display from the Prodigy interface.  It assumes the input page
-corpus has already been annotated with image paths with an `image_path`
-attribute, and adds an optional url prefix and converts any .TIF extensions
-to .jpg.
+This script is used to prepare the page-level PPA corpus data for use in
+Prodigy annotation. It adds work-level metadata (title, author, year) in the
+locations that Prodigy requires for display, and allows adjusting image paths
+for display from the Prodigy interface. It assumes the input page corpus has
+corpus has already been annotated with image paths with an ``image_path``
+attribute using :py:mod:`corppa.utils.add_image_relpaths`.
+
+Example usage: ::
+
+    python add_metadata.py ppa_with_images.jsonl ppa_metadata.csv out.jsonl
+
 """
 
 # NOTE: this script is provisional and should likely be refactored

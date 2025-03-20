@@ -2,14 +2,15 @@
 This module contains custom command recipes for Prodigy.
 
 Recipes:
-* `ppa-task-progress`: Report the current progress for a PPA annotation task
+
+* ``ppa-task-progress``: Report the current progress for a PPA annotation task
   at the page and annotator level.
 
 
-Example use:
-```
-prodigy ppa-stats task_id -F command_recipes.py
-```
+Example use: ::
+
+    prodigy ppa-stats task_id -F command_recipes.py
+
 """
 
 from collections import Counter, defaultdict

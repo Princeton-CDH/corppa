@@ -319,7 +319,7 @@ class TestReviewStream:
         assert mock_get_session_name.call_count == 3
         assert mock_add_session_prefix.call_count == 3
         mock_add_session_prefix.assert_has_calls(
-            [call(task_a), call(task_b, session_sfx=1), call({}, session_sfx=2)]
+            [call(task_a), call(task_b, session_sfx="1"), call({}, session_sfx="2")]
         )
 
         # Test flag behavior (set if any flagged example)

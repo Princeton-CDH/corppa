@@ -1,8 +1,23 @@
 """
-Create poetry page set.
-Note that this is hard-coded for the poetry test-set
+This hard-coded script was used to create a PPA page set for our preliminary
+annotation efforts. Note: this script may not work.
 
-env: ppa-data
+This script takes three inputs:
+
+1. A directory for a PPA text corpus
+2. Our poetry testset file (CSV) that included manual identifications of pages
+   containing poetry for several works in the PPA
+3. An output JSONL
+
+The script then returned a CSV containing page-level metadata for every page of
+the PPA works covered in our poetry testet. This page-level metadata included
+an image path, if the page is known to contain poetry, and some work-level
+information.
+
+Example usage: ::
+
+    python create_pageset.py ppa_corpus_dir poetry_testset.csv out.jsonl
+
 """
 
 import csv
@@ -12,9 +27,10 @@ import re
 import sys
 
 import orjsonl
-from helper import encode_htid, get_stub_dir
 from tqdm import tqdm
 from xopen import xopen
+
+from corppa.utils.path_utils import encode_htid, get_stub_dir
 
 
 def extract_page_numbers(page_url_list):

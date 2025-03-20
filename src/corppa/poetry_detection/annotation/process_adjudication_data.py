@@ -14,10 +14,10 @@ absence and requires external knowledge of what pages were covered in
 the annotation rounds. So, the former is particularly useful for the evaluation
 process while the latter is better suited for building a final excerpt dataset.
 
-Example command line usage:
-```
-python process_adjudication_data.py prodigy_data.jsonl adj_pages.jsonl adj_excerpts.csv
-```
+Example command line usage: ::
+
+    python process_adjudication_data.py prodigy_data.jsonl adj_pages.jsonl adj_excerpts.csv
+
 """
 
 import argparse
