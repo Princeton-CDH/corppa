@@ -47,6 +47,7 @@ poem_id = [
 ]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
+notebooks = ["jupyterlab", "itables", "treon"]
 dev = [
   "pre-commit",
   "ruff",
@@ -57,12 +58,14 @@ dev = [
   "corppa[passim]",
   "corppa[chadwyck_healey]",
   "corppa[doc]",
+  "corppa[notebooks]",
 ]
 test = [
   "pytest",
   "pytest-cov",
   "corppa[poem_id]",
   "corppa[chadwyck_healey]",
+  "corppa[notebooks]",  
 ]
 
 [project.scripts]
