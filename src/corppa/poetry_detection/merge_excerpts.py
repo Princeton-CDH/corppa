@@ -13,7 +13,7 @@ the output will likely be a mix of labeled and unlabeled excerpts.
 Merging logic is as follows:
 
 - Excerpts are grouped on the combination of page id and excerpt id,
-  and then merged if all refence fields match exactly, or where
+  and then merged if all reference fields match exactly, or where
   reference fields are present in one excerpt and unset in the other.
     - If the same excerpt has different labels (different `poem_id` values), both
       labeled excerpts will be included in the output
