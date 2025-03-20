@@ -171,7 +171,7 @@ def compile_metadata(data_dir, output_file):
             .with_columns(source=pl.lit(SOURCE_ID["Chadwyck-Healey"]))
             .with_columns(
                 pl.concat_str(
-                    [pl.col("author_fname"), pl.col("author_lname")],
+                    [pl.col("author_firstname"), pl.col("author_lastname")],
                     separator=" ",
                 ).alias("author")
             )
@@ -249,12 +249,8 @@ def _text_for_search(expr):
         expr.str.replace_all(r"(\w)[-'](\w)", "$1$2")
         # metrical notation that splits words (e.g. sudden | -ly or visit | -or)
         .str.replace_all(r"(\w) \| -(\w)", "$1$2")
-        # replace other puncutation with spaces
+        # replace other punctuation with spaces
         .str.replace_all("[[:punct:]]", " ")
-        # remove indent entity in CH (probably more of these...)
-        .str.replace_all(
-            "&indent;", " "
-        )  # TODO: remove when we switch to new version of CH texts
         .str.replace_all(
             LINE_SEPARATOR, "\n"
         )  # replace unicode line separator with newline
@@ -341,10 +337,10 @@ def multiple_matches(filtered_ref_df):
         return match_df, reason
 
     # if author/title duplication check failed, check for author matches
-    # poetry foundation includes shakespeare drama excerpts with alternate names
+    # poetry foundation includes Shakespeare drama excerpts with alternate names
     authordupe_df = df.filter(df.select(["_author"]).is_duplicated())
     if not authordupe_df.is_empty():
-        # shakespeare shows up oddly in poetry foundation;
+        # Shakespeare shows up oddly in poetry foundation;
         # if author matches, assume the other source has the correct title
         non_poetryfoundtn = authordupe_df.filter(
             pl.col("source") != SOURCE_ID["Poetry Foundation"]
@@ -576,7 +572,7 @@ def _find_reference_poem_OLD(input_row, ref_df, meta_df):  # pragma: no cover
     return None
 
 
-def process(input_file, output_file):
+def process(input_file, output_file, recompile=False):
     """Process excerpts in the specified input file and output any
     identified poems as labeled excerpts in the specified output file.
     If the parquet files for reference poetry text and metadata are not present,
@@ -585,17 +581,25 @@ def process(input_file, output_file):
 
     # if the parquet files aren't present, generate them
     # (could add an option to recompile in future)
-    if not TEXT_PARQUET_FILE.exists():
-        print(f"Compiling reference poem text to {TEXT_PARQUET_FILE}")
+    if not TEXT_PARQUET_FILE.exists() or recompile:
+        verb = "Recompiling" if TEXT_PARQUET_FILE.exists() else "Compiling"
+        print(f"{verb} reference poem text to {TEXT_PARQUET_FILE}")
         compile_text(REF_DATA_DIR, TEXT_PARQUET_FILE)
-    if not META_PARQUET_FILE.exists():
-        print(f"Compiling reference poem metadata to {META_PARQUET_FILE}")
+    if not META_PARQUET_FILE.exists() or recompile:
+        verb = "Recompiling" if META_PARQUET_FILE.exists() else "Compiling"
+        print(f"{verb} reference poem metadata to {META_PARQUET_FILE}")
         compile_metadata(REF_DATA_DIR, META_PARQUET_FILE)
 
     # load for searching
     reference_df = pl.read_parquet(TEXT_PARQUET_FILE)
     meta_df = pl.read_parquet(META_PARQUET_FILE)
     print(f"Poetry reference text data: {reference_df.height:,} entries")
+    print("total by source")
+    source_counts = reference_df["source"].value_counts()
+    for value, count in source_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{value}: {count:,}")
+
     # some texts from poetry foundation and maybe Chadwyck-Healey are truncated
     # discard them to avoid bad partial/fuzzy matches
     reference_df = reference_df.with_columns(text_length=pl.col("text").str.len_chars())
@@ -605,6 +609,11 @@ def process(input_file, output_file):
     print(f"  Omitting {short_texts.height} poems with text length < {min_length}")
 
     print(f"Poetry reference metadata: {meta_df.height:,} entries")
+    print("total by source")
+    source_counts = meta_df["source"].value_counts()
+    for value, count in source_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{value}: {count:,}")
 
     # join metadata so we can work with one reference dataframe
     reference_df = reference_df.join(
@@ -715,6 +724,12 @@ def main():
         type=pathlib.Path,
         required=False,
     )
+    parser.add_argument(
+        "--recompile",
+        help="Recompile poetry reference data even if it already exists",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
     if not args.input.is_file():
         print(f"Error: input file {args.input} does not exist", file=sys.stderr)
@@ -731,7 +746,7 @@ def main():
         sys.exit(1)
 
     logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
-    process(args.input, args.output)
+    process(args.input, args.output, args.recompile)
 
 
 if __name__ == "__main__":
