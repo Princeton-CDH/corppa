@@ -151,7 +151,10 @@ def test_identify_excerpt_special_characters(reference_df, capsys):
     excerpt_row["search_text"] = "* The earth is the Lords"
     assert identify_excerpt(excerpt_row, reference_df) is None
     captured = capsys.readouterr()
-    assert "Error searching: regex error" in captured.err
+    assert (
+        f"Error searching on {excerpt_earth.page_id} {excerpt_earth.excerpt_id}: regex error"
+        in captured.err
+    )
     assert "error: repetition operator missing expression" in captured.err
 
 
