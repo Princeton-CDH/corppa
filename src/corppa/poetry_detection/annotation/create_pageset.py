@@ -27,9 +27,10 @@ import re
 import sys
 
 import orjsonl
-from helper import encode_htid, get_stub_dir
 from tqdm import tqdm
 from xopen import xopen
+
+from corppa.path_utils import encode_htid, get_stub_dir
 
 
 def extract_page_numbers(page_url_list):
