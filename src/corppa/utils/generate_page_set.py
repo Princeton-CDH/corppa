@@ -17,6 +17,11 @@ The pages are selected as follows:
 The resulting output CSV file has the following fields:
     * work_id: PPA work id
     * page_num: Digital page number
+
+Example usage: ::
+
+    python generate_page_set.py input.csv output.csv 300
+
 """
 
 import argparse
