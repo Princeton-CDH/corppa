@@ -1,6 +1,6 @@
 """
 This hard-coded script was used to create a PPA page set for our preliminary
-annotation efforts.
+annotation efforts. Note: this script may not work.
 
 This script takes three inputs:
 
