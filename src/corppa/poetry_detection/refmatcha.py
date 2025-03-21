@@ -748,7 +748,7 @@ def main():
         sys.exit(1)
 
     logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
-    process(args.input, args.output, args.recompile)
+    process(args.input, args.output, recompile=args.recompile)
 
 
 if __name__ == "__main__":

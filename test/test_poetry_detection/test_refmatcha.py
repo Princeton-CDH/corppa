@@ -333,7 +333,7 @@ def chadwyck_healey_csv(tmp_path):
     ch_meta_csv = tmp_path / CHADWYCK_HEALEY_CSV
     ch_meta_csv.parent.mkdir(exist_ok=True)
     # old version for now
-    ch_meta_csv.write_text("""_id,author_dob,author_dob_valid,author_dod,author_dod_valid,author_fname,author_lname,author_role,id,id_link,meta_genre,meta_period,meta_rhymes,num_lines,title_edition,title_figure,title_hi,title_main,title_sub
+    ch_meta_csv.write_text("""_id,author_dob,author_dob_valid,author_dod,author_dod_valid,author_firstname,author_lastname,author_role,id,id_link,meta_genre,meta_period,meta_rhymes,num_lines,title_edition,title_figure,title_hi,title_main,title_sub
 5163205e1177fb6b57000000,1928,TRUE,,FALSE,Donald,Hall,orig.,Z200132299,http://lilaserver.stanford.edu:8080/poetry/Z200132299,,Twentieth-Century 1900-1999,,271,Sappho's Gymnasium (1994),,,The Night of the Day,""")
     return ch_meta_csv
 
@@ -494,7 +494,7 @@ def test_main(mock_process, capsys, tmp_path):
         input_file.touch()
         expected_output = input_file.with_name(f"{input_file.stem}_matched.csv")
         main()
-        mock_process.assert_called_with(input_file, expected_output)
+        mock_process.assert_called_with(input_file, expected_output, recompile=False)
 
         # if output file exists, complain
         expected_output.touch()
@@ -512,7 +512,7 @@ def test_main(mock_process, capsys, tmp_path):
         "sys.argv", ["refmatcha", str(input_file), "--output", str(output_file)]
     ):
         main()
-        mock_process.assert_called_with(input_file, output_file)
+        mock_process.assert_called_with(input_file, output_file, recompile=False)
 
         # still complains if output file already exists
         output_file.touch()
