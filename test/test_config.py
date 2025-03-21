@@ -6,11 +6,13 @@ from corppa import config
 
 
 def test_get_config_not_found(tmp_path):
-    with pytest.raises(SystemExit, match="Config file not found") as err:
-        config.get_config()
+    test_config = tmp_path / "test.cfg"
     # error should include directions about how to fix the problem
-    help_msg = f"Copy {config.SAMPLE_CONFIG_PATH} to {config.CORPPA_CONFIG_PATH} and configure for your environment."
-    assert help_msg in str(err)
+    expected_error_msg = f"""Config file not found.
+Copy .*{config.SAMPLE_CONFIG_PATH.name} to .*{test_config.name} and configure for your environment."""
+    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
+        with pytest.raises(SystemExit, match=expected_error_msg):
+            config.get_config()
 
 
 def test_get_config(tmp_path):

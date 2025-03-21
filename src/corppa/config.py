@@ -5,23 +5,22 @@ Load local configuration options
 import configparser
 import pathlib
 
-#: src dir relative to this file (assumeing dev environment for now)
-CORPPA_SRC_DIR = pathlib.Path(__file__).parent.absolute()
+#: src dir relative to this file (assuming dev environment for now)
+CORPPA_SRC_DIR = pathlib.Path(__file__).parent.parent.absolute()
 
-#: expected patch for local config file (non-versioned)
+#: expected path for local config file (non-versioned)
 CORPPA_CONFIG_PATH = CORPPA_SRC_DIR.parent / "corppa.cfg"
-#: expected patch for example config file
+#: expected path for example config file
 SAMPLE_CONFIG_PATH = CORPPA_SRC_DIR.parent / "sample.cfg"
-
-CFG_NOT_FOUND_MESSAGE = f""""Config file not found.
-Copy {SAMPLE_CONFIG_PATH} to {CORPPA_CONFIG_PATH} and configure for your environment.
-"""
 
 
 def get_config():
     # if the config file is not in place
     if not CORPPA_CONFIG_PATH.exists():
-        raise SystemExit(CFG_NOT_FOUND_MESSAGE)
+        not_found_msg = f""""Config file not found.
+Copy {SAMPLE_CONFIG_PATH} to {CORPPA_CONFIG_PATH} and configure for your environment.
+"""
+        raise SystemExit(not_found_msg)
 
     config = configparser.ConfigParser()
     config.read(CORPPA_CONFIG_PATH)
