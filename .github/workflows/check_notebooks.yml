@@ -1,4 +1,4 @@
-name: Check that jupyter notebooks run
+name: Check jupyter notebooks
 
 on:
   pull_request:
@@ -19,8 +19,13 @@ jobs:
           python-version: "3.12"
           cache: 'pip'
           cache-dependency-path: '**/pyproject.toml'
+
       - name: Install package with development dependencies
         run: pip install -e ".[dev]"
+
+      # copy notebook config file to current directory
+      - name: Check jupyter notebooks with treon
+        run: cp notebooks/sample_data/test.cfg ./corppa.cfg
 
       # run treon to confirm that notebooks run with current code
       - name: Check jupyter notebooks with treon
