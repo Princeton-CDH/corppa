@@ -157,6 +157,8 @@ def compile_metadata(data_dir, output_file):
     # open a parquet writer for outputting content in batches
     pqwriter = pq.ParquetWriter(output_file, schema)
 
+    # TODO: prioritize internet-poems matches over CH
+
     # load chadwyck healey metadata
     if CHADWYCK_HEALEY_CSV.exists():
         # use polars to read in the csv and convert to the format we want
