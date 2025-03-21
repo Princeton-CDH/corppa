@@ -41,7 +41,7 @@ jobs:
             pip-
 
       - name: Install dependencies
-        run: pip install ".[test]"
+        run: pip install -e ".[test]"
 
       - name: Run pytest
         run: pytest --cov=corppa --cov=test --cov-report=xml
