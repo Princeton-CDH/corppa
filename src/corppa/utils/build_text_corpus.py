@@ -1,5 +1,24 @@
 """
-Script for building text corpus (JSONL) from directory of text files
+Script for building a text corpus file (JSONL) from a directory of texts.
+
+This script converts each text (``.txt``) file within an input directory
+(including  nested files), and compiles them into a single output text corpus
+where each record corresponds to a single text file with the following fields:
+
+    - ``id``: The name of the file (without prefix)
+    - ``text``: The text of the file (assumes UTF-8 formatting)
+
+Note that the output file can also be written in any compressed form supported
+by :mod:`orjsonl`. If no suffix is provided, ``.jsonl`` will be used.
+
+Example usage: ::
+
+    python build_text_corpus.py input_dir out_corpus
+
+    python build_text_corpus.py input_dir out_corpus.jsonl
+
+    python build_text_corpus.py input_dir out_corpus.jsonl.gz
+
 """
 
 import argparse

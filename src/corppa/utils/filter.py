@@ -15,8 +15,8 @@ pages specified in page-level filtering.
 
 Filter methods can be run via command-line or python code. Filtering takes a jsonl file
 (compressed or not) as input, and will produce a jsonl file (compressed or not) as output.
-The input and output filenames can use any extension supported by any extension supported
-by :mod:`orjsonl`, with or without compression; e.g. `.jsonl`, `.jsonl.gz`, `.jsonl.bz2`, etc.
+The input and output filenames can use any extension supported by :mod:`orjsonl`, with or
+without compression (e.g. ``.jsonl``, ``.jsonl.gz``, ``.jsonl.bz2``).
 
 Example command line usages: ::
 
