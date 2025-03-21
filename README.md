@@ -75,6 +75,8 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
+- Copy `sample.cfg` to `corppa.cfg` and edit paths and configurations for your local environment.
+
 ## Experimental Scripts
 
 Experimental scripts associated with `corppa` are located within the `scripts` directory.
