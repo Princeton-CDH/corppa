@@ -16,7 +16,7 @@ Utils
 Filter Utility
 --------------
 .. automodule:: corppa.utils.filter
-  :members:
+.. Note: not including members for method docs, only top-level script usage
 
 Path Utilities
 --------------
