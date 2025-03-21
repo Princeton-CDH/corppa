@@ -8,8 +8,10 @@ from corppa import config
 def test_get_config_not_found(tmp_path):
     test_config = tmp_path / "test.cfg"
     # error should include directions about how to fix the problem
-    expected_error_msg = f"""Config file not found.
-Copy .*{config.SAMPLE_CONFIG_PATH.name} to .*{test_config.name} and configure for your environment."""
+    expected_error_msg = (
+        "Config file not found.\n"
+        + f"Copy .*{config.SAMPLE_CONFIG_PATH.name} to .*{test_config.name} and configure for your environment."
+    )
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         with pytest.raises(SystemExit, match=expected_error_msg):
             config.get_config()

@@ -17,9 +17,10 @@ SAMPLE_CONFIG_PATH = CORPPA_SRC_DIR.parent / "sample.cfg"
 def get_config():
     # if the config file is not in place
     if not CORPPA_CONFIG_PATH.exists():
-        not_found_msg = f""""Config file not found.
-Copy {SAMPLE_CONFIG_PATH} to {CORPPA_CONFIG_PATH} and configure for your environment.
-"""
+        not_found_msg = (
+            "Config file not found.\n"
+            + f"Copy {SAMPLE_CONFIG_PATH} to {CORPPA_CONFIG_PATH} and configure for your environment."
+        )
         raise SystemExit(not_found_msg)
 
     config = configparser.ConfigParser()
