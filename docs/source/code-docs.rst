@@ -33,6 +33,11 @@ Add Image (Relative) Paths
 .. automodule:: corppa.utils.add_image_relpaths
 .. Note: not including members for method docs, only top-level script usage
 
+Build Text Corpus
+-----------------
+.. automodule:: corppa.utils.build_text_corpus
+.. Note: not including members for method docs, only top-level script usage
+
 
 Annotation
 ==========
