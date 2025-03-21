@@ -369,7 +369,7 @@ def test_compile_text(
     text_row = text_df.row(1, named=True)
     assert text_row["id"] == internet_poem.stem
     assert text_row["text"].startswith("ARMA virumque cano")
-    assert text_row["source"] == "internet-poems"
+    assert text_row["source"] == "internet_poems"
     text_row = text_df.row(2, named=True)
     assert text_row["id"] == "55489"
     assert text_row["text"].startswith("Dear Writers, I’m compiling")

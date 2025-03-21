@@ -101,7 +101,7 @@ def compile_text(data_dir, output_file):
     for chunk in batched(iglob(f"{data_dir}/**/*.txt"), 1000):
         chunk_files = [pathlib.Path(f) for f in chunk]
         ids = [f.stem for f in chunk_files]
-        sources = [f.parent.name for f in chunk_files]
+        sources = [SOURCE_ID.get(f.parent.name, f.parent.name) for f in chunk_files]
         texts = [f.open().read() for f in chunk_files]
         # create and write a record batch
         record_batch = pa.RecordBatch.from_arrays(
