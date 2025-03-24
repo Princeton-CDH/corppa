@@ -9,7 +9,7 @@ import yaml
 try:
     from yaml import CLoader as Loader
 except ImportError:
-    from yaml import Loader
+    from yaml import Loader  # pragma: no cover
 
 #: src dir relative to this file (assuming dev environment for now)
 CORPPA_SRC_DIR = pathlib.Path(__file__).parent.parent.absolute()
