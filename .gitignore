@@ -6,7 +6,7 @@ __pycache__/
 # project specific
 # - don't check reference poetry data for identify_poems into version control
 poetry-reference-data/
-corppa.cfg
+corppa_config.yml
 
 # C extensions
 *.so

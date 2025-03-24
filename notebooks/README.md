@@ -34,7 +34,7 @@ treon notebooks/poetry_excerpt_review.ipynb
 ``
 
 Be aware that running treon locally will use whatever poem dataset path
-is configured in your local `corppa.cfg` config file.
+is configured in your local `corppa_config.yml` config file.
 
 
  

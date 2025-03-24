@@ -2,16 +2,22 @@
 Load local configuration options
 """
 
-import configparser
 import pathlib
+
+import yaml
+
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 
 #: src dir relative to this file (assuming dev environment for now)
 CORPPA_SRC_DIR = pathlib.Path(__file__).parent.parent.absolute()
 
 #: expected path for local config file (non-versioned)
-CORPPA_CONFIG_PATH = CORPPA_SRC_DIR.parent / "corppa.cfg"
+CORPPA_CONFIG_PATH = CORPPA_SRC_DIR.parent / "corppa_config.yml"
 #: expected path for example config file
-SAMPLE_CONFIG_PATH = CORPPA_SRC_DIR.parent / "sample.cfg"
+SAMPLE_CONFIG_PATH = CORPPA_SRC_DIR.parent / "sample_config.yml"
 
 
 def get_config():
@@ -23,6 +29,8 @@ def get_config():
         )
         raise SystemExit(not_found_msg)
 
-    config = configparser.ConfigParser()
-    config.read(CORPPA_CONFIG_PATH)
-    return config
+    with CORPPA_CONFIG_PATH.open() as cfg_file:
+        try:
+            return yaml.load(cfg_file, Loader=Loader)
+        except yaml.parser.ParserError as err:
+            raise SystemExit(f"Error parsing config file: {err}")

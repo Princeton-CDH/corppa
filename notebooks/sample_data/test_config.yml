@@ -1,0 +1,7 @@
+# corppa configuration for automated tests / continuous integration
+
+# local path to compiled poem dataset files
+poem_dataset:
+  # Use relative path for CI, since the path depends on the build.
+  # For notebooks, relative path starts from the notebook directory.
+  data_dir: "sample_data/"

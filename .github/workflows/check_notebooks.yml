@@ -25,7 +25,7 @@ jobs:
 
       # copy notebook config file to current directory
       - name: Check jupyter notebooks with treon
-        run: cp notebooks/sample_data/test.cfg ./corppa.cfg
+        run: cp notebooks/sample_data/test_config.yml ./corppa_config.yml
 
       # run treon to confirm that notebooks run with current code
       - name: Check jupyter notebooks with treon
