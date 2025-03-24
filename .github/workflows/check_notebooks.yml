@@ -20,8 +20,8 @@ jobs:
           cache: 'pip'
           cache-dependency-path: '**/pyproject.toml'
 
-      - name: Install package with development dependencies
-        run: pip install -e ".[dev]"
+      - name: Install package with notebook dependencies
+        run: pip install -e ".[notebooks]"
 
       # copy notebook config file to current directory
       - name: Check jupyter notebooks with treon
