@@ -8,7 +8,7 @@ import yaml
 
 try:
     from yaml import CLoader as Loader
-except ImportError:
+except ImportError:  # pragma: no cover
     from yaml import Loader  # pragma: no cover
 
 #: src dir relative to this file (assuming dev environment for now)
