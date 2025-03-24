@@ -106,18 +106,18 @@ class ChadwyckHealey(BaseReferenceCorpus):
 class OtherPoems(BaseReferenceCorpus):
     corpus_id: str = "other_poems"
     corpus_name: str = "Other Poems"
-    metadata_csv: str
+    metadata_url: str
 
     def __init__(self):
         # get configuration for this corpus
         config_opts = self.get_config_opts()
         # set data path from config file and check that path exists
-        self.metadata_csv = config_opts["metadata_csv"]
+        self.metadata_url = config_opts["metadata_url"]
         # TODO: handle key error
 
     def get_metadata(self):
         # polars can load csv from a url;
-        meta_df = pl.read_csv(self.metadata_csv)
+        meta_df = pl.read_csv(self.metadata_url)
         # field are already named appropriately
         yield from meta_df.iter_rows(named=True)
 
