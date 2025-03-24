@@ -1,8 +1,8 @@
 # corppa configuration
-# copy this file to corppa.cfg and edit as needed
+# copy this file to corppa_config.yml and edit as needed
 
 # local path to compiled poem dataset files
-# NOTE: currently requires an absolute path, since jupyter
-# notebooks will try to load relative to the notebook
-[poem_dataset]
-data_dir=/path/to/ppa-found-poems/data/
+poem_dataset:
+  # NOTE: currently requires an absolute path, since jupyter
+  # notebooks will try to load relative to the notebook
+  data_dir: "/path/to/ppa-found-poems/data/"
