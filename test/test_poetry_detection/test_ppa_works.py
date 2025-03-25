@@ -7,8 +7,33 @@ import pytest
 from corppa.poetry_detection.ppa_works import (
     PPA_FIELDS,
     add_ppa_work_meta,
+    extract_page_meta,
     load_ppa_works_df,
 )
+
+
+def test_extract_page_meta():
+    ppa_page_ids = ["A01224.100", "yale.39002088447587.00000050", "CW0111540239.0092"]
+    excerpts_df = pl.DataFrame(
+        [
+            {"page_id": page_id, "excerpt_id": f"excerpt_{i}"}
+            for i, page_id in enumerate(ppa_page_ids)
+        ]
+    )
+    results = extract_page_meta(excerpts_df)
+    # Check column names
+    assert set(results.columns) == set(excerpts_df.columns) | {
+        "ppa_work_id",
+        "page_num",
+    }
+    # Check row contents
+    for i, page_id in enumerate(ppa_page_ids):
+        work_id, page_num = page_id.rsplit(".", maxsplit=1)
+        expected_row = excerpts_df.row(i, named=True) | {
+            "ppa_work_id": work_id,
+            "page_num": int(page_num),
+        }
+        assert results.row(i, named=True) == expected_row
 
 
 def test_load_ppa_works_df(tmp_path):
@@ -57,6 +82,7 @@ def test_load_ppa_works_df(tmp_path):
     result_df = load_ppa_works_df(ppa_meta)
     # Check column names
     assert result_df.columns == list(PPA_FIELDS.values())
+    # Check row contents
     for i, row in enumerate(rows):
         row_dict = {v: row[k] for k, v in PPA_FIELDS.items()}
         assert result_df.row(i, named=True) == row_dict
@@ -133,3 +159,11 @@ def test_add_ppa_work_meta(mock_load_ppa_df):
     assert results.row(2, named=True) == (
         excerpts_df.row(2, named=True) | ppa_meta_rows[0]
     )
+
+    # Error case: missing `ppa_work_id` field
+    mock_load_ppa_df.reset_mock()
+    err_msg = "Missing ppa_work_id field; use extract_page_meta to extract it."
+    with pytest.raises(ValueError, match=err_msg):
+        bad_df = pl.DataFrame([{"excerpt_id": "a"}, {"excerpt_id": "b"}])
+        add_ppa_work_meta(bad_df, "ppa_meta")
+        mock_load_ppa_df.assert_not_called()

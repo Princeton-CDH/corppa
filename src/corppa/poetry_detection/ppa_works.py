@@ -19,6 +19,18 @@ PPA_FIELDS = {
 }
 
 
+def extract_page_meta(excerpts_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Extracts PPA page metadata (i.e., PPA work ID and page number) from each excerpt's
+    ``page_id`` and combines it with the input excerpts ``DataFrame``.
+    """
+    out_df = excerpts_df.with_columns(
+        ppa_work_id=pl.col("page_id").str.extract(r"^(.*)\.\d+$", 1),
+        page_num=pl.col("page_id").str.extract(r"(\d+)$").cast(pl.Int64),
+    )
+    return out_df
+
+
 def load_ppa_works_df(file: Path) -> pl.DataFrame:
     """
     Loads PPA work-level metadata (``CSV``) as a polars DataFrame containing only the
@@ -50,5 +62,10 @@ def add_ppa_work_meta(
     Combines found poem excerpt data (:class:`polars.DataFrame`) with PPA
     work-level metadata (``CSV``) and returns the resulting ``DataFrame``.
     """
+    # Check for ppa_work_id field
+    if "ppa_work_id" not in excerpts_df.columns:
+        raise ValueError(
+            "Missing ppa_work_id field; use extract_page_meta to extract it."
+        )
     ppa_works_meta = load_ppa_works_df(ppa_works_csv)
     return excerpts_df.join(ppa_works_meta, on="ppa_work_id", how="left")
