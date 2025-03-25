@@ -21,16 +21,34 @@ from corppa.poetry_detection.ref_corpora import (
 @pytest.fixture
 def corppa_test_config(tmp_path):
     # test fixture to create and use a temporary config file
+    # uses explicit, non-default paths
     test_config = tmp_path / "test_config.yml"
+    base_dir = tmp_path / "ref-corpora"
     test_config.write_text(f"""
     # local path to compiled poem dataset files
     reference_corpora:
-        dir: {tmp_path / "ref-corpora"}
+        base_dir: { base_dir }
         internet_poems:
-            data_path: {tmp_path / "ref-corpora" / "internet_poems"}
+            data_path: { base_dir / "internet_poems2"}
         chadwyck-healey:
-            data_path: {tmp_path / "ref-corpora" / "chadwyck-healey"}
-            metadata_path: {tmp_path / "ref-corpora" / "chadwyck-healey" / "chadwyck-healey.csv"}
+            data_path: "ch"
+            metadata_path: "ch/chadwyck-healey.csv"
+        other:
+            metadata_url: http://example.com/other-poems.csv
+    """)
+    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
+        yield test_config
+
+
+@pytest.fixture
+def corppa_test_config_defaults(tmp_path):
+    # test fixture with a minimal reference corpus config file
+    test_config = tmp_path / "test_config.yml"
+    base_dir = tmp_path / "ref-corpora"
+    test_config.write_text(f"""
+    # local path to compiled poem dataset files
+    reference_corpora:
+        base_dir: {base_dir}
         other:
             metadata_url: http://example.com/other-poems.csv
     """)
@@ -63,7 +81,21 @@ INTERNETPOEMS_TEXTS = [
 @pytest.fixture
 def internetpoems_data_dir(tmp_path):
     # test fixture to create internet poems data directory with sample text files
-    data_dir = tmp_path / "ref-corpora" / "internet_poems"
+    config_opts = config.get_config()
+    # use the configured data dir
+    base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
+    # if configured, data_path overrides default path
+    if (
+        "internet_poems" in config_opts["reference_corpora"]
+        and "data_path" in config_opts["reference_corpora"]["internet_poems"]
+    ):
+        data_dir = pathlib.Path(
+            config_opts["reference_corpora"]["internet_poems"]["data_path"]
+        )
+    else:
+        data_dir = base_dir / InternetPoems.data_path
+
+    # data_dir = tmp_path / "ref-corpora" / "internet_poems"
     data_dir.mkdir(parents=True, exist_ok=True)
     for sample in INTERNETPOEMS_TEXTS:
         text_file = data_dir / f"{sample['id']}.txt"
@@ -74,24 +106,52 @@ def internetpoems_data_dir(tmp_path):
 class TestInternetPoems:
     def test_init(self, tmp_path, corppa_test_config):
         # path in test config doesn't exist
-        with pytest.raises(ValueError, match="not configured correctly"):
+        with pytest.raises(ValueError, match="Configuration error:.* does not exist"):
             InternetPoems()
 
         config_opts = config.get_config()
-
-        # create expected data_dir
+        # expected data_dir
         expected_data_dir = pathlib.Path(
             config_opts["reference_corpora"]["internet_poems"]["data_path"]
         )
-        expected_data_dir.mkdir(parents=True)
 
+        # init should succeed when directory exists
+        expected_data_dir.mkdir(parents=True)
         internet_poems = InternetPoems()
         assert isinstance(internet_poems.data_path, pathlib.Path)
         assert internet_poems.data_path == expected_data_dir
 
+        # error if it is not a directory : remove dir and create a regular file
+        expected_data_dir.rmdir()
+        expected_data_dir.touch()
+        with pytest.raises(
+            ValueError, match="Configuration error:.* is not a directory"
+        ):
+            InternetPoems()
+
+    def test_init_default_path(self, tmp_path, corppa_test_config_defaults):
+        # load full configuration
+        config_opts = config.get_config()
+        # expected data directory is base dir + default path
+        base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
+        expected_data_dir = base_dir / InternetPoems.data_path
+        # make sure it exists as a directory to test init
+        expected_data_dir.mkdir(parents=True)
+        internet_poems = InternetPoems()
+        assert isinstance(internet_poems.data_path, pathlib.Path)
+        assert internet_poems.data_path == expected_data_dir
+
+    @patch("corppa.poetry_detection.ref_corpora.pathlib")
+    def test_get_config(self, mock_pathlib, tmp_path, corppa_test_config):
+        config_opts = InternetPoems().get_config_opts()
+        # should pass in reference corpus base directory
+        assert "base_dir" in config_opts
+        # should include ref_corpus specific options, where are in the test config
+        assert "data_path" in config_opts
+
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_metadata_df(
-        self, mock_get_config_opts, tmp_path, internetpoems_data_dir
+        self, mock_get_config_opts, tmp_path, corppa_test_config, internetpoems_data_dir
     ):
         mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
@@ -108,7 +168,11 @@ class TestInternetPoems:
 
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_text_corpus(
-        self, mock_get_config_opts, tmp_path, internetpoems_data_dir
+        self,
+        mock_get_config_opts,
+        tmp_path,
+        corppa_test_config_defaults,
+        internetpoems_data_dir,
     ):
         mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
@@ -125,25 +189,35 @@ class TestInternetPoems:
 def chadwyck_healey_csv(tmp_path):
     "fixture to create a test version of the chadwyck-healey metadata csv file"
     # test fixture to create internet poems data directory with sample text files
-    # TODO: move these defaults to the class
-    data_dir = tmp_path / "ref-corpora" / "chadwyck-healey"
+
+    config_opts = config.get_config()
+    # use the configured data paths or configured ref_corpus base_dir and defaults
+    base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
+    # if configured, data_path overrides default path
+    if ChadwyckHealey.corpus_id in config_opts["reference_corpora"]:
+        override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
+        if "data_path" in override_opts:
+            data_dir = pathlib.Path(override_opts["data_path"])
+        if "metadata_path" in override_opts:
+            ch_meta_csv = pathlib.Path(override_opts["metadata_path"])
+    else:
+        data_dir = ChadwyckHealey.data_path
+        ch_meta_csv = ChadwyckHealey.metadata_path
+
+    # in either case, make relative to base dir if not absolute
+    if not data_dir.is_absolute():
+        data_dir = base_dir / data_dir
+    if not ch_meta_csv.is_absolute():
+        ch_meta_csv = base_dir / ch_meta_csv
+
     data_dir.mkdir(parents=True, exist_ok=True)
-    ch_meta_csv = data_dir / "chadwyck-healey.csv"
     ch_meta_csv.write_text("""id,author_lastname,author_firstname,author_birth,author_death,author_period,transl_lastname,transl_firstname,transl_birth,transl_death,title_id,title_main,title_sub,edition_id,edition_text,period,genre,rhymes
 Z300475611,Robinson,Mary,1758,1800,,,,,,Z300475611,THE CAVERN OF WOE.,,Z000475579,The Poetical Works (1806),Later Eighteenth-Century 1750-1799,,y""")
     return ch_meta_csv
 
 
 class TestChadwyckHealey:
-    @patch.object(ChadwyckHealey, "get_config_opts")
-    def test_get_metadata_df(self, mock_get_config_opts, tmp_path, chadwyck_healey_csv):
-        # data path is currently required even though not used in this test
-        data_dir = tmp_path / "chadwyck-healey_texts"
-        data_dir.mkdir()
-        mock_get_config_opts.return_value = {
-            "metadata_path": str(chadwyck_healey_csv),
-            "data_path": str(data_dir),
-        }
+    def test_get_metadata_df(self, tmp_path, corppa_test_config, chadwyck_healey_csv):
         chadwyck_healey = ChadwyckHealey()
         meta_df = chadwyck_healey.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
@@ -198,6 +272,14 @@ class TestOtherPoems:
         assert meta_row["ref_corpus"] == opoems.corpus_id
 
         mock_pl_read_csv.assert_called_with(opoems.metadata_url, schema=METADATA_SCHEMA)
+
+    @patch.object(OtherPoems, "get_config_opts")
+    def test_config_error(self, mock_get_config_opts):
+        mock_get_config_opts.return_value = {}
+        with pytest.raises(
+            ValueError, match="Configuration error:.* metadata_url is not set"
+        ):
+            OtherPoems()
 
 
 # because this method instantiates the ref_corpus objects,

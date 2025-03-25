@@ -27,18 +27,24 @@ class BaseReferenceCorpus:
     metadata_path: pathlib.Path
 
     def get_config_opts(self) -> dict:
-        # load reference section for this corpus from config file
+        """Load reference corpus-specific configuration options from
+        corppa config file. Must include the reference corpora base directory;
+        may include overrides for non-default paths.
+        """
         config_opts = get_config()
         if "reference_corpora" not in config_opts:
             raise ValueError(
                 "Reference corpora configuration section `reference_corpora` not found in config file"
             )
         try:
-            return config_opts["reference_corpora"][self.corpus_id]
+            base_dir = config_opts["reference_corpora"]["base_dir"]
         except KeyError:
-            raise ValueError(
-                f"Configuration for `{self.corpus_id}` reference corpus not found"
-            )
+            raise ValueError("Configuration for `reference_corpora.base_dir` not found")
+        # always include the reference_corpora base directory
+        corpus_opts = {"base_dir": base_dir}
+        # include any options for this specific corpus
+        corpus_opts.update(config_opts["reference_corpora"].get(self.corpus_id, {}))
+        return corpus_opts
 
     def get_metadata_df(self) -> pl.DataFrame:
         """Minimal common poetry metadata for use across reference corpora.
@@ -56,8 +62,31 @@ class BaseReferenceCorpus:
 class LocalTextCorpus(BaseReferenceCorpus):
     """Base class for reference corpus where text content is
     provided as a set of text files in a directory.
+    On initialization, configures data path based on
+    configured based dir and corpus default or any overrides, and validates
+    that the path exists and is a directory.
     Provides :meth:`get_text_corpus` for generating text corpus from
     the file system."""
+
+    def __init__(self):
+        # get configuration for this corpus
+        config_opts = self.get_config_opts()
+
+        # if configured, data_path overrides default path
+        if "data_path" in config_opts:
+            self.data_path = pathlib.Path(config_opts["data_path"])
+        # if data path is not absolute, assume relative to ref_corpus base dir
+        if not self.data_path.is_absolute():
+            self.data_path = pathlib.Path(config_opts["base_dir"]) / self.data_path
+
+        if not self.data_path.exists():
+            raise ValueError(
+                f"Configuration error: {self.corpus_name} path {self.data_path} does not exist"
+            )
+        if not self.data_path.is_dir():
+            raise ValueError(
+                f"Configuration error: {self.corpus_name} path {self.data_path} is not a directory"
+            )
 
     def get_text_corpus(
         self, disable_progress: bool = True
@@ -80,19 +109,14 @@ class InternetPoems(LocalTextCorpus):
     The filename without extension is used as the `poem_id`.
     """
 
+    #: id for this reference corpus: internet_poems
     corpus_id: str = "internet_poems"
     corpus_name: str = "Internet Poems"
-    data_path: pathlib.Path
+    #: path for contents; default is `internet_poems` relative to configured
+    # reference corpora base dir
+    data_path: pathlib.Path = pathlib.Path("internet_poems")
 
-    def __init__(self):
-        # get configuration for this corpus
-        config_opts = self.get_config_opts()
-        # set data path from config file and check that path exists
-        self.data_path = pathlib.Path(config_opts["data_path"])
-        if not (self.data_path.exists() and self.data_path.is_dir()):
-            raise ValueError(
-                "Internet Poems Reference Corpus is not configured correctly"
-            )
+    # no init/validation needed beyond that provided by LocalTextCorpus
 
     def get_metadata_df(self) -> pl.DataFrame:
         metadata = []
@@ -120,24 +144,35 @@ class ChadwyckHealey(LocalTextCorpus):
     metadata csv file. Uses Chadwyck-Healey identifiers for `poem_id`.
     """
 
+    #: id for this reference corpus: chadwyck-healey
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"  # should we note that it is filtered?
-    data_path: pathlib.Path
-    metadata_path: pathlib.Path
+    #: path for directory of text files; default is `chadwyck-healey` relative to configured
+    #: reference corpora base dir
+    data_path: pathlib.Path = pathlib.Path("chadwyck-healey")
+    #: path for metadat CSV files; default is `chadwyck-healey/chadwyck-healey.csv`
+    # relative to configured reference corpora base dir
+    metadata_path: pathlib.Path = pathlib.Path("chadwyck-healey/chadwyck-healey.csv")
 
     def __init__(self):
-        # get configuration for this corpus
+        # use LocalTextCorpus init to configure and validate data_path
+        super().__init__()
+        # get configuration to set metadata path
         config_opts = self.get_config_opts()
-        # set data path from config file and check that path exists
-        self.data_path = pathlib.Path(config_opts["data_path"])
-        if not (self.data_path.exists() and self.data_path.is_dir()):
-            raise ValueError(
-                "Chadwyck-Healey Reference Corpus is not configured correctly"
+
+        # if configured, data_path overrides default path
+        if "metadata_path" in config_opts:
+            self.metadata_path = pathlib.Path(config_opts["data_path"])
+        # if metadata path is not absolute, assume relative to ref_corpus base dir
+        if not self.metadata_path.is_absolute():
+            self.metadata_path = (
+                pathlib.Path(config_opts["base_dir"]) / self.metadata_path
             )
+
         self.metadata_path = pathlib.Path(config_opts["metadata_path"])
         if not (self.metadata_path.exists() and self.metadata_path.is_file()):
             raise ValueError(
-                "Chadwyck-Healey Reference Corpus is not configured correctly"
+                f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
             )
 
     def get_metadata_df(self) -> pl.DataFrame:
@@ -178,8 +213,12 @@ class OtherPoems(BaseReferenceCorpus):
         # get configuration for this corpus
         config_opts = self.get_config_opts()
         # set data path from config file and check that path exists
-        self.metadata_url = config_opts["metadata_url"]
-        # TODO: handle key error
+        try:
+            self.metadata_url = config_opts["metadata_url"]
+        except KeyError:
+            raise ValueError(
+                f"Configuration error: {self.corpus_name} metadata_url is not set"
+            )
 
     def get_metadata_df(self) -> pl.DataFrame:
         # polars can load csv directly from a url

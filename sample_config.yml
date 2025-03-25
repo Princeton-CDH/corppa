@@ -7,13 +7,21 @@ poem_dataset:
   # notebooks will try to load relative to the notebook
   data_dir: "/path/to/ppa-found-poems/data/"
 
-# paths to data and metadata for
+# paths to reference corpora metadata and text
 reference_corpora:
-  internet_poems:
-    data_path: path/to/internet-poems/
-  chadwyck-healey:
-    data_path: path/to/chadwyck-healey/
-    metadata_path: path/to/chadwyck-healey_metadata.csv
+  base_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/ref-corpora/
+  # Uses default paths relative to reference_corpora.base_dir
+  # Uncomment to override if needed; if path is not absolute,
+  # will be assumed relative to reference_corpora base_dir
+  # internet_poems:
+    # data_path: internet_poems
+  # chadwyck-healey:
+    # data_path: chadwyck-healey/chadwyck-healey_texts
+    # metadata_path: chadwyck-healey/chadwyck-healey.csv
   other:
     # url for google sheets as CSV
     metadata_url:
+
+
+# path for local copies of text content
+working_data_dir:
