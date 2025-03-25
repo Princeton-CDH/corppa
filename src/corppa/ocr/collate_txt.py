@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 """
-Script to turn directories with multiple text files into a single JSON
+Script to turn directories containing multiple text files into a single ``JSON``
 file containing text contents of all files with page numbers based
 on text filenames. (Page number logic is currently Gale-specific).
+
+Note: This was used to create work-level text corpora files after running OCR.
+
+Example usage: ::
+
+    python collate_txt.py top-level-input-dir top-level-output-dir
+
 """
 
 import argparse
