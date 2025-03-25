@@ -13,6 +13,7 @@ from corppa.poetry_detection.ref_corpora import (
     InternetPoems,
     OtherPoems,
     all_corpora,
+    compile_metadata_df,
     fulltext_corpora,
 )
 
@@ -62,8 +63,8 @@ INTERNETPOEMS_TEXTS = [
 @pytest.fixture
 def internetpoems_data_dir(tmp_path):
     # test fixture to create internet poems data directory with sample text files
-    data_dir = tmp_path / "internet_poems"
-    data_dir.mkdir()
+    data_dir = tmp_path / "ref-corpora" / "internet_poems"
+    data_dir.mkdir(parents=True, exist_ok=True)
     for sample in INTERNETPOEMS_TEXTS:
         text_file = data_dir / f"{sample['id']}.txt"
         text_file.write_text(sample["text"])
@@ -96,6 +97,7 @@ class TestInternetPoems:
         internet_poems = InternetPoems()
         meta_df = internet_poems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
+        assert meta_df.schema == METADATA_SCHEMA
         assert meta_df.height == len(INTERNETPOEMS_TEXTS)
         # get the first row as a dict; sort by id so order matches input
         meta_row = meta_df.sort("poem_id").row(0, named=True)
@@ -124,8 +126,8 @@ def chadwyck_healey_csv(tmp_path):
     "fixture to create a test version of the chadwyck-healey metadata csv file"
     # test fixture to create internet poems data directory with sample text files
     # TODO: move these defaults to the class
-    data_dir = tmp_path / "chadwyck-healey"
-    data_dir.mkdir()
+    data_dir = tmp_path / "ref-corpora" / "chadwyck-healey"
+    data_dir.mkdir(parents=True, exist_ok=True)
     ch_meta_csv = data_dir / "chadwyck-healey.csv"
     ch_meta_csv.write_text("""id,author_lastname,author_firstname,author_birth,author_death,author_period,transl_lastname,transl_firstname,transl_birth,transl_death,title_id,title_main,title_sub,edition_id,edition_text,period,genre,rhymes
 Z300475611,Robinson,Mary,1758,1800,,,,,,Z300475611,THE CAVERN OF WOE.,,Z000475579,The Poetical Works (1806),Later Eighteenth-Century 1750-1799,,y""")
@@ -170,18 +172,23 @@ OTHERPOEM_METADATA = [
 ]
 
 
+@pytest.fixture
+def otherpoems_metadata_df():
+    # create and return polars dataframe from fixture data above
+    # does NOT include ref_corpus field, to simulate other poem spreadsheet
+    return pl.from_records(OTHERPOEM_METADATA, schema=["poem_id", "author", "title"])
+
+
 class TestOtherPoems:
     @patch("corppa.poetry_detection.ref_corpora.pl.read_csv")
-    def test_get_metadata_df(self, mock_pl_read_csv, corppa_test_config):
-        # mock the read_csv method and return a dataframe
-        # generated from fixture data above
-        sample_df = pl.from_records(
-            OTHERPOEM_METADATA, schema=["poem_id", "author", "title"]
-        )
-        mock_pl_read_csv.return_value = sample_df
+    def test_get_metadata_df(
+        self, mock_pl_read_csv, corppa_test_config, otherpoems_metadata_df
+    ):
+        mock_pl_read_csv.return_value = otherpoems_metadata_df
         opoems = OtherPoems()
         meta_df = opoems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
+        assert meta_df.schema == METADATA_SCHEMA
         assert meta_df.height == len(OTHERPOEM_METADATA)
         # check values on the first row
         meta_row = meta_df.row(0, named=True)
@@ -212,3 +219,34 @@ def test_fulltext_corpora():
     corpus_classes = [ref_corpus.__class__ for ref_corpus in fulltext_ref_corpora]
     # other poems is currently our only metadata-only reference corpus
     assert OtherPoems not in corpus_classes
+
+
+def test_compile_metadata_df(
+    tmp_path,
+    corppa_test_config,
+    internetpoems_data_dir,
+    chadwyck_healey_csv,
+    otherpoems_metadata_df,
+):
+    # data fixtures should ensure that all the expected directories exist
+
+    # add corpus id to other poems data frame and patch it to be returned
+    otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
+        ref_corpus=pl.lit(OtherPoems.corpus_id)
+    )
+    with patch.object(
+        OtherPoems, "get_metadata_df", return_value=otherpoems_metadata_df
+    ):
+        compiled_metadata = compile_metadata_df()
+
+    assert isinstance(compiled_metadata, pl.DataFrame)
+    assert compiled_metadata.schema == METADATA_SCHEMA
+    assert (
+        compiled_metadata.height
+        == len(INTERNETPOEMS_TEXTS) + len(OTHERPOEM_METADATA) + 1
+    )
+    assert set(compiled_metadata["ref_corpus"].unique().to_list()) == {
+        InternetPoems.corpus_id,
+        ChadwyckHealey.corpus_id,
+        OtherPoems.corpus_id,
+    }
