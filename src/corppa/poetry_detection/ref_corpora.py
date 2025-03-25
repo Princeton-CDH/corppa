@@ -56,10 +56,12 @@ class BaseReferenceCorpus:
 class LocalTextCorpus(BaseReferenceCorpus):
     """Base class for reference corpus where text content is
     provided as a set of text files in a directory.
-    Provides :meth:`get_text` for generating text corpus from
+    Provides :meth:`get_text_corpus` for generating text corpus from
     the file system."""
 
-    def get_text(self, disable_progress: bool = True) -> Generator[dict[str, str]]:
+    def get_text_corpus(
+        self, disable_progress: bool = True
+    ) -> Generator[dict[str, str]]:
         # NOTE: the build_text_corpus method returns id,
         # so we have to rename to poem_id
         yield from (
