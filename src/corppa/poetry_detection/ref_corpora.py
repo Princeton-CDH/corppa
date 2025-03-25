@@ -167,7 +167,7 @@ class OtherPoems(BaseReferenceCorpus):
     Poem identifiers are constructed from author and title using the same
     convention as :class:`InternetPoems`.
 
-    Does not provide an implementation for :meth:`get_text`.
+    Does not provide an implementation for :meth:`get_text_corpus`.
     """
 
     corpus_id: str = "other"
@@ -182,14 +182,12 @@ class OtherPoems(BaseReferenceCorpus):
         # TODO: handle key error
 
     def get_metadata_df(self) -> pl.DataFrame:
-        # polars can load csv from a url;
-        df = pl.read_csv(self.metadata_url, schema=METADATA_SCHEMA)
-        df = df.with_columns(ref_corpus=pl.lit(self.corpus_id))
-        meta_df = pl.DataFrame([], schema=METADATA_SCHEMA)
-        meta_df.extend(df)
-        return meta_df
+        # polars can load csv directly from a url
+        return pl.read_csv(self.metadata_url, schema=METADATA_SCHEMA).with_columns(
+            ref_corpus=pl.lit(self.corpus_id)
+        )
 
-    # this is a metadata-only corpus, so leave get_text as not implemented
+    # this is a metadata-only corpus, so leave get_text_corpus as not implemented
 
 
 def all_corpora() -> list[BaseReferenceCorpus]:
@@ -213,8 +211,7 @@ def compile_metadata_df() -> pl.DataFrame:
     # for each corpus, load poem metadata into a polars dataframe,
     # rename id to poem_id, and add a column with the corpus id
     for ref_corpus in all_corpora():
-        meta_df = ref_corpus.get_metadata_df()
-        poem_metadata.extend(meta_df.head())
+        poem_metadata.extend(ref_corpus.get_metadata_df())
     return poem_metadata
 
 

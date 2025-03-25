@@ -6,11 +6,20 @@ import polars as pl
 import pytest
 
 from corppa import config
-from corppa.poetry_detection.ref_corpora import BaseReferenceCorpus, InternetPoems
+from corppa.poetry_detection.ref_corpora import (
+    METADATA_SCHEMA,
+    BaseReferenceCorpus,
+    ChadwyckHealey,
+    InternetPoems,
+    OtherPoems,
+    all_corpora,
+    fulltext_corpora,
+)
 
 
 @pytest.fixture
 def corppa_test_config(tmp_path):
+    # test fixture to create and use a temporary config file
     test_config = tmp_path / "test_config.yml"
     test_config.write_text(f"""
     # local path to compiled poem dataset files
@@ -37,18 +46,31 @@ class TestBaseReferenceCorpus:
             BaseReferenceCorpus().get_text_corpus()
 
 
-class TestInternetPoems:
-    sample_texts = [
-        {
-            "id": "King-James-Bible_Psalms",
-            "text": "He hath made his wonderful works to be remembered",
-        },
-        {
-            "id": "Robert-Burns_Mary",
-            "text": "Powers celestial! whose protection Ever guards the virtuous fair,",
-        },
-    ]
+# fixture data for internet poems
+INTERNETPOEMS_TEXTS = [
+    {
+        "id": "King-James-Bible_Psalms",
+        "text": "He hath made his wonderful works to be remembered",
+    },
+    {
+        "id": "Robert-Burns_Mary",
+        "text": "Powers celestial! whose protection Ever guards the virtuous fair,",
+    },
+]
 
+
+@pytest.fixture
+def internetpoems_data_dir(tmp_path):
+    # test fixture to create internet poems data directory with sample text files
+    data_dir = tmp_path / "internet_poems"
+    data_dir.mkdir()
+    for sample in INTERNETPOEMS_TEXTS:
+        text_file = data_dir / f"{sample['id']}.txt"
+        text_file.write_text(sample["text"])
+    return data_dir
+
+
+class TestInternetPoems:
     def test_init(self, tmp_path, corppa_test_config):
         # path in test config doesn't exist
         with pytest.raises(ValueError, match="not configured correctly"):
@@ -67,41 +89,88 @@ class TestInternetPoems:
         assert internet_poems.data_path == expected_data_dir
 
     @patch.object(InternetPoems, "get_config_opts")
-    def test_get_metadata_df(self, mock_get_config_opts, tmp_path):
-        data_dir = tmp_path / "internet_poems"
-        data_dir.mkdir()
-
-        for sample in self.sample_texts:
-            text_file = data_dir / f"{sample['id']}.txt"
-            text_file.write_text(sample["text"])
-
-        mock_get_config_opts.return_value = {"data_path": str(data_dir)}
+    def test_get_metadata_df(
+        self, mock_get_config_opts, tmp_path, internetpoems_data_dir
+    ):
+        mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
         meta_df = internet_poems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
-        assert meta_df.height == len(self.sample_texts)
+        assert meta_df.height == len(INTERNETPOEMS_TEXTS)
         # get the first row as a dict; sort by id so order matches input
         meta_row = meta_df.sort("poem_id").row(0, named=True)
-        assert meta_row["poem_id"] == self.sample_texts[0]["id"]
+        assert meta_row["poem_id"] == INTERNETPOEMS_TEXTS[0]["id"]
         assert meta_row["author"] == "King James Bible"
         assert meta_row["title"] == "Psalms"
         assert meta_row["ref_corpus"] == internet_poems.corpus_id
 
     @patch.object(InternetPoems, "get_config_opts")
-    def test_get_text_corpus(self, mock_get_config_opts, tmp_path):
-        data_dir = tmp_path / "internet_poems"
-        data_dir.mkdir()
-
-        for sample in self.sample_texts:
-            text_file = data_dir / f"{sample['id']}.txt"
-            text_file.write_text(sample["text"])
-
-        mock_get_config_opts.return_value = {"data_path": str(data_dir)}
+    def test_get_text_corpus(
+        self, mock_get_config_opts, tmp_path, internetpoems_data_dir
+    ):
+        mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
         text_data = internet_poems.get_text_corpus()
         assert isinstance(text_data, Generator)
         # turn the generator into a list; sort by id so order matches input
         text_data = sorted(text_data, key=lambda x: x["poem_id"])
-        assert len(text_data) == len(self.sample_texts)
-        assert text_data[0]["poem_id"] == self.sample_texts[0]["id"]
-        assert text_data[0]["text"] == self.sample_texts[0]["text"]
+        assert len(text_data) == len(INTERNETPOEMS_TEXTS)
+        assert text_data[0]["poem_id"] == INTERNETPOEMS_TEXTS[0]["id"]
+        assert text_data[0]["text"] == INTERNETPOEMS_TEXTS[0]["text"]
+
+
+# ch todo
+
+# text fixture data for other poems corpus
+OTHERPOEM_METADATA = [
+    # poem ids
+    ["Joseph-Addison_Cato", "John-Ogilvie_Ode-to-Time", "John-Dryden_Amphitryon"],
+    # authors
+    ["Joseph Addison", "John Ogilvie", "John Dryden"],
+    # titles
+    ["Cato", "Ode to Time", "Amphitryon"],
+]
+
+
+class TestOtherPoems:
+    @patch("corppa.poetry_detection.ref_corpora.pl.read_csv")
+    def test_get_metadata_df(self, mock_pl_read_csv, corppa_test_config):
+        # mock the read_csv method and return a dataframe
+        # generated from fixture data above
+        sample_df = pl.from_records(
+            OTHERPOEM_METADATA, schema=["poem_id", "author", "title"]
+        )
+        mock_pl_read_csv.return_value = sample_df
+        opoems = OtherPoems()
+        meta_df = opoems.get_metadata_df()
+        assert isinstance(meta_df, pl.DataFrame)
+        assert meta_df.height == len(OTHERPOEM_METADATA)
+        # check values on the first row
+        meta_row = meta_df.row(0, named=True)
+        assert meta_row["poem_id"] == OTHERPOEM_METADATA[0][0]
+        assert meta_row["author"] == OTHERPOEM_METADATA[1][0]
+        assert meta_row["title"] == OTHERPOEM_METADATA[2][0]
+        assert meta_row["ref_corpus"] == opoems.corpus_id
+
+        mock_pl_read_csv.assert_called_with(opoems.metadata_url, schema=METADATA_SCHEMA)
+
+
+def test_all_corpora():
+    all_ref_corpora = all_corpora()
+    assert all(
+        isinstance(ref_corpus, BaseReferenceCorpus) for ref_corpus in all_ref_corpora
+    )
+    corpus_classes = [ref_corpus.__class__ for ref_corpus in all_ref_corpora]
+    # order indicates priority, so check both presence and order
+    assert corpus_classes == [InternetPoems, ChadwyckHealey, OtherPoems]
+
+
+def test_fulltext_corpora():
+    fulltext_ref_corpora = fulltext_corpora()
+    assert all(
+        isinstance(ref_corpus, BaseReferenceCorpus)
+        for ref_corpus in fulltext_ref_corpora
+    )
+    corpus_classes = [ref_corpus.__class__ for ref_corpus in fulltext_ref_corpora]
+    # other poems is currently our only metadata-only reference corpus
+    assert OtherPoems not in corpus_classes
