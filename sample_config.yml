@@ -14,10 +14,10 @@ reference_corpora:
   # Uncomment to override if needed; if path is not absolute,
   # will be assumed relative to reference_corpora base_dir
   # internet_poems:
-    # data_path: internet_poems
+    # data_path: "internet_poems"
   # chadwyck-healey:
-    # data_path: chadwyck-healey/chadwyck-healey_texts
-    # metadata_path: chadwyck-healey/chadwyck-healey.csv
+    # data_path: "chadwyck-healey/chadwyck-healey_texts"
+    # metadata_path: "chadwyck-healey/chadwyck-healey.csv"
   other:
     # url for google sheets as CSV
     metadata_url:
