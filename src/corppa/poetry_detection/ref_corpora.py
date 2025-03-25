@@ -150,7 +150,7 @@ class ChadwyckHealey(LocalTextCorpus):
     #: path for directory of text files; default is `chadwyck-healey` relative to configured
     #: reference corpora base dir
     data_path: pathlib.Path = pathlib.Path("chadwyck-healey")
-    #: path for metadat CSV files; default is `chadwyck-healey/chadwyck-healey.csv`
+    #: path for metadata CSV files; default is `chadwyck-healey/chadwyck-healey.csv`
     # relative to configured reference corpora base dir
     metadata_path: pathlib.Path = pathlib.Path("chadwyck-healey/chadwyck-healey.csv")
 
