@@ -15,6 +15,7 @@ from corppa.poetry_detection.ref_corpora import (
     all_corpora,
     compile_metadata_df,
     fulltext_corpora,
+    save_poem_metadata,
 )
 
 
@@ -44,9 +45,12 @@ def corppa_test_config(tmp_path):
 def corppa_test_config_defaults(tmp_path):
     # test fixture with a minimal reference corpus config file
     test_config = tmp_path / "test_config.yml"
+    compiled_dataset_dir = tmp_path / "found-poems-data"
     base_dir = tmp_path / "ref-corpora"
     test_config.write_text(f"""
     # local path to compiled poem dataset files
+    compiled_dataset:    
+        data_dir : { compiled_dataset_dir }
     reference_corpora:
         base_dir: {base_dir}
         other:
@@ -217,6 +221,14 @@ Z300475611,Robinson,Mary,1758,1800,,,,,,Z300475611,THE CAVERN OF WOE.,,Z00047557
 
 
 class TestChadwyckHealey:
+    def test_init(self, tmp_path, corppa_test_config, chadwyck_healey_csv):
+        # configured metadata file doesn't exist
+        chadwyck_healey_csv.unlink()
+        with pytest.raises(
+            ValueError, match="Configuration error:.* metadata .* does not exist"
+        ):
+            ChadwyckHealey()
+
     def test_get_metadata_df(self, tmp_path, corppa_test_config, chadwyck_healey_csv):
         chadwyck_healey = ChadwyckHealey()
         meta_df = chadwyck_healey.get_metadata_df()
@@ -346,3 +358,56 @@ def test_compile_metadata_df(
         ChadwyckHealey.corpus_id,
         OtherPoems.corpus_id,
     }
+
+
+def test_save_poem_metadata(
+    tmp_path,
+    capsys,
+    corppa_test_config_defaults,
+    internetpoems_data_dir,
+    chadwyck_healey_csv,
+    otherpoems_metadata_df,
+):
+    # data fixtures should ensure that all the expected directories exist
+    config_opts = config.get_config()
+    expected_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
+
+    # add corpus id to other poems data frame and patch it to be returned
+    otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
+        ref_corpus=pl.lit(OtherPoems.corpus_id)
+    )
+    with patch.object(
+        OtherPoems, "get_metadata_df", return_value=otherpoems_metadata_df
+    ):
+        # data dir does not exist
+        with pytest.raises(
+            ValueError,
+            match="Configuration error: compiled dataset path .* does not exist",
+        ):
+            save_poem_metadata()
+
+        # exists but not a directory
+        expected_data_dir.touch()
+        with pytest.raises(
+            ValueError,
+            match="Configuration error: compiled dataset path .* is not a directory",
+        ):
+            save_poem_metadata()
+
+        # valid directory - should create a csv file
+        expected_data_dir.unlink()
+        expected_data_dir.mkdir(parents=True)
+        save_poem_metadata()
+        expected_meta_file = expected_data_dir / "poem_meta.csv"
+        assert expected_meta_file.exists()
+        # check output
+        captured = capsys.readouterr()
+        # create vs replace
+        assert "Creating" in captured.out
+        # output currently includes summary numbers
+        assert "6 poem metadata entries" in captured.out
+
+        # run again when the file already exists
+        save_poem_metadata()
+        captured = capsys.readouterr()
+        assert "Replacing" in captured.out

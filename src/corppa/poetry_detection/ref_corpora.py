@@ -257,9 +257,15 @@ def save_poem_metadata():
     poem dataset.
     """
     config_opts = get_config()
-    output_data_dir = pathlib.Path(config_opts["poem_dataset"]["data_dir"])
-    if not (output_data_dir.exists() and output_data_dir.is_dir()):
-        raise ValueError("Poem dataset path is not configured correctly")
+    output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
+    if not output_data_dir.exists():
+        raise ValueError(
+            f"Configuration error: compiled dataset path {output_data_dir} does not exist"
+        )
+    if not output_data_dir.is_dir():
+        raise ValueError(
+            f"Configuration error: compiled dataset path {output_data_dir} is not a directory"
+        )
 
     output_file = output_data_dir / "poem_meta.csv"
 
