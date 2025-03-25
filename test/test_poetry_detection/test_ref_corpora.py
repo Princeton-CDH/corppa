@@ -119,7 +119,45 @@ class TestInternetPoems:
         assert text_data[0]["text"] == INTERNETPOEMS_TEXTS[0]["text"]
 
 
-# ch todo
+@pytest.fixture
+def chadwyck_healey_csv(tmp_path):
+    "fixture to create a test version of the chadwyck-healey metadata csv file"
+    # test fixture to create internet poems data directory with sample text files
+    # TODO: move these defaults to the class
+    data_dir = tmp_path / "chadwyck-healey"
+    data_dir.mkdir()
+    ch_meta_csv = data_dir / "chadwyck-healey.csv"
+    ch_meta_csv.write_text("""id,author_lastname,author_firstname,author_birth,author_death,author_period,transl_lastname,transl_firstname,transl_birth,transl_death,title_id,title_main,title_sub,edition_id,edition_text,period,genre,rhymes
+Z300475611,Robinson,Mary,1758,1800,,,,,,Z300475611,THE CAVERN OF WOE.,,Z000475579,The Poetical Works (1806),Later Eighteenth-Century 1750-1799,,y""")
+    return ch_meta_csv
+
+
+class TestChadwyckHealey:
+    @patch.object(ChadwyckHealey, "get_config_opts")
+    def test_get_metadata_df(self, mock_get_config_opts, tmp_path, chadwyck_healey_csv):
+        # data path is currently required even though not used in this test
+        data_dir = tmp_path / "chadwyck-healey_texts"
+        data_dir.mkdir()
+        mock_get_config_opts.return_value = {
+            "metadata_path": str(chadwyck_healey_csv),
+            "data_path": str(data_dir),
+        }
+        chadwyck_healey = ChadwyckHealey()
+        meta_df = chadwyck_healey.get_metadata_df()
+        assert isinstance(meta_df, pl.DataFrame)
+        assert meta_df.schema == METADATA_SCHEMA
+        # csv fixture data currently has one row
+        assert meta_df.height == 1
+        # get the first row as a dict and check values
+        meta_row = meta_df.row(0, named=True)
+        assert meta_row["poem_id"] == "Z300475611"
+        assert meta_row["author"] == "Mary Robinson"
+        assert meta_row["title"] == "THE CAVERN OF WOE."
+        assert meta_row["ref_corpus"] == chadwyck_healey.corpus_id
+
+    # get_text_corpus method is not tested here because it is inherited;
+    # logic is shared with InternetPoems and tested there
+
 
 # text fixture data for other poems corpus
 OTHERPOEM_METADATA = [
