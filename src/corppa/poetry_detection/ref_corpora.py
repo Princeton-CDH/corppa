@@ -6,6 +6,14 @@ import polars as pl
 from corppa.config import get_config
 from corppa.utils.build_text_corpus import build_text_corpus
 
+#: schema for reference corpora metadata :class:`pl.DataFrame`
+METADATA_SCHEMA = {
+    "poem_id": pl.String,
+    "author": pl.String,
+    "title": pl.String,
+    "ref_corpus": pl.String,
+}
+
 
 class BaseReferenceCorpus:
     """
@@ -18,7 +26,7 @@ class BaseReferenceCorpus:
     data_path: pathlib.Path
     metadata_path: pathlib.Path
 
-    def get_config_opts(self):
+    def get_config_opts(self) -> dict:
         # load reference section for this corpus from config file
         config_opts = get_config()
         if "reference_corpora" not in config_opts:
@@ -32,10 +40,10 @@ class BaseReferenceCorpus:
                 f"Configuration for `{self.corpus_id}` reference corpus not found"
             )
 
-    def get_metadata(self) -> Generator[dict[str, str]]:
+    def get_metadata_df(self) -> pl.DataFrame:
         """Minimal common poetry metadata for use across reference corpora.
-        Should yield a dictionary with poem_id, author, and title for each poem
-        in this corpus."""
+        Should return a :class:`pl.DataFrame` with poem_id, author, title, and
+        ref_corpus for each poem in this corpus."""
         raise NotImplementedError
 
     def get_text_corpus(self) -> Generator[dict[str, str]]:
@@ -63,6 +71,13 @@ class LocalTextCorpus(BaseReferenceCorpus):
 
 
 class InternetPoems(LocalTextCorpus):
+    """Curated corpus of poems with plain text content sourced from
+    the internet, for high priority sources known to occur in excerpts,
+    including full text of Shakespeare's plays. Metadata is inferred based on
+    filename, with a naming convention of `Firstname-Lastname_Poem-Title.txt`.
+    The filename without extension is used as the `poem_id`.
+    """
+
     corpus_id: str = "internet_poems"
     corpus_name: str = "Internet Poems"
     data_path: pathlib.Path
@@ -77,7 +92,8 @@ class InternetPoems(LocalTextCorpus):
                 "Internet Poems Reference Corpus is not configured correctly"
             )
 
-    def get_metadata(self) -> Generator[dict[str, str]]:
+    def get_metadata_df(self) -> pl.DataFrame:
+        metadata = []
         for text_file in self.data_path.glob("*.txt"):
             # filename format:
             #   Firstname-Lastname_Poem-Title.txt
@@ -85,10 +101,23 @@ class InternetPoems(LocalTextCorpus):
             poem_id = text_file.stem
             #   Replace - with spaces and split on - to separate author/title
             author, title = poem_id.replace("-", " ").split("_", 1)
-            yield {"poem_id": text_file.stem, "author": author, "title": title}
+            metadata.append(
+                {
+                    "poem_id": poem_id,
+                    "author": author,
+                    "title": title,
+                    "ref_corpus": self.corpus_id,
+                }
+            )
+        return pl.from_dicts(metadata, schema=METADATA_SCHEMA)
 
 
 class ChadwyckHealey(LocalTextCorpus):
+    """Reference corpus based on a filtered subset of Chadwyck-Healey
+    poetry collection. Requires a directory of plain text files and a
+    metadata csv file. Uses Chadwyck-Healey identifiers for `poem_id`.
+    """
+
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"  # should we note that it is filtered?
     data_path: pathlib.Path
@@ -109,24 +138,37 @@ class ChadwyckHealey(LocalTextCorpus):
                 "Chadwyck-Healey Reference Corpus is not configured correctly"
             )
 
-    def get_metadata(self) -> Generator[dict[str, str]]:
+    def get_metadata_df(self) -> pl.DataFrame:
         df = (
             # ignore parse errors in fields we don't care about (author_dob)
             pl.read_csv(self.metadata_path, ignore_errors=True)
+            # rename fields
             .rename({"title_main": "title", "id": "poem_id"})
+            # construct author name from separate fields in the metadata
             .with_columns(
-                pl.concat_str(
+                author=pl.concat_str(
                     [pl.col("author_firstname"), pl.col("author_lastname")],
                     separator=" ",
-                ).alias("author")
+                ),
+                # set corpus id
+                ref_corpus=pl.lit(self.corpus_id),
             )
-            .select(["poem_id", "author", "title"])
+            .select(["poem_id", "author", "title", "ref_corpus"])
         )
-        yield from df.iter_rows(named=True)
+        # construct a new dataframe with our schema and add the content
+        return pl.DataFrame([], schema=METADATA_SCHEMA).extend(df)
 
 
 class OtherPoems(BaseReferenceCorpus):
-    corpus_id: str = "other_poems"
+    """A metadata-only reference corpus with metadata for poems that have
+    been identified but for which we do not have full text.
+    Poem identifiers are constructed from author and title using the same
+    convention as :class:`InternetPoems`.
+
+    Does not provide an implementation for :meth:`get_text`.
+    """
+
+    corpus_id: str = "other"
     corpus_name: str = "Other Poems"
     metadata_url: str
 
@@ -137,11 +179,13 @@ class OtherPoems(BaseReferenceCorpus):
         self.metadata_url = config_opts["metadata_url"]
         # TODO: handle key error
 
-    def get_metadata(self):
+    def get_metadata_df(self) -> pl.DataFrame:
         # polars can load csv from a url;
-        meta_df = pl.read_csv(self.metadata_url)
-        # field are already named appropriately
-        yield from meta_df.iter_rows(named=True)
+        df = pl.read_csv(self.metadata_url, schema=METADATA_SCHEMA)
+        df = df.with_columns(ref_corpus=pl.lit(self.corpus_id))
+        meta_df = pl.DataFrame([], schema=METADATA_SCHEMA)
+        meta_df.extend(df)
+        return meta_df
 
     # this is a metadata-only corpus, so leave get_text as not implemented
 
@@ -162,23 +206,13 @@ def compile_metadata_df() -> pl.DataFrame:
     """Compile poetry metadata from all reference corpora into a single
     polars DataFrame with reference corpus ids."""
     # create an empty dataframe with the intended fields
-    poem_metadata = pl.DataFrame(
-        [],
-        schema={
-            "poem_id": pl.String,
-            "author": pl.String,
-            "title": pl.String,
-            "ref_corpus": pl.String,
-        },
-    )
+    poem_metadata = pl.DataFrame([], schema=METADATA_SCHEMA)
 
     # for each corpus, load poem metadata into a polars dataframe,
     # rename id to poem_id, and add a column with the corpus id
     for ref_corpus in all_corpora():
-        corpus_meta = pl.from_dicts(ref_corpus.get_metadata()).with_columns(
-            ref_corpus=pl.lit(ref_corpus.corpus_id)
-        )
-        poem_metadata.extend(corpus_meta)
+        meta_df = ref_corpus.get_metadata_df()
+        poem_metadata.extend(meta_df.head())
     return poem_metadata
 
 
