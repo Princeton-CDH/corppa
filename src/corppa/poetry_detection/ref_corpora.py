@@ -19,10 +19,18 @@ class BaseReferenceCorpus:
     metadata_path: pathlib.Path
 
     def get_config_opts(self):
-        # load data path from config file and check that path exists
+        # load reference section for this corpus from config file
         config_opts = get_config()
-        # TODO: handle missing config opts
-        return config_opts["reference_corpora"][self.corpus_id]
+        if "reference_corpora" not in config_opts:
+            raise ValueError(
+                "Reference corpora configuration section `reference_corpora` not found in config file"
+            )
+        try:
+            return config_opts["reference_corpora"][self.corpus_id]
+        except KeyError:
+            raise ValueError(
+                f"Configuration for `{self.corpus_id}` reference corpus not found"
+            )
 
     def get_metadata(self) -> Generator[dict[str, str]]:
         """Minimal common poetry metadata for use across reference corpora.
@@ -37,7 +45,24 @@ class BaseReferenceCorpus:
         raise NotImplementedError
 
 
-class InternetPoems(BaseReferenceCorpus):
+class LocalTextCorpus(BaseReferenceCorpus):
+    """Base class for reference corpus where text content is
+    provided as a set of text files in a directory.
+    Provides :meth:`get_text` for generating text corpus from
+    the file system."""
+
+    def get_text(self, disable_progress: bool = True) -> Generator[dict[str, str]]:
+        # NOTE: the build_text_corpus method returns id,
+        # so we have to rename to poem_id
+        yield from (
+            {"poem_id": p["id"], "text": p["text"]}
+            for p in build_text_corpus(
+                self.data_path, disable_progress=disable_progress
+            )
+        )
+
+
+class InternetPoems(LocalTextCorpus):
     corpus_id: str = "internet_poems"
     corpus_name: str = "Internet Poems"
     data_path: pathlib.Path
@@ -62,11 +87,8 @@ class InternetPoems(BaseReferenceCorpus):
             author, title = poem_id.replace("-", " ").split("_", 1)
             yield {"poem_id": text_file.stem, "author": author, "title": title}
 
-    def get_text(self, disable_progress: bool = True) -> Generator[dict[str, str]]:
-        yield from build_text_corpus(self.data_path, disable_progress=disable_progress)
 
-
-class ChadwyckHealey(BaseReferenceCorpus):
+class ChadwyckHealey(LocalTextCorpus):
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"  # should we note that it is filtered?
     data_path: pathlib.Path
@@ -124,8 +146,16 @@ class OtherPoems(BaseReferenceCorpus):
     # this is a metadata-only corpus, so leave get_text as not implemented
 
 
-def all_corpora():
+def all_corpora() -> list[BaseReferenceCorpus]:
+    """Convenience access to all reference corpora, for generating
+    compiled versions of reference data."""
     return [InternetPoems(), ChadwyckHealey(), OtherPoems()]
+
+
+def fulltext_corpora() -> list[BaseReferenceCorpus]:
+    """Convenience access to all full-text reference corpora, for generating
+    compiled metadata and text."""
+    return [InternetPoems(), ChadwyckHealey()]
 
 
 def compile_metadata_df() -> pl.DataFrame:
