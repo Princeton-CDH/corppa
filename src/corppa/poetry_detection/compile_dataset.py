@@ -170,6 +170,7 @@ def main():
         print("#### Merging excerpts")
         # find and merge excerpt source files into the compiled dataset file
         excerpt_sources = get_excerpt_sources(compile_opts["source_excerpt_data"])
+        # TODO:  need to save as csv and THEN compress, polars doesn't do it for us
         merge_excerpt_files(excerpt_sources, compile_opts["compiled_excerpt_file"])
 
     if compilation_steps is None or "poem_metadata" in compilation_steps:
