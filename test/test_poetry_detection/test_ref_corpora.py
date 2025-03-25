@@ -200,7 +200,16 @@ class TestOtherPoems:
         mock_pl_read_csv.assert_called_with(opoems.metadata_url, schema=METADATA_SCHEMA)
 
 
-def test_all_corpora():
+# because this method instantiates the ref_corpus objects,
+# data directories must pass validation checks
+
+
+def test_all_corpora(
+    corppa_test_config,
+    internetpoems_data_dir,
+    chadwyck_healey_csv,
+    otherpoems_metadata_df,
+):
     all_ref_corpora = all_corpora()
     assert all(
         isinstance(ref_corpus, BaseReferenceCorpus) for ref_corpus in all_ref_corpora
@@ -210,7 +219,12 @@ def test_all_corpora():
     assert corpus_classes == [InternetPoems, ChadwyckHealey, OtherPoems]
 
 
-def test_fulltext_corpora():
+def test_fulltext_corpora(
+    corppa_test_config,
+    internetpoems_data_dir,
+    chadwyck_healey_csv,
+    otherpoems_metadata_df,
+):
     fulltext_ref_corpora = fulltext_corpora()
     assert all(
         isinstance(ref_corpus, BaseReferenceCorpus)
