@@ -287,7 +287,7 @@ class TestOtherPoems:
 
 
 def test_all_corpora(
-    corppa_test_config,
+    corppa_test_config_defaults,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
@@ -302,7 +302,7 @@ def test_all_corpora(
 
 
 def test_fulltext_corpora(
-    corppa_test_config,
+    corppa_test_config_defaults,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
@@ -319,7 +319,7 @@ def test_fulltext_corpora(
 
 def test_compile_metadata_df(
     tmp_path,
-    corppa_test_config,
+    corppa_test_config_defaults,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,

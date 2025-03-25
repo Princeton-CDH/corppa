@@ -162,14 +162,12 @@ class ChadwyckHealey(LocalTextCorpus):
 
         # if configured, data_path overrides default path
         if "metadata_path" in config_opts:
-            self.metadata_path = pathlib.Path(config_opts["data_path"])
+            self.metadata_path = pathlib.Path(config_opts["metadata_path"])
         # if metadata path is not absolute, assume relative to ref_corpus base dir
         if not self.metadata_path.is_absolute():
             self.metadata_path = (
                 pathlib.Path(config_opts["base_dir"]) / self.metadata_path
             )
-
-        self.metadata_path = pathlib.Path(config_opts["metadata_path"])
         if not (self.metadata_path.exists() and self.metadata_path.is_file()):
             raise ValueError(
                 f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
