@@ -166,4 +166,4 @@ def test_add_ppa_work_meta(mock_load_ppa_df):
     with pytest.raises(ValueError, match=err_msg):
         bad_df = pl.DataFrame([{"excerpt_id": "a"}, {"excerpt_id": "b"}])
         add_ppa_work_meta(bad_df, "ppa_meta")
-        mock_load_ppa_df.assert_not_called()
+    mock_load_ppa_df.assert_not_called()
