@@ -1,5 +1,7 @@
 import csv
+from unittest.mock import patch
 
+import polars as pl
 import pytest
 
 from corppa.poetry_detection.ppa_works import (
@@ -80,3 +82,54 @@ def test_load_ppa_works_df(tmp_path):
         err_msg = f"Input CSV is missing the following required fields: {missing_str}"
         with pytest.raises(ValueError, match=err_msg):
             load_ppa_works_df(bad_csv)
+
+
+@patch("corppa.poetry_detection.ppa_works.load_ppa_works_df")
+def test_add_ppa_work_meta(mock_load_ppa_df):
+    # Construct test inputs
+    excerpts_df = pl.DataFrame(
+        [
+            {
+                "page_id": "page_a",
+                "excerpt_id": "ex_1",
+                "ppa_work_id": "work_a",
+            },
+            {
+                "page_id": "page_b",
+                "excerpt_id": "ex_1",
+                "ppa_work_id": "work_b",
+            },
+            {
+                "page_id": "page_a",
+                "excerpt_id": "ex_2",
+                "ppa_work_id": "work_a",
+            },
+        ]
+    )
+    ppa_meta_rows = []
+    for i in ["a", "b", "c"]:
+        ppa_meta_rows.append(
+            {
+                "ppa_work_id": f"work_{i}",
+                "ppa_author": f"author_{i}",
+                "ppa_title": f"title_{i}",
+            }
+        )
+    ppa_meta_df = pl.DataFrame(ppa_meta_rows)
+    # Set-up mock object
+    mock_load_ppa_df.return_value = ppa_meta_df
+
+    results = add_ppa_work_meta(excerpts_df, "ppa_meta")
+    mock_load_ppa_df.assert_called_once_with("ppa_meta")
+    # Check columns
+    assert set(results.columns) == set(excerpts_df.columns) | set(ppa_meta_df.columns)
+    # Check row contents
+    assert results.row(0, named=True) == (
+        excerpts_df.row(0, named=True) | ppa_meta_rows[0]
+    )
+    assert results.row(1, named=True) == (
+        excerpts_df.row(1, named=True) | ppa_meta_rows[1]
+    )
+    assert results.row(2, named=True) == (
+        excerpts_df.row(2, named=True) | ppa_meta_rows[0]
+    )

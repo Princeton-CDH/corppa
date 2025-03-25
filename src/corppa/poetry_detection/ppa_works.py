@@ -22,7 +22,7 @@ PPA_FIELDS = {
 def load_ppa_works_df(file: Path) -> pl.DataFrame:
     """
     Loads PPA work-level metadata (``CSV``) as a polars DataFrame containing only the
-    fields in :data:`corppa.poetry_detection.ppa_works.PPA_FIELDS` that have been
+    fields in :data:`PPA_FIELDS` that have been
     renamed to its corresponding values.
     """
     # Check that file exists
@@ -51,4 +51,4 @@ def add_ppa_work_meta(
     work-level metadata (``CSV``) and returns the resulting ``DataFrame``.
     """
     ppa_works_meta = load_ppa_works_df(ppa_works_csv)
-    return excerpts_df.join(ppa_works_meta, on=["ppa_work_id"])
+    return excerpts_df.join(ppa_works_meta, on="ppa_work_id", how="left")
