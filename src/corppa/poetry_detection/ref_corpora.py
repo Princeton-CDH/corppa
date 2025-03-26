@@ -176,9 +176,9 @@ class ChadwyckHealey(LocalTextCorpus):
             )
 
     def get_metadata_df(self) -> pl.DataFrame:
-        df = (
-            # ignore parse errors in fields we don't care about (author_dob)
-            pl.read_csv(self.metadata_path, ignore_errors=True)
+        # disable schema inference; the fields we care about are all strings
+        return (
+            pl.read_csv(self.metadata_path, infer_schema=False)
             # rename fields
             .rename({"title_main": "title", "id": "poem_id"})
             # construct author name from separate fields in the metadata
@@ -192,8 +192,6 @@ class ChadwyckHealey(LocalTextCorpus):
             )
             .select(["poem_id", "author", "title", "ref_corpus"])
         )
-        # construct a new dataframe with our schema and add the content
-        return pl.DataFrame([], schema=METADATA_SCHEMA).extend(df)
 
 
 class OtherPoems(BaseReferenceCorpus):
