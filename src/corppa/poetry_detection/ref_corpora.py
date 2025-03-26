@@ -108,10 +108,12 @@ class LocalTextCorpus(BaseReferenceCorpus):
     def get_text_corpus(
         self, disable_progress: bool = True
     ) -> Generator[dict[str, str]]:
-        # TODO: if text_dir is tarball, raise not implemented
-
-        # NOTE: the build_text_corpus method returns id,
-        # so we have to rename to poem_id
+        # if text_dir is tarball, raise not implemented error
+        if not self.text_dir.is_dir():
+            raise NotImplementedError(
+                "text corpus generation is not supported for tar.gz; configure a directory"
+            )
+        # build_text_corpus method returns id, so rename id to poem_id
         yield from (
             {"poem_id": p["id"], "text": p["text"]}
             for p in build_text_corpus(self.text_dir, disable_progress=disable_progress)

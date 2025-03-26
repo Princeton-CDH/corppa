@@ -132,18 +132,15 @@ def internetpoems_tarball(tmp_path):
         text_file.write_text(sample["text"])
 
     tarfile_name = config_opts["reference_corpora"]["internet_poems"]["text_dir"]
-    print(f"%%%% tarfile name {tarfile_name}")
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
     tarfile_path = base_dir / tarfile_name
     tarfile_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"%%%% tarfile path {tarfile_path}")
 
     with tarfile.open(tarfile_path, "w:gz") as tar:
         for text_file in internetpoems_data_dir.glob("*.txt"):
-            print(text_file)
             tar.add(text_file)
 
-    return pathlib.Path(tarfile_name)
+    return tarfile_path
 
 
 class TestInternetPoems:
@@ -197,18 +194,12 @@ class TestInternetPoems:
         assert meta_row["title"] == "Psalms"
         assert meta_row["ref_corpus"] == internet_poems.corpus_id
 
-    # @patch.object(InternetPoems, "get_config_opts")
     def test_get_metadata_df_tarball(
         self,
-        # mock_get_config_opts,
         tmp_path,
         corppa_test_config_defaults,
         internetpoems_tarball,
     ):
-        print("** tarball")
-        print(internetpoems_tarball)
-
-        # mock_get_config_opts.return_value = {"text_dir": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
         meta_df = internet_poems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
@@ -220,6 +211,17 @@ class TestInternetPoems:
         assert meta_row["author"] == "King James Bible"
         assert meta_row["title"] == "Psalms"
         assert meta_row["ref_corpus"] == internet_poems.corpus_id
+
+    def test_get_text_corpus_tarball(
+        self,
+        tmp_path,
+        corppa_test_config_defaults,
+        internetpoems_tarball,
+    ):
+        internet_poems = InternetPoems()
+        with pytest.raises(NotImplementedError, match="not supported for tar.gz"):
+            # returns a generator; use list to get to actually run
+            list(internet_poems.get_text_corpus())
 
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_text_corpus(
