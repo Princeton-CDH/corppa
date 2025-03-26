@@ -13,7 +13,7 @@ compiled_dataset:
 # paths to reference corpora metadata and text
 reference_corpora:
   # default base_dir is data_ingredients_dir / ref-corpora
-  # uncomment to override
+  # uncomment to override; assumed relative to data_ingredients_dir if not absolute
   # base_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/ref-corpora/
 
   # Uses default paths relative to reference_corpora.base_dir
