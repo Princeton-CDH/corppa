@@ -75,6 +75,7 @@ corppa-ocr = "corppa.ocr.gvision_ocr:main"
 collate-txt = "corppa.ocr.collate_txt:main"
 merge-excerpts = "corppa.poetry_detection.merge_excerpts:main"
 refmatcha = "corppa.poetry_detection.refmatcha:main"
+corppa-compile-dataset = "corppa.poetry_detection.compile_dataset:main"
 
 [tool.hatch.version]
 path = "src/corppa/__init__.py"
@@ -89,6 +90,10 @@ src = ["src"]
 [tool.hatch.metadata]
 # so passim can be installed from GitHub (i.e., direct reference)
 allow-direct-references = true
+
+[tool.hatch.build.targets.wheel.force-include]
+# include sample config file when installed as python package
+"./sample_config.yml" = "corppa/sample_config.yml"
 
 [tool.coverage.report]
 exclude_lines = [
