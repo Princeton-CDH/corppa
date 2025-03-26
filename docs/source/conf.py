@@ -35,6 +35,7 @@ autodoc_mock_imports = [
     "pyarrow",
     "rapidfuzz",
     "spacy",
+    "unidecode",
 ]
 
 
