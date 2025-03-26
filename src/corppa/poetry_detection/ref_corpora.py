@@ -34,12 +34,14 @@ class BaseReferenceCorpus:
         config_opts = get_config()
         if "reference_corpora" not in config_opts:
             raise ValueError(
-                "Reference corpora configuration section `reference_corpora` not found in config file"
+                "Configuration error: required section 'reference_corpora' not found"
             )
         try:
             base_dir = config_opts["reference_corpora"]["base_dir"]
         except KeyError:
-            raise ValueError("Configuration for `reference_corpora.base_dir` not found")
+            raise ValueError(
+                "Configuration error: required 'reference_corpora.base_dir' not found"
+            )
         # always include the reference_corpora base directory
         corpus_opts = {"base_dir": base_dir}
         # include any options for this specific corpus

@@ -68,6 +68,24 @@ class TestBaseReferenceCorpus:
         with pytest.raises(NotImplementedError):
             BaseReferenceCorpus().get_text_corpus()
 
+    @patch("corppa.poetry_detection.ref_corpora.get_config")
+    def test_get_config_error(self, mock_get_config):
+        # reference_corpora not set
+        mock_get_config.return_value = {}
+        with pytest.raises(
+            ValueError,
+            match="Configuration error: required section 'reference_corpora' not found",
+        ):
+            BaseReferenceCorpus().get_config_opts()
+
+        # reference_corpora section but no base dir
+        mock_get_config.return_value = {"reference_corpora": {}}
+        with pytest.raises(
+            ValueError,
+            match="Configuration error: required 'reference_corpora.base_dir' not found",
+        ):
+            BaseReferenceCorpus().get_config_opts()
+
 
 # fixture data for internet poems
 INTERNETPOEMS_TEXTS = [
