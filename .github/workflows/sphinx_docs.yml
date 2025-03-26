@@ -46,7 +46,7 @@ jobs:
       # For pull requests, exit with error if documentation coverage is incomplete
       - name: Report on documentation coverage
         if: ${{ github.event_name == 'pull_request' }}
-        run: cd docs && if [[ $((`grep corpppa build/coverage/python.txt | grep -v 100 | wc -l`)) -eq 0 ]] ; then echo "Documentation coverage complete"; else cat build/coverage/python.txt && exit 1; fi
+        run: cd docs && if [[ $((`grep corpppa build/coverage/python.txt | grep -v 100 | wc -l`)) -eq 0 ]] ; then cat build/coverage/python.txt && echo "" && echo "Documentation coverage complete"; else cat build/coverage/python.txt && exit 1; fi
 
       # When building on push to main, publish the built docs
       - name: Deploy built docs to github pages
