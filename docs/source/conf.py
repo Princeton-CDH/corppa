@@ -30,7 +30,13 @@ exclude_patterns = []
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 # Ignore annotation-related modules
-autodoc_mock_imports = ["prodigy", "spacy"]
+autodoc_mock_imports = [
+    "prodigy",
+    "pyarrow",
+    "rapidfuzz",
+    "spacy",
+    "unidecode",
+]
 
 
 # -- Options for HTML output -------------------------------------------------

@@ -1,0 +1,61 @@
+name: sphinx docs
+
+on:
+  push: # run on push to main and PR
+    branches:
+      - main
+      - develop
+  pull_request:
+
+env:
+  # Python version used to build sphinx docs
+  DOCS_PYTHON_VERSION: "3.12"
+
+jobs:
+  docs:
+    name: Sphinx documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DOCS_PYTHON_VERSION }}
+      
+      # base the Python cache on the hash of all pyproject.toml,
+      # which includes Python requirements.
+      # if any change, the cache is invalidated.
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ hashFiles('pyproject.toml') }}
+            pip-
+
+      # Install package + dependencies for building docs
+      - name: Install dependencies
+        run: pip install -e ".[doc]"
+
+      - name: Build Sphinx docs
+        run: cd docs && make -b coverage html
+
+      # For pull requests, exit with error if documentation coverage is incomplete
+      - name: Report on documentation coverage
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          cd docs/build/coverage && \
+            if [[ $((`grep corppa python.txt | grep -v 100 | wc -l`)) -eq 0 ]];\
+            then echo "Documentation coverage complete"; \
+            else cat python.txt; fi
+
+      # When building on push to main, publish the built docs
+      - name: Deploy built docs to github pages
+        if: ${{ github.event_name == 'push' }}
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/build/html

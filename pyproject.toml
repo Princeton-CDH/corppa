@@ -29,6 +29,7 @@ dependencies = [
 	"tqdm",
   "biopython",
   "pyyaml",
+  "polars",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +41,6 @@ doc = ["sphinx", "myst-parser"]
 ocr = ["google-cloud-vision"]
 poem_id = [
   "pyarrow",
-  "polars",
   "unidecode",
   "rapidfuzz",
   # Conditional
