@@ -1,4 +1,6 @@
+import os.path
 import pathlib
+import tarfile
 from collections.abc import Generator
 
 import polars as pl
@@ -96,9 +98,11 @@ class LocalTextCorpus(BaseReferenceCorpus):
                 f"Configuration error: {self.corpus_name} path {self.text_dir} does not exist"
             )
         # TODO: allow tar.gz here; determine which and set a flag?
-        if not self.text_dir.is_dir():
+        if not self.text_dir.is_dir() and not (
+            self.text_dir.is_file() and self.text_dir.name.endswith(".tar.gz")
+        ):
             raise ValueError(
-                f"Configuration error: {self.corpus_name} path {self.text_dir} is not a directory"
+                f"Configuration error: {self.corpus_name} path {self.text_dir} is not a directory or a tar.gz"
             )
 
     def get_text_corpus(
@@ -131,12 +135,24 @@ class InternetPoems(LocalTextCorpus):
 
     def get_metadata_df(self) -> pl.DataFrame:
         metadata = []
-        # TODO: handle tar.gz
-        for text_file in self.text_dir.glob("*.txt"):
+
+        # if configured text_dir is a directory, get list of names
+        # from the filesystem
+        if self.text_dir.is_dir():
+            text_ids = [file.stem for file in self.text_dir.glob("*.txt")]
+        # otherwise, get from tar archive list
+        else:
+            with tarfile.open(str(self.text_dir), "r:gz") as text_archive:
+                text_ids = [
+                    os.path.splitext(os.path.basename(name))[0]
+                    for name in text_archive.getnames()
+                    if name.endswith(".txt")
+                ]
+
+        # filename without extension is poem identifier
+        for poem_id in text_ids:
             # filename format:
             #   Firstname-Lastname_Poem-Title.txt
-            # use filename without extension as poem identifier
-            poem_id = text_file.stem
             #   Replace - with spaces and split on - to separate author/title
             author, title = poem_id.replace("-", " ").split("_", 1)
             metadata.append(
