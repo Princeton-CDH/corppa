@@ -253,16 +253,9 @@ def chadwyck_healey_csv(tmp_path):
     config_opts = config.get_config()
     # use the configured data paths or configured ref_corpus base_dir and defaults
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
-    # if configured, text_dir overrides default path
-    if ChadwyckHealey.corpus_id in config_opts["reference_corpora"]:
-        override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
-        if "text_dir" in override_opts:
-            data_dir = pathlib.Path(override_opts["text_dir"])
-        if "metadata_path" in override_opts:
-            ch_meta_csv = pathlib.Path(override_opts["metadata_path"])
-    else:
-        data_dir = ChadwyckHealey.text_dir
-        ch_meta_csv = ChadwyckHealey.metadata_path
+    override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
+    data_dir = pathlib.Path(override_opts["text_dir"])
+    ch_meta_csv = pathlib.Path(override_opts["metadata_path"])
 
     # in either case, make relative to base dir if not absolute
     if not data_dir.is_absolute():
