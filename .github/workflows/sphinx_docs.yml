@@ -35,10 +35,9 @@ jobs:
             pip-${{ hashFiles('pyproject.toml') }}
             pip-
 
-      # TODO: Is installing the dev environment the right call?
-      # Install dependencies
+      # Install package + dependencies for building docs
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[doc]"
 
       - name: Build Sphinx docs
         run: cd docs && make -b coverage html
