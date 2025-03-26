@@ -35,7 +35,7 @@ def corppa_test_config(tmp_path):
             data_path: "ch"
             metadata_path: "ch/chadwyck-healey.csv"
         other:
-            metadata_url: http://example.com/other-poems.csv
+            metadata_path: http://example.com/other-poems.csv
     """)
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         yield test_config
@@ -54,7 +54,7 @@ def corppa_test_config_defaults(tmp_path):
     reference_corpora:
         base_dir: {base_dir}
         other:
-            metadata_url: http://example.com/other-poems.csv
+            metadata_path: http://example.com/other-poems.csv
     """)
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         yield test_config
@@ -301,13 +301,15 @@ class TestOtherPoems:
         assert meta_row["title"] == OTHERPOEM_METADATA[2][0]
         assert meta_row["ref_corpus"] == opoems.corpus_id
 
-        mock_pl_read_csv.assert_called_with(opoems.metadata_url, schema=METADATA_SCHEMA)
+        mock_pl_read_csv.assert_called_with(
+            opoems.metadata_path, schema=METADATA_SCHEMA
+        )
 
     @patch.object(OtherPoems, "get_config_opts")
     def test_config_error(self, mock_get_config_opts):
         mock_get_config_opts.return_value = {}
         with pytest.raises(
-            ValueError, match="Configuration error:.* metadata_url is not set"
+            ValueError, match="Configuration error:.* metadata_path is not set"
         ):
             OtherPoems()
 

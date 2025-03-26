@@ -24,7 +24,7 @@ class BaseReferenceCorpus:
     corpus_id: str
     corpus_name: str
     data_path: pathlib.Path
-    metadata_path: pathlib.Path
+    metadata_path: pathlib.Path | str
 
     def get_config_opts(self) -> dict:
         """Load reference corpus-specific configuration options from
@@ -205,24 +205,26 @@ class OtherPoems(BaseReferenceCorpus):
     Does not provide an implementation for :meth:`get_text_corpus`.
     """
 
+    #: id for this reference corpus (currently "other")
     corpus_id: str = "other"
     corpus_name: str = "Other Poems"
-    metadata_url: str
+    #: URL or local path for metadata (can pull from Google Sheets published csv)
+    metadata_path: str
 
     def __init__(self):
         # get configuration for this corpus
         config_opts = self.get_config_opts()
         # set data path from config file and check that path exists
         try:
-            self.metadata_url = config_opts["metadata_url"]
+            self.metadata_path = config_opts["metadata_path"]
         except KeyError:
             raise ValueError(
-                f"Configuration error: {self.corpus_name} metadata_url is not set"
+                f"Configuration error: {self.corpus_name} metadata_path is not set"
             )
 
     def get_metadata_df(self) -> pl.DataFrame:
         # polars can load csv directly from a url
-        return pl.read_csv(self.metadata_url, schema=METADATA_SCHEMA).with_columns(
+        return pl.read_csv(self.metadata_path, schema=METADATA_SCHEMA).with_columns(
             ref_corpus=pl.lit(self.corpus_id)
         )
 

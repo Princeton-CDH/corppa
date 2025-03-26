@@ -1,27 +1,35 @@
 # corppa configuration
 # copy this file to corppa_config.yml and edit as needed
 
+# top-level bath for excerpt dataset ingredients
+data_ingredients_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/
+
 # local path to compiled poem dataset files
 compiled_dataset:
   # NOTE: currently requires an absolute path, since jupyter
   # notebooks will try to load relative to the notebook
-  data_dir: "/path/to/ppa-found-poems/data/"
+  output_data_dir: "/path/to/ppa-found-poems/data/"
 
 # paths to reference corpora metadata and text
 reference_corpora:
-  base_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/ref-corpora/
+  # default base_dir is data_ingredients_dir / ref-corpora
+  # uncomment to override
+  # base_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/ref-corpora/
+
   # Uses default paths relative to reference_corpora.base_dir
   # Uncomment to override if needed; if path is not absolute,
   # will be assumed relative to reference_corpora base_dir
+
   # internet_poems:
-    # data_path: "internet_poems"
+    # tarball of directory of text files OR expanded directory;
+    # some functionality will only work with the expanded directory
+    # text_dir: "internet_poems/internet_poems_texts.tar.gz"
   # chadwyck-healey:
-    # data_path: "chadwyck-healey/chadwyck-healey_texts"
+    # tarball of directory of text files OR expanded directory;
+    # some functionality will only work with the expanded directory
+    # text_dir: "chadwyck-healey/chadwyck-healey_texts.tar.gz"
     # metadata_path: "chadwyck-healey/chadwyck-healey.csv"
   other:
-    # url for google sheets as CSV
-    metadata_url:
-
-
-# path for local copies of text content
-working_data_dir:
+    # URL for google sheets as CSV or local path for cached copy
+    # TODO: change this from metadata_url
+    metadata_path:
