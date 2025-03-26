@@ -23,16 +23,19 @@ from corppa.poetry_detection.ref_corpora import (
 def corppa_test_config(tmp_path):
     # test fixture to create and use a temporary config file
     # uses explicit, non-default paths
+    compiled_dataset_dir = tmp_path / "found-poems-data"
     test_config = tmp_path / "test_config.yml"
     base_dir = tmp_path / "ref-corpora"
     test_config.write_text(f"""
     # local path to compiled poem dataset files
+    compiled_dataset:    
+        output_data_dir : {compiled_dataset_dir}
     reference_corpora:
-        base_dir: { base_dir }
+        base_dir: {base_dir}
         internet_poems:
-            data_path: { base_dir / "internet_poems2"}
+            text_dir: {base_dir / "internet_poems2"}
         chadwyck-healey:
-            data_path: "ch"
+            text_dir: "ch"
             metadata_path: "ch/chadwyck-healey.csv"
         other:
             metadata_path: http://example.com/other-poems.csv
@@ -50,7 +53,7 @@ def corppa_test_config_defaults(tmp_path):
     test_config.write_text(f"""
     # local path to compiled poem dataset files
     compiled_dataset:    
-        data_dir : { compiled_dataset_dir }
+        output_data_dir : {compiled_dataset_dir}
     reference_corpora:
         base_dir: {base_dir}
         other:
@@ -104,20 +107,11 @@ INTERNETPOEMS_TEXTS = [
 def internetpoems_data_dir(tmp_path):
     # test fixture to create internet poems data directory with sample text files
     config_opts = config.get_config()
-    # use the configured data dir
-    base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
-    # if configured, data_path overrides default path
-    if (
-        "internet_poems" in config_opts["reference_corpora"]
-        and "data_path" in config_opts["reference_corpora"]["internet_poems"]
-    ):
-        data_dir = pathlib.Path(
-            config_opts["reference_corpora"]["internet_poems"]["data_path"]
-        )
-    else:
-        data_dir = base_dir / InternetPoems.data_path
+    # use the configured text data dir
+    data_dir = pathlib.Path(
+        config_opts["reference_corpora"]["internet_poems"]["text_dir"]
+    )
 
-    # data_dir = tmp_path / "ref-corpora" / "internet_poems"
     data_dir.mkdir(parents=True, exist_ok=True)
     for sample in INTERNETPOEMS_TEXTS:
         text_file = data_dir / f"{sample['id']}.txt"
@@ -134,14 +128,14 @@ class TestInternetPoems:
         config_opts = config.get_config()
         # expected data_dir
         expected_data_dir = pathlib.Path(
-            config_opts["reference_corpora"]["internet_poems"]["data_path"]
+            config_opts["reference_corpora"]["internet_poems"]["text_dir"]
         )
 
         # init should succeed when directory exists
         expected_data_dir.mkdir(parents=True)
         internet_poems = InternetPoems()
-        assert isinstance(internet_poems.data_path, pathlib.Path)
-        assert internet_poems.data_path == expected_data_dir
+        assert isinstance(internet_poems.text_dir, pathlib.Path)
+        assert internet_poems.text_dir == expected_data_dir
 
         # error if it is not a directory : remove dir and create a regular file
         expected_data_dir.rmdir()
@@ -151,31 +145,19 @@ class TestInternetPoems:
         ):
             InternetPoems()
 
-    def test_init_default_path(self, tmp_path, corppa_test_config_defaults):
-        # load full configuration
-        config_opts = config.get_config()
-        # expected data directory is base dir + default path
-        base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
-        expected_data_dir = base_dir / InternetPoems.data_path
-        # make sure it exists as a directory to test init
-        expected_data_dir.mkdir(parents=True)
-        internet_poems = InternetPoems()
-        assert isinstance(internet_poems.data_path, pathlib.Path)
-        assert internet_poems.data_path == expected_data_dir
-
     @patch("corppa.poetry_detection.ref_corpora.pathlib")
     def test_get_config(self, mock_pathlib, tmp_path, corppa_test_config):
         config_opts = InternetPoems().get_config_opts()
         # should pass in reference corpus base directory
         assert "base_dir" in config_opts
         # should include ref_corpus specific options, where are in the test config
-        assert "data_path" in config_opts
+        assert "text_dir" in config_opts
 
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_metadata_df(
         self, mock_get_config_opts, tmp_path, corppa_test_config, internetpoems_data_dir
     ):
-        mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
+        mock_get_config_opts.return_value = {"text_dir": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
         meta_df = internet_poems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
@@ -193,10 +175,13 @@ class TestInternetPoems:
         self,
         mock_get_config_opts,
         tmp_path,
-        corppa_test_config_defaults,
+        corppa_test_config,
         internetpoems_data_dir,
     ):
-        mock_get_config_opts.return_value = {"data_path": str(internetpoems_data_dir)}
+        mock_get_config_opts.return_value = {
+            "text_dir": str(internetpoems_data_dir),
+            "base_dir": tmp_path / "ref-corpora",
+        }
         internet_poems = InternetPoems()
         text_data = internet_poems.get_text_corpus()
         assert isinstance(text_data, Generator)
@@ -215,15 +200,15 @@ def chadwyck_healey_csv(tmp_path):
     config_opts = config.get_config()
     # use the configured data paths or configured ref_corpus base_dir and defaults
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
-    # if configured, data_path overrides default path
+    # if configured, text_dir overrides default path
     if ChadwyckHealey.corpus_id in config_opts["reference_corpora"]:
         override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
-        if "data_path" in override_opts:
-            data_dir = pathlib.Path(override_opts["data_path"])
+        if "text_dir" in override_opts:
+            data_dir = pathlib.Path(override_opts["text_dir"])
         if "metadata_path" in override_opts:
             ch_meta_csv = pathlib.Path(override_opts["metadata_path"])
     else:
-        data_dir = ChadwyckHealey.data_path
+        data_dir = ChadwyckHealey.text_dir
         ch_meta_csv = ChadwyckHealey.metadata_path
 
     # in either case, make relative to base dir if not absolute
@@ -309,7 +294,7 @@ class TestOtherPoems:
     def test_config_error(self, mock_get_config_opts):
         mock_get_config_opts.return_value = {}
         with pytest.raises(
-            ValueError, match="Configuration error:.* metadata_path is not set"
+            ValueError, match="Configuration error:.* 'metadata_path' is not set"
         ):
             OtherPoems()
 
@@ -319,7 +304,7 @@ class TestOtherPoems:
 
 
 def test_all_corpora(
-    corppa_test_config_defaults,
+    corppa_test_config,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
@@ -334,7 +319,7 @@ def test_all_corpora(
 
 
 def test_fulltext_corpora(
-    corppa_test_config_defaults,
+    corppa_test_config,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
@@ -351,7 +336,7 @@ def test_fulltext_corpora(
 
 def test_compile_metadata_df(
     tmp_path,
-    corppa_test_config_defaults,
+    corppa_test_config,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
@@ -383,14 +368,14 @@ def test_compile_metadata_df(
 def test_save_poem_metadata(
     tmp_path,
     capsys,
-    corppa_test_config_defaults,
+    corppa_test_config,
     internetpoems_data_dir,
     chadwyck_healey_csv,
     otherpoems_metadata_df,
 ):
     # data fixtures should ensure that all the expected directories exist
     config_opts = config.get_config()
-    expected_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
+    expected_data_dir = pathlib.Path(config_opts["compiled_dataset"]["output_data_dir"])
 
     # add corpus id to other poems data frame and patch it to be returned
     otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
