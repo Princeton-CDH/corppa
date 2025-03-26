@@ -21,7 +21,9 @@ compile-dataset --m --poem -ppa
 """
 
 import argparse
+import gzip
 import pathlib
+import shutil
 import sys
 
 from corppa.config import get_config
@@ -63,9 +65,10 @@ def load_compilation_config():
         )
 
     # filenames where compiled data will be saved
-    compiled_excerpt_file = output_data_dir / "excerpts.csv.gz"
+    compiled_excerpt_file = output_data_dir / "excerpts.csv"
+    compressed_excerpt_file = output_data_dir / "excerpts.csv.gz"
     poem_metadata_file = output_data_dir / "poem_meta.csv"
-    ppa_metadata_file = output_data_dir / "ppa_work_meta.csv"
+    ppa_metadata_file = output_data_dir / "ppa_work_metadata.csv"
 
     # source directories
     try:
@@ -116,6 +119,7 @@ def load_compilation_config():
         # outputs
         "output_data_dir": output_data_dir,
         "compiled_excerpt_file": compiled_excerpt_file,
+        "compressed_excerpt_file": compressed_excerpt_file,
         "poem_metadata_file": poem_metadata_file,
         "ppa_metadata_file": ppa_metadata_file,
         # sources
@@ -136,8 +140,15 @@ def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
     # ]
 
 
-def save_ppa_metadata(input_file, output_file):
+def save_ppa_metadata(input_file: pathlib.Path, output_file: pathlib.Path):
     load_ppa_works_df(input_file).write_csv(output_file)
+
+
+def compress_file(uncompressed_file, compressed_file):
+    # FIXME: this is the example in the docs but does not seem to work 😬
+    with open(str(uncompressed_file), "rb") as inputfile:
+        with gzip.open(str(compress_file), "wb") as output_file:
+            shutil.copyfileobj(inputfile, output_file)
 
 
 def main():
@@ -167,18 +178,27 @@ def main():
     compile_opts = load_compilation_config()
 
     if compilation_steps is None or "merge" in compilation_steps:
-        print("#### Merging excerpts")
-        # find and merge excerpt source files into the compiled dataset file
+        print("## Merging excerpts")
+        # find excerpt source files to be included in the compiled dataset file
         excerpt_sources = get_excerpt_sources(compile_opts["source_excerpt_data"])
-        # TODO:  need to save as csv and THEN compress, polars doesn't do it for us
+        # merge into a single uncompressed csv
+        # (polars doesn't currently support writing directly to a csv.gz)
         merge_excerpt_files(excerpt_sources, compile_opts["compiled_excerpt_file"])
+        # compress the resulting file
+        print(
+            f"Compressing excerpt data... ({compile_opts['compiled_excerpt_file']} → {compile_opts['compressed_excerpt_file']})"
+        )
+        compress_file(
+            compile_opts["compiled_excerpt_file"],
+            compile_opts["compressed_excerpt_file"],
+        )
 
     if compilation_steps is None or "poem_metadata" in compilation_steps:
         print("\n## Compiling reference corpora metadata")
         save_poem_metadata(compile_opts["poem_metadata_file"])
 
     if compilation_steps is None or "ppa_metadata" in compilation_steps:
-        print("#### PPA work-level metadata")
+        print("\n## PPA work-level metadata")
         save_ppa_metadata(
             compile_opts["source_ppa_metadata"], compile_opts["ppa_metadata_file"]
         )
