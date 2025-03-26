@@ -196,6 +196,73 @@ def merge_excerpts(
     return output_df
 
 
+def merge_excerpt_files(input_files, output_file):
+    total_excerpts = 0
+    input_dfs = []
+
+    # load files and combine into a single excerpt dataframe
+    for input_file in input_files:
+        try:
+            input_dfs.append(load_excerpts_df(input_file))
+        except ValueError as err:
+            # if any input file does not have minimum required fields, bail out
+            print(err, file=sys.stderr)
+            sys.exit(-1)
+
+    # combine input dataframes with a "diagonal" concat, which aligns
+    # columns and fills in nulls for missing columns in any of the dataframes
+    # NOTE: very important to standardize columns so that extraneous input
+    # columns do not prevent duplicate excerpts from merging
+    excerpts = standardize_dataframe(pl.concat(input_dfs, how="diagonal"))
+    # get initial totals before any uniquifying or merging
+    total_excerpts = excerpts.height
+    # use unique to drop exact duplicates
+    excerpts = excerpts.unique()
+    initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
+    # output summary information about input data
+    print(
+        f"Loaded {total_excerpts:,} excerpts from {len(input_files)} files ({excerpts.height:,} unique; {initial_labeled_excerpts:,} labeled)."
+    )
+
+    # merge labeled + unlabeled excerpts AND duplicate labeled excerpts
+    # display progress bar & output summary information
+    excerpts = merge_excerpts(excerpts, disable_progress=False, verbose=True)
+    # standardize columns so we have all expected fields and no extras
+    excerpts = standardize_dataframe(excerpts)
+
+    # write the merged data to the requested output file
+    # (in future, support multiple formats - at least csv/jsonl)
+
+    # convert list fields for output to csv and reporting
+    excerpts = excerpts.with_columns(
+        detection_methods=pl.col("detection_methods")
+        .list.sort()
+        .list.join(MULTIVAL_DELIMITER),
+        identification_methods=pl.col("identification_methods")
+        .list.sort()
+        .list.join(MULTIVAL_DELIMITER),
+    )
+
+    labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
+
+    # summary information about the content and what as done
+    print(
+        f"\n{len(excerpts):,} excerpts after merging; {len(labeled_excerpts):,} labeled excerpts."
+    )
+    detectmethod_counts = excerpts["detection_methods"].value_counts()
+    idmethod_counts = labeled_excerpts["identification_methods"].value_counts()
+    print("Total by detection method:")
+    for row in detectmethod_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{row[0]}: {row[1]:,}")
+    print("Total by identification method:")
+    for row in idmethod_counts.iter_rows():
+        # row is a tuple of value, count
+        print(f"\t{row[0]}: {row[1]:,}")
+
+    excerpts.write_csv(output_file)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Merge excerpts with labeled excerpts or notes"
@@ -238,70 +305,7 @@ def main():
         )
         sys.exit(-1)
 
-    total_excerpts = 0
-    input_dfs = []
-
-    # load files and combine into a single excerpt dataframe
-    for input_file in args.input_files:
-        try:
-            input_dfs.append(load_excerpts_df(input_file))
-        except ValueError as err:
-            # if any input file does not have minimum required fields, bail out
-            print(err, file=sys.stderr)
-            sys.exit(-1)
-
-    # combine input dataframes with a "diagonal" concat, which aligns
-    # columns and fills in nulls for missing columns in any of the dataframes
-    # NOTE: very important to standardize columns so that extraneous input
-    # columns do not prevent duplicate excerpts from merging
-    excerpts = standardize_dataframe(pl.concat(input_dfs, how="diagonal"))
-    # get initial totals before any uniquifying or merging
-    total_excerpts = excerpts.height
-    # use unique to drop exact duplicates
-    excerpts = excerpts.unique()
-    initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
-    # output summary information about input data
-    print(
-        f"Loaded {total_excerpts:,} excerpts from {len(args.input_files)} files ({excerpts.height:,} unique; {initial_labeled_excerpts:,} labeled)."
-    )
-
-    # merge labeled + unlabeled excerpts AND duplicate labeled excerpts
-    # display progress bar & output summary information
-    excerpts = merge_excerpts(excerpts, disable_progress=False, verbose=True)
-    # standardize columns so we have all expected fields and no extras
-    excerpts = standardize_dataframe(excerpts)
-
-    # write the merged data to the requested output file
-    # (in future, support multiple formats - at least csv/jsonl)
-
-    # convert list fields for output to csv and reporting
-    excerpts = excerpts.with_columns(
-        detection_methods=pl.col("detection_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-        identification_methods=pl.col("identification_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-    )
-
-    labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
-
-    # summary information about the content and what as done
-    print(
-        f"\n{len(excerpts):,} excerpts after merging; {len(labeled_excerpts):,} labeled excerpts."
-    )
-    detectmethod_counts = excerpts["detection_methods"].value_counts()
-    idmethod_counts = labeled_excerpts["identification_methods"].value_counts()
-    print("Total by detection method:")
-    for row in detectmethod_counts.iter_rows():
-        # row is a tuple of value, count
-        print(f"\t{row[0]}: {row[1]:,}")
-    print("Total by identification method:")
-    for row in idmethod_counts.iter_rows():
-        # row is a tuple of value, count
-        print(f"\t{row[0]}: {row[1]:,}")
-
-    excerpts.write_csv(args.output)
+    merge_excerpt_files(args.input_files, args.output)
 
 
 if __name__ == "__main__":

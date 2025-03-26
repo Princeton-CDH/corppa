@@ -448,8 +448,6 @@ def test_save_poem_metadata(
     otherpoems_metadata_df,
 ):
     # data fixtures should ensure that all the expected directories exist
-    config_opts = config.get_config()
-    expected_data_dir = pathlib.Path(config_opts["compiled_dataset"]["output_data_dir"])
 
     # add corpus id to other poems data frame and patch it to be returned
     otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
@@ -458,27 +456,10 @@ def test_save_poem_metadata(
     with patch.object(
         OtherPoems, "get_metadata_df", return_value=otherpoems_metadata_df
     ):
-        # data dir does not exist
-        with pytest.raises(
-            ValueError,
-            match="Configuration error: compiled dataset path .* does not exist",
-        ):
-            save_poem_metadata()
-
-        # exists but not a directory
-        expected_data_dir.touch()
-        with pytest.raises(
-            ValueError,
-            match="Configuration error: compiled dataset path .* is not a directory",
-        ):
-            save_poem_metadata()
-
-        # valid directory - should create a csv file
-        expected_data_dir.unlink()
-        expected_data_dir.mkdir(parents=True)
-        save_poem_metadata()
-        expected_meta_file = expected_data_dir / "poem_meta.csv"
-        assert expected_meta_file.exists()
+        # create a path reference for the file we want to create
+        output_file = tmp_path / "poem_meta.csv"
+        save_poem_metadata(output_file)
+        assert output_file.exists()
         # check output
         captured = capsys.readouterr()
         # create vs replace
@@ -487,6 +468,6 @@ def test_save_poem_metadata(
         assert "6 poem metadata entries" in captured.out
 
         # run again when the file already exists
-        save_poem_metadata()
+        save_poem_metadata(output_file)
         captured = capsys.readouterr()
         assert "Replacing" in captured.out
