@@ -145,10 +145,12 @@ def save_ppa_metadata(input_file: pathlib.Path, output_file: pathlib.Path):
 
 
 def compress_file(uncompressed_file, compressed_file):
-    # FIXME: this is the example in the docs but does not seem to work 😬
     with open(str(uncompressed_file), "rb") as inputfile:
-        with gzip.open(str(compress_file), "wb") as output_file:
+        with gzip.open(str(compressed_file), "wb") as output_file:
             shutil.copyfileobj(inputfile, output_file)
+    # report sizes before/after? maybe return them?
+    # remove the uncompressed file
+    uncompressed_file.unlink()
 
 
 def main():
