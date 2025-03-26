@@ -48,9 +48,8 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           cd docs/build/coverage && \
-            if [[ $((`grep corpppa python.txt | grep -v 100 | wc -l`)) -eq 0 ]];\
-            then echo `grep corppa python.txt | grep -v 100 | wc -l` && echo "" && \
-            echo "Documentation coverage complete"; \
+            if [[ $((`grep corppa python.txt | grep -v 100 | wc -l`)) -eq 0 ]];\
+            then echo "Documentation coverage complete"; \
             else cat python.txt && exit 1; fi
 
       # When building on push to main, publish the built docs
