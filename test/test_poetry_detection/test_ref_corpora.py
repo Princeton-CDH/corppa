@@ -90,6 +90,34 @@ class TestBaseReferenceCorpus:
         ):
             BaseReferenceCorpus().get_config_opts()
 
+        # reference_corpora path relative but no ingredients dir
+        mock_get_config.return_value = {
+            "reference_corpora": {"base_dir": "ref-corpora"}
+        }
+        with pytest.raises(
+            ValueError,
+            match="Configuration error: 'reference_corpora.base_dir' is relative but 'data_ingredients_dir' is not configured",
+        ):
+            BaseReferenceCorpus().get_config_opts()
+
+    @patch("corppa.poetry_detection.ref_corpora.get_config")
+    def test_get_config_relative_dir(self, mock_get_config):
+        # reference_corpora path should be made relative to ingredients dir
+        ingredients_dir = "/tigerdata/cdh/prosody/ingredients"
+        ref_corpora_dir = "ref-corpora"
+        mock_get_config.return_value = {
+            "data_ingredients_dir": ingredients_dir,
+            "reference_corpora": {"base_dir": ref_corpora_dir},
+        }
+
+        test_ref_corpus = BaseReferenceCorpus()
+        test_ref_corpus.corpus_id = "test"
+        config_opts = test_ref_corpus.get_config_opts()
+        assert isinstance(config_opts["base_dir"], pathlib.Path)
+        assert (
+            config_opts["base_dir"] == pathlib.Path(ingredients_dir) / ref_corpora_dir
+        )
+
 
 # fixture data for internet poems
 INTERNETPOEMS_TEXTS = [
