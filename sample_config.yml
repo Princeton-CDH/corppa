@@ -14,7 +14,7 @@ compiled_dataset:
 reference_corpora:
   # default base_dir is data_ingredients_dir / ref-corpora
   # uncomment to override; assumed relative to data_ingredients_dir if not absolute
-  # base_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/ref-corpora/
+  # base_dir: ref-corpora/
 
   # Uses default paths relative to reference_corpora.base_dir
   # Uncomment to override if needed; if path is not absolute,
@@ -30,6 +30,6 @@ reference_corpora:
     # text_dir: "chadwyck-healey/chadwyck-healey_texts.tar.gz"
     # metadata_path: "chadwyck-healey/chadwyck-healey.csv"
   other:
-    # URL for google sheets as CSV or local path for cached copy
-    # TODO: change this from metadata_url
-    metadata_path:
+    # Provide a URL or local path to "Other Poems" metadata
+    # Use a URL if you want to pull directly from google sheets as CSV or
+    metadata_path: "https://docs.google.com/spreadsheets/d/..." or "/path/to/other.csv"

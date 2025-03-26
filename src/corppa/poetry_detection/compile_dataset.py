@@ -6,7 +6,7 @@ from corppa.poetry_detection.ref_corpora import save_poem_metadata
 
 def main():
     config_opts = get_config()
-    required_sections = ["poem_dataset", "reference_corpora"]
+    required_sections = ["compiled_dataset", "reference_corpora"]
     for section in required_sections:
         if section not in config_opts:
             print(f"Required configuration for '{section}' not found in config file")
