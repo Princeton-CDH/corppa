@@ -5,6 +5,8 @@ This repository is research software developed as part of the [Ends of Prosody](
 > [!WARNING]
 > This code is primarily for internal team use. Some portions of it may eventually be useful for participants of the [Ends of Prosody conference](https://cdh.princeton.edu/events/the-ends-of-prosody/) or be adapted or used elsewhere.
 
+For early experimental work on this project that is not included in the corppa python package, see https://github.com/Princeton-CDH/ppa-nlp-archive
+
 ## Basic Usage
 
 ### Installation
