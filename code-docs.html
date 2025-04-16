@@ -394,6 +394,27 @@ process while the latter is better suited for building a final excerpt dataset.<
 <h2>Poetry Detection<a class="headerlink" href="#poetry-detection" title="Link to this heading">¶</a></h2>
 <section id="scripts">
 <h3>Scripts<a class="headerlink" href="#scripts" title="Link to this heading">¶</a></h3>
+<section id="module-corppa.poetry_detection.refmatcha">
+<span id="refmatcha"></span><h4>refmatcha<a class="headerlink" href="#module-corppa.poetry_detection.refmatcha" title="Link to this heading">¶</a></h4>
+<p><em>🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵</em></p>
+<p>refmatcha identifies poem excerpts by matching against a local collection of
+reference poems.  It takes in a CSV of unidentified excerpts and outputs a CSV of
+labeled excerpts for those excerpts it is able to identify.
+By default, the output file is created in the same directory as the input
+with the same name plus <cite>_matches</cite>; i.e., given an input file <cite>round1_excerpts.csv</cite>,
+refmatcha will output identified excerpts to <cite>round1_excerpts_matches.csv</cite>.
+To override this, specify an output filename with <cite>–output</cite> or <cite>-o</cite>.</p>
+<p>Setup:</p>
+<p>Download and extract <cite>poetry-ref-data.tar.bz2</cite> from <cite>/tigerdata/cdh/prosody/poetry-detection</cite>.
+You should extract it in the same directory where you plan to run this script.
+The script will compile reference content into full-text and metadata parquet files
+on the first run; to force recompilation, rename or remove the parquet files.</p>
+<p>Example usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">refmatcha</span> <span class="n">round1_excerpts</span><span class="o">.</span><span class="n">csv</span>
+<span class="n">refmatcha</span> <span class="n">round1_excerpts</span><span class="o">.</span><span class="n">csv</span> <span class="o">--</span><span class="n">output</span> <span class="n">round1_matches</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
 <section id="module-corppa.poetry_detection.merge_excerpts">
 <span id="merge-excerpts"></span><h4>Merge excerpts<a class="headerlink" href="#module-corppa.poetry_detection.merge_excerpts" title="Link to this heading">¶</a></h4>
 <p>This script merges labeled and unlabeled poem excerpts, combining
@@ -437,27 +458,6 @@ span information will likely require more sophisticated merge logic</p></li>
 unlabeled excerpt with notes has multiple labels, only the first match
 will have combined notes</p></li>
 </ul>
-</section>
-<section id="module-corppa.poetry_detection.refmatcha">
-<span id="refmatcha"></span><h4>refmatcha<a class="headerlink" href="#module-corppa.poetry_detection.refmatcha" title="Link to this heading">¶</a></h4>
-<p><em>🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵</em></p>
-<p>refmatcha identifies poem excerpts by matching against a local collection of
-reference poems.  It takes in a CSV of unidentified excerpts and outputs a CSV of
-labeled excerpts for those excerpts it is able to identify.
-By default, the output file is created in the same directory as the input
-with the same name plus <cite>_matches</cite>; i.e., given an input file <cite>round1_excerpts.csv</cite>,
-refmatcha will output identified excerpts to <cite>round1_excerpts_matches.csv</cite>.
-To override this, specify an output filename with <cite>–output</cite> or <cite>-o</cite>.</p>
-<p>Setup:</p>
-<p>Download and extract <cite>poetry-ref-data.tar.bz2</cite> from <cite>/tigerdata/cdh/prosody/poetry-detection</cite>.
-You should extract it in the same directory where you plan to run this script.
-The script will compile reference content into full-text and metadata parquet files
-on the first run; to force recompilation, rename or remove the parquet files.</p>
-<p>Example usage:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">refmatcha</span> <span class="n">round1_excerpts</span><span class="o">.</span><span class="n">csv</span>
-<span class="n">refmatcha</span> <span class="n">round1_excerpts</span><span class="o">.</span><span class="n">csv</span> <span class="o">--</span><span class="n">output</span> <span class="n">round1_matches</span><span class="o">.</span><span class="n">csv</span>
-</pre></div>
-</div>
 </section>
 </section>
 </section>
