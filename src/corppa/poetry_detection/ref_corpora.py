@@ -273,23 +273,10 @@ def compile_metadata_df() -> pl.DataFrame:
     return poem_metadata
 
 
-def save_poem_metadata():
+def save_poem_metadata(output_file: pathlib.Path):
     """Generate and save compiled poetry metadata as a data file in the
     poem dataset.
     """
-    config_opts = get_config()
-    output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["output_data_dir"])
-    if not output_data_dir.exists():
-        raise ValueError(
-            f"Configuration error: compiled dataset path {output_data_dir} does not exist"
-        )
-    if not output_data_dir.is_dir():
-        raise ValueError(
-            f"Configuration error: compiled dataset path {output_data_dir} is not a directory"
-        )
-
-    output_file = output_data_dir / "poem_meta.csv"
-
     # check & report if the file already exists
     output_verb = "Creating"
     if output_file.exists():
