@@ -12,11 +12,11 @@ This repository is research software developed as part of the [Ends of Prosody](
 Use pip to install as a python package directly from GitHub.  Use a branch or tag name, e.g. `@develop` or `@0.1` if you need to install a specific version.
 
 ```sh
-pip install git+https://github.com/Princeton-CDH/ppa-nlp.git#egg=corppa
+pip install git+https://github.com/Princeton-CDH/corppa.git#egg=corppa
 ```
 or
 ```sh
-pip install git+https://github.com/Princeton-CDH/ppa-nlp.git@v0.1#egg=corppa
+pip install git+https://github.com/Princeton-CDH/corppa.git@v0.1#egg=corppa
 ```
 
 ### Scripts
