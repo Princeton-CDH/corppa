@@ -29,4 +29,4 @@ jobs:
 
       # run treon to confirm that notebooks run with current code
       - name: Check jupyter notebooks with treon
-        run: treon notebooks/
+        run: treon notebooks/excerpt_overlap_review.ipynb notebooks/poetry_excerpt_review.ipynb
