@@ -1,11 +1,34 @@
 # CHANGELOG
 
 ## 0.4.0
-- Renamed the repository from ppa-nlp to corppa; early experimental work not included
+- Now supports and tested against both Python 3.11 and 3.12
+### Documentation
+- Set up Sphinx documentation
+- Improved code documentation throughout the code
+- Notebooks by @WHaverals to provide orientation to PPA data and related corppa functionality
+### Annotation
+- Prodigy custom command recipe for reporting on annotation progress
+- `process_adjudication_data script` to process reviewed annotation data
+### Poetry Detection
+- code for parsing and reporting on tags/attributes in Chadwyck-Healey poetry corpus
+- dataclasses for `Span`, `Excerpt`, and `LabeledExcerpt`
+- evaluation code and documentation for comparing spans
+- `merge_excerpts` script for combining labeled and unlabeled poem excerpts
+- code for working with passim (preparing corpus input files, running passim, working with the results)
+- polars utility methods for working with excerpt data
+- `refmatcha` script for identifying excerpts based on matches in local reference corpora (preliminary)
+### Utilities
+- `collate_txt` script to create work-level text corpora files after running OCR
+- `gvision_ocr` script to use Google Vision API to run OCR on local images (optional install `corppa[ocr]`)
+- `build_text_corpus` script to convert a directory of text files into a JSONL corpus
+- method to get page number from a PPA image or text file name (currently HathiTrust only)
+- relative path generator of files with one or more extensions within a directory
+### Misc
+- Added GitHub Actions workflow to check Jupyter notebooks
+- Renamed the GitHub repository from `ppa-nlp` to `corppa`; early experimental work not included
   in this package preserved in https://github.com/Princeton-CDH/ppa-nlp-archive
-- Added GitHub Actions workflow to check jupyter notebooks
-- Setup sphinx documentation
-- Now supports both Python 3.11 and 3.12
+- Increased use of Python type hinting
+
 
 ## 0.3.0
 - New dependency: intspan
