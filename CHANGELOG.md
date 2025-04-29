@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.4.0
+- Renamed the repository from ppa-nlp to corppa; early experimental work not included
+  in this package preserved in https://github.com/Princeton-CDH/ppa-nlp-archive
+- Added GitHub Actions workflow to check jupyter notebooks
+- Setup sphinx documentation
+- Now supports both Python 3.11 and 3.12
+
 ## 0.3.0
 - New dependency: intspan
 ### Poetry Detection
