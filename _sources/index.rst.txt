@@ -17,3 +17,4 @@ documentation for details.
 
    Overview <readme.md>
    code-docs
+   eop-docs
