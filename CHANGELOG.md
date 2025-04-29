@@ -21,7 +21,7 @@
 - `collate_txt` script to create work-level text corpora files after running OCR
 - `gvision_ocr` script to use Google Vision API to run OCR on local images (optional install `corppa[ocr]`)
 - `build_text_corpus` script to convert a directory of text files into a JSONL corpus
-- method to get page number from a PPA image or text file name (currently HathiTrust only)
+- method to get page number from a PPA image or text file name (currently Gale/ECCO only)
 - relative path generator of files with one or more extensions within a directory
 ### Misc
 - Added GitHub Actions workflow to check Jupyter notebooks
