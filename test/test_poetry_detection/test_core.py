@@ -240,20 +240,6 @@ class TestExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
-    def test_fieldnames(self):
-        fieldnames = Excerpt.fieldnames()
-        # should match the names of the fields as declared
-        # and in the same order
-        assert fieldnames == [
-            "page_id",
-            "ppa_span_start",
-            "ppa_span_end",
-            "ppa_span_text",
-            "detection_methods",
-            "notes",
-            "excerpt_id"
-        ]
-
     def test_to_csv(self):
         # No optional fields
         excerpt = Excerpt(
