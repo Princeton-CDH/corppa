@@ -34,37 +34,112 @@
             
   <section id="ends-of-prosody-corppa-utilities">
 <h1>Ends of Prosody: corppa utilities<a class="headerlink" href="#ends-of-prosody-corppa-utilities" title="Link to this heading">¶</a></h1>
+<p>Documentation of <cite>corppa</cite> functionality for working with PPA text and image data
+that may be useful to Ends of Prosody participants.</p>
 <section id="filter-utility">
 <h2>Filter Utility<a class="headerlink" href="#filter-utility" title="Link to this heading">¶</a></h2>
-<p>Utility for filtering PPA full-text corpus to work with a subset of
-pages.</p>
-<dl class="simple">
-<dt>Currently supports the following types of filtering:</dt><dd><ul class="simple">
-<li><p>List of PPA work ids (as a text file, id-per-line)</p></li>
-<li><p>CSV file specifying work pages (by digital page number) (csv, page-per-line)</p></li>
-<li><p>Filtering by key-value pair for either inclusion or exclusion</p></li>
+<p>The <code class="docutils literal notranslate"><span class="pre">corppa-filter</span></code> command is a utility for filtering a PPA page-level text corpus.
+The PPA page-level text corpus is shared as a json lines (<cite>.jsonl</cite>) file, which may or may not be compressed (e.g., <cite>.jsonl.gz</cite>).
+It’s often useful to filter the full corpus to a subset of pages for a specific task.</p>
+<p>Currently, <code class="docutils literal notranslate"><span class="pre">corppa-filter</span></code> supports the following types of filtering:</p>
+<ul class="simple">
+<li><p>A list of PPA work ids (as a text file, id-per-line)</p></li>
+<li><p>A CSV file specifying work pages (by digital page number)(csv, page-per-line)</p></li>
+<li><p>A key-value pair for either inclusion or exclusion</p></li>
 </ul>
-</dd>
-</dl>
-<p>These filtering options can be combined, generally as a logical AND. Pages filtered
-by work ids or page numbers will be further filtered by the key-value logic. In cases
-where both work- and page-level filtering occurs, works not specified in the page
-filtering are included in full. Works that are specified in both will be limited to the
-pages specified in page-level filtering.</p>
-<p>Filter methods can be run via command-line or python code. Filtering takes a jsonl file
-(compressed or not) as input, and will produce a jsonl file (compressed or not) as output.
-The input and output filenames can use any extension supported by <code class="xref py py-mod docutils literal notranslate"><span class="pre">orjsonl</span></code>, with or
-without compression (e.g. <code class="docutils literal notranslate"><span class="pre">.jsonl</span></code>, <code class="docutils literal notranslate"><span class="pre">.jsonl.gz</span></code>, <code class="docutils literal notranslate"><span class="pre">.jsonl.bz2</span></code>).</p>
-<p>Example command line usages:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">output</span><span class="o">/</span><span class="n">ppa_subset_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">idfile</span> <span class="n">my_ids</span><span class="o">.</span><span class="n">txt</span>
-
-<span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">output</span><span class="o">/</span><span class="n">ppa_subset_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">pg</span><span class="o">-</span><span class="n">file</span> <span class="n">pages</span><span class="o">.</span><span class="n">csv</span> <span class="o">--</span><span class="n">include</span> <span class="n">key</span><span class="o">=</span><span class="n">value</span>
+<p>These filtering options can be combined, generally as a logical AND.
+Pages filtered by work ids or page numbers will be further filtered by the key-value logic.
+In cases where both work- and page-level filtering occurs, works not specified in teh page filtered are included in full.
+Works that are specified in both will be limited to the pages specified in page-level filtering.</p>
+<p><strong>NOTE:</strong> <em>PPA work identifiers</em> are based on source identifiers, i.e., the identifier from the original source (HathiTrust, Gale/ECCO, EEBO-TCP).
+In most cases the work identifier and the source identifier are the same, but <em>if you are working with any excerpted content the work id is NOT the same as the source identifier</em>.
+Excerpt ids are based on the combination of source identifier and the first original page included in the excerpt.
+In some cases PPA contains multiple excerpts from the same source, so this provides guaranteed unique work ids.</p>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h3>
+<p>To create a subset corpus with <em>all pages</em> for a set of specific volumes, create a text file with a list of <strong>PPA work identifiers</strong>, one id per line,
+and then run <code class="docutils literal notranslate"><span class="pre">corppa-filter</span></code> with the input file, desired output file, and path to id file.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">my_subset</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">idfile</span> <span class="n">my_ids</span><span class="o">.</span><span class="n">txt</span>
+</pre></div>
+</div>
+<p>To create a subset of <em>specific pages</em> from specific volumes, create a CSV file that includes fields <cite>work_id</cite> and <cite>page_num</cite>,
+and pass that to the filter script with the <cite>–pg-file</cite> option:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">my_subset</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">pg_file</span> <span class="n">my_work_pages</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>You can filter a page corpus to exclude or include pages based on exact-matches for attributes included in the jsonl data.
+For example, to get all pages with the original page number roman numeral ‘i’:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">i_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">include</span> <span class="n">label</span><span class="o">=</span><span class="n">i</span>
+</pre></div>
+</div>
+<p>Filters can also be combined; for example, to get the original page 10 for every volume from a list, you could specify a list of ids and the <cite>–include</cite> filter:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">corppa</span><span class="o">-</span><span class="nb">filter</span> <span class="n">ppa_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">my_subset_page10</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">idfile</span> <span class="n">my_ids</span><span class="o">.</span><span class="n">txt</span> <span class="o">--</span><span class="n">include</span> <span class="n">label</span><span class="o">=</span><span class="mi">10</span>
 </pre></div>
 </div>
 </section>
-<section id="path-utilities">
-<h2>Path Utilities<a class="headerlink" href="#path-utilities" title="Link to this heading">¶</a></h2>
-<p>General-purpose methods for working with paths, PPA identifiers, and directories</p>
+</section>
+<section id="ppa-identifier-utilities">
+<h2>PPA Identifier Utilities<a class="headerlink" href="#ppa-identifier-utilities" title="Link to this heading">¶</a></h2>
+<p>Here are some utility functions that may be useful when working with PPA work and volume identifiers.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_volume_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">work_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span></dt>
+<dd><p>Extract volume id from PPA work id</p>
+<ul class="simple">
+<li><p>For full works, volume ids and work ids are the same.</p></li>
+<li><p>For excerpts, the work id is composed of the prefix followed by “-p” and
+the starting page of the excerpt.</p></li>
+</ul>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_ppa_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vol_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span></dt>
+<dd><p>For a given volume id, return the corresponding source.
+Assume:
+* Gale volume ids begin with <code class="docutils literal notranslate"><span class="pre">&quot;CW0&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;CB0&quot;</span></code>
+* EEBO-TCP volume ids begin with <code class="docutils literal notranslate"><span class="pre">A</span></code>
+* Hathitrust volume ids contain a <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">encode_htid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">htid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span></dt>
+<dd><p>Returns the “clean” version of a HathiTrust volume identifier with the form:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">library</span> <span class="nb">id</span><span class="p">]</span><span class="o">.</span><span class="p">[</span><span class="n">volume</span> <span class="nb">id</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Specifically, the volume-portion of the id undergoes the following
+character replacements:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;:&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;+&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;=&quot;</span><span class="p">,</span> <span class="s2">&quot;.&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;,&quot;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">decode_htid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">encoded_htid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span></dt>
+<dd><p>Return original HathiTrust volume identifier from encoded version:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">library</span> <span class="nb">id</span><span class="p">]</span><span class="o">.</span><span class="p">[</span><span class="n">encoded</span> <span class="n">volume</span> <span class="nb">id</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Specifically, the volume-portion of the id undergoes the following
+character replacements:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;+&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="s2">&quot;=&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="s2">&quot;,&quot;</span> <span class="o">--&gt;</span> <span class="s2">&quot;.&quot;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+<section id="image-path-utilities">
+<h2>Image Path Utilities<a class="headerlink" href="#image-path-utilities" title="Link to this heading">¶</a></h2>
+<p>Here are some utility functions that may be useful when working with the Gale/ECCO page images.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_vol_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vol_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a></span></span></dt>
+<dd><p>Returns the volume directory (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pathlib.Path</span></code></a>) for the specified volume (<code class="docutils literal notranslate"><span class="pre">vol_id</span></code>)</p>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py">
 <span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_stub_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">vol_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a></span></span></dt>
@@ -84,8 +159,11 @@ identifier and (2) every third character of the encoded volume identifier.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py">
-<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_vol_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vol_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a></span></span></dt>
-<dd><p>Returns the volume directory (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pathlib.Path</span></code></a>) for the specified volume (<code class="docutils literal notranslate"><span class="pre">vol_id</span></code>)</p>
+<span class="sig-prename descclassname"><span class="pre">corppa.utils.path_utils.</span></span><span class="sig-name descname"><span class="pre">get_page_number</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pagefile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></span></span></dt>
+<dd><p>Extract and return the page number from the filename for page-level
+content (e.g., image or text). Returns the page number as a string
+with leading zeros. (Note: logic is currently
+specific to Gale/ECCO file naming conventions.)</p>
 </dd></dl>
 
 </section>
@@ -120,10 +198,12 @@ identifier and (2) every third character of the encoded volume identifier.</p>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="readme.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dev-notes.html">Developer Notes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code-docs.html">Code Documentation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Ends of Prosody: corppa utilities</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#filter-utility">Filter Utility</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#path-utilities">Path Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ppa-identifier-utilities">PPA Identifier Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#image-path-utilities">Image Path Utilities</a></li>
 </ul>
 </li>
 </ul>

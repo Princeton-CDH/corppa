@@ -14,7 +14,7 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Code Documentation" href="code-docs.html" />
+    <link rel="next" title="Developer Notes" href="dev-notes.html" />
     <link rel="prev" title="corppa documentation" href="index.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -36,10 +36,12 @@
   <section id="corppa">
 <h1>corppa<a class="headerlink" href="#corppa" title="Link to this heading">¶</a></h1>
 <p>This repository is research software developed as part of the <a class="reference external" href="https://cdh.princeton.edu/projects/the-ends-of-prosody/">Ends of Prosody</a>, which is associated with the <a class="reference external" href="https://prosody.princeton.edu/">Princeton Prosody Archive</a> (PPA). This software is particularly focused on research and work related to PPA full-text and page image corpora.</p>
-<blockquote>
-<div><p>[!WARNING]
-This code is primarily for internal team use. Some portions of it may eventually be useful for participants of the <a class="reference external" href="https://cdh.princeton.edu/events/the-ends-of-prosody/">Ends of Prosody conference</a> or be adapted or used elsewhere.</p>
-</div></blockquote>
+<p>Documentation for this package is available at <a class="reference external" href="https://princeton-cdh.github.io/corppa/">https://princeton-cdh.github.io/corppa/</a>.</p>
+<p><strong>WARNING:</strong> This code is primarily for internal team use.
+Specific portions that may be useful are included in the
+<a class="reference external" href="https://princeton-cdh.github.io/corppa/eop-docs.html">Ends of Prosody utilities</a> documentation
+which was created for participates of the <a class="reference external" href="https://cdh.princeton.edu/events/the-ends-of-prosody/">Ends of Prosody</a>
+conference.</p>
 <section id="basic-usage">
 <h2>Basic Usage<a class="headerlink" href="#basic-usage" title="Link to this heading">¶</a></h2>
 <section id="installation">
@@ -55,53 +57,10 @@ This code is primarily for internal team use. Some portions of it may eventually
 </section>
 <section id="scripts">
 <h3>Scripts<a class="headerlink" href="#scripts" title="Link to this heading">¶</a></h3>
-<p>Installing <code class="docutils literal notranslate"><span class="pre">corppa</span></code> currently provides access to two command line scripts, for filtering a PPA page-level corpus or for generating OCR text for images using Google Vision API. These can be run as <code class="docutils literal notranslate"><span class="pre">corppa-filter</span></code> and <code class="docutils literal notranslate"><span class="pre">corppa-ocr</span></code> respectively.</p>
-<section id="filtering-ppa-page-text-corpus">
-<h4>Filtering PPA page-text corpus<a class="headerlink" href="#filtering-ppa-page-text-corpus" title="Link to this heading">¶</a></h4>
-<p>The PPA page-level text corpus is shared as a json lines (<code class="docutils literal notranslate"><span class="pre">.jsonl</span></code>) file, which may or may not be compressed (e.g., <code class="docutils literal notranslate"><span class="pre">.jsonl.gz</span></code>). It’s often useful to filter the full corpus to a subset of pages for a specific task, e.g. to analyze content from specific volumes or select particular pages for annotation.</p>
-<p>To create a subset corpus with <em>all pages</em> for a set of specific volumes, create a text file with a list of <strong>PPA work identifiers</strong>, one id per line, and then run the filter script with the input file, desired output file, and path to id file.</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>corppa-filter<span class="w"> </span>ppa_pages.jsonl<span class="w"> </span>my_subset.jsonl<span class="w"> </span>--idfile<span class="w"> </span>my_ids.txt
-</pre></div>
-</div>
-<blockquote>
-<div><p>[!NOTE]
-<strong>PPA work identifiers</strong> are based on source identifiers, i.e., the identifier from the original source (HathiTrust, Gale/ECCO, EEBO-TCP). In most cases the work identifier and the source identifier are the same, but <em>if you are working with any excerpted content the work id is NOT the same as the source identifier</em>. Excerpt ids are based on the combination of source identifier and the first original page included in the excerpt. In some cases PPA contains multiple excerpts from the same source, so this provides guaranteed unique work ids.</p>
-</div></blockquote>
-<p>To create a subset of <em>specific pages</em> from specific volumes, create a CSV file that includes fields <code class="docutils literal notranslate"><span class="pre">work_id</span></code> and <code class="docutils literal notranslate"><span class="pre">page_num</span></code>, and pass that to the filter script with the <code class="docutils literal notranslate"><span class="pre">--pg-file</span></code> option:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>corppa-filter<span class="w"> </span>ppa_pages.jsonl<span class="w"> </span>my_subset.jsonl<span class="w"> </span>--pg_file<span class="w"> </span>my_work_pages.csv
-</pre></div>
-</div>
-<p>You can filter a page corpus to exclude or include pages based on exact-matches for attributes included in the jsonl data. For example, to get all pages with the original page number roman numeral ‘i’:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>corppa-filter<span class="w"> </span>ppa_pages.jsonl<span class="w"> </span>i_pages.jsonl<span class="w"> </span>--include<span class="w"> </span><span class="nv">label</span><span class="o">=</span>i
-</pre></div>
-</div>
-<p>Filters can also be combined; for example, to get the original page 10 for every volume from a list, you could specify a list of ids and the <code class="docutils literal notranslate"><span class="pre">--include</span></code> filter:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>corppa-filter<span class="w"> </span>ppa_pages.jsonl<span class="w"> </span>my_subset_page10.jsonl<span class="w"> </span>--idfile<span class="w"> </span>my_ids.txt<span class="w"> </span>--include<span class="w"> </span><span class="nv">label</span><span class="o">=</span><span class="m">10</span>
-</pre></div>
-</div>
-</section>
-</section>
-</section>
-<section id="development-instructions">
-<h2>Development instructions<a class="headerlink" href="#development-instructions" title="Link to this heading">¶</a></h2>
-<p>This repo uses <a class="reference external" href="https://github.com/nvie/gitflow">git-flow</a> branching conventions; <strong>main</strong> contains the most recent release, and work in progress will be on the <strong>develop</strong> branch. Pull requests for new features should be made against develop.</p>
-<section id="developer-setup-and-installation">
-<h3>Developer setup and installation<a class="headerlink" href="#developer-setup-and-installation" title="Link to this heading">¶</a></h3>
+<p>Installing <code class="docutils literal notranslate"><span class="pre">corppa</span></code> currently provides access to two command line scripts:</p>
 <ul class="simple">
-<li><p><strong>Recommended:</strong> create a python virtual environment with your tool of choice (virtualenv, conda, etc); use python 3.12 or higher</p></li>
-<li><p>Install the local checked out version of this package in editable mode (<code class="docutils literal notranslate"><span class="pre">-e</span></code>), including all python dependencies and optional dependencies for development and testing:</p></li>
-</ul>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
-</pre></div>
-</div>
-<ul class="simple">
-<li><p>This repository uses <a class="reference external" href="https://pre-commit.com/">pre-commit</a> for python code linting and consistent formatting. Run this command to initialize and install pre-commit hooks:</p></li>
-</ul>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pre-commit<span class="w"> </span>install
-</pre></div>
-</div>
-<ul class="simple">
-<li><p>Copy <code class="docutils literal notranslate"><span class="pre">sample_config.yml</span></code> to <code class="docutils literal notranslate"><span class="pre">corppa_config.yml</span></code> and edit paths and configurations for your local environment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corppa-filter</span></code>: For filtering a PPA page-level corpus. Corresponds to <code class="docutils literal notranslate"><span class="pre">corppa.ocr.gvision_ocr.py</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corppa-ocr</span></code>: For generating OCR text for images using Google Vision API. Corresponds to <code class="docutils literal notranslate"><span class="pre">corppa.utils.filter.py</span></code>.</p></li>
 </ul>
 </section>
 </section>
@@ -109,27 +68,6 @@ This code is primarily for internal team use. Some portions of it may eventually
 <h2>Experimental Scripts<a class="headerlink" href="#experimental-scripts" title="Link to this heading">¶</a></h2>
 <p>Experimental scripts associated with <code class="docutils literal notranslate"><span class="pre">corppa</span></code> are located within the <code class="docutils literal notranslate"><span class="pre">scripts</span></code> directory.
 See this directory’s README for more detail.</p>
-</section>
-<section id="documentation">
-<h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">¶</a></h2>
-<p>Documentation is generated by using <a class="reference external" href="https://www.sphinx-doc.org/en/master/">sphinx</a>. To
-generate the documentation, first install the development requirements.</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
-</pre></div>
-</div>
-<p>Then the documentation can be built using the customized makefile in the <code class="docutils literal notranslate"><span class="pre">docs</span></code> directory.</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>docs
-make<span class="w"> </span>html
-</pre></div>
-</div>
-<p>To check documentation coverage, run:</p>
-<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>html<span class="w"> </span>-b<span class="w"> </span>coverage
-</pre></div>
-</div>
-<p>This will create a file under <code class="docutils literal notranslate"><span class="pre">_build/coverage/python.txt</span></code> listing any Python classes or methods
-that are not documented. Note that sphinx can only report on code coverage for files that are
-included in the documentation. If a new Python file is created but not included in the sphinx
-documentation, it will be omitted.</p>
 </section>
 </section>
 
@@ -163,11 +101,10 @@ documentation, it will be omitted.</p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#basic-usage">Basic Usage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#development-instructions">Development instructions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#experimental-scripts">Experimental Scripts</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#documentation">Documentation</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="dev-notes.html">Developer Notes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="code-docs.html">Code Documentation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="eop-docs.html">Ends of Prosody: corppa utilities</a></li>
 </ul>
@@ -177,7 +114,7 @@ documentation, it will be omitted.</p>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="index.html" title="previous chapter">corppa documentation</a></li>
-      <li>Next: <a href="code-docs.html" title="next chapter">Code Documentation</a></li>
+      <li>Next: <a href="dev-notes.html" title="next chapter">Developer Notes</a></li>
   </ul></li>
 </ul>
 </div>

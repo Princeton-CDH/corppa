@@ -16,5 +16,6 @@ documentation for details.
    :caption: Contents:
 
    Overview <readme.md>
+   Developer Notes <dev-notes.md>
    code-docs
    eop-docs
