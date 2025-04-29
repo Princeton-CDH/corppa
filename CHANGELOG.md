@@ -8,7 +8,7 @@
 - Notebooks by @WHaverals to provide orientation to PPA data and related corppa functionality
 ### Annotation
 - Prodigy custom command recipe for reporting on annotation progress
-- `process_adjudication_data script` to process reviewed annotation data
+- `process_adjudication_data` script to process reviewed annotation data
 ### Poetry Detection
 - code for parsing and reporting on tags/attributes in Chadwyck-Healey poetry corpus
 - dataclasses for `Span`, `Excerpt`, and `LabeledExcerpt`
