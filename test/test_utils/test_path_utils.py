@@ -50,6 +50,7 @@ def test_get_ppa_source():
     assert get_ppa_source("CB0127060085") == "Gale"
     assert get_ppa_source("CW0116527364") == "Gale"
     assert get_ppa_source("mdp.39015010540071") == "HathiTrust"
+    assert get_ppa_source("A01224") == "EEBO-TCP"
     with pytest.raises(ValueError, match="Can't identify source for volume 'xxx0000'"):
         get_ppa_source("xxx0000")
 

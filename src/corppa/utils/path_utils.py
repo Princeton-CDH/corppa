@@ -56,11 +56,14 @@ def get_ppa_source(vol_id: str) -> str:
     For a given volume id, return the corresponding source.
     Assume:
     * Gale volume ids begin with ``"CW0"`` or ``"CB0"``
+    * EEBO-TCP volume ids begin with ``A``
     * Hathitrust volume ids contain a ``"."``
     """
     # Note that this is fairly brittle.
     if vol_id.startswith("CW0") or vol_id.startswith("CB0"):
         return "Gale"
+    elif vol_id.startswith("A"):
+        return "EEBO-TCP"
     elif "." in vol_id:
         return "HathiTrust"
     else:
