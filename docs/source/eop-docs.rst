@@ -1,5 +1,7 @@
 Ends of Prosody: corppa utilities
 #################################
+Documentation of `corppa` functionality for working with PPA text and image data
+that may be useful to Ends of Prosody participants.
 
 Filter Utility
 --------------
@@ -45,8 +47,8 @@ Filters can also be combined; for example, to get the original page 10 for every
   corppa-filter ppa_pages.jsonl my_subset_page10.jsonl --idfile my_ids.txt --include label=10
 
 
-PPA ID Utilities
---------------------
+PPA Identifier Utilities
+------------------------
 
 Here are some utility functions that may be useful when working with PPA work and volume identifiers.
 

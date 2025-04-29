@@ -4,9 +4,11 @@ This repository is research software developed as part of the [Ends of Prosody](
 
 Documentation for this package is available at <https://princeton-cdh.github.io/corppa/>.
 
-**WARNING:** This code is primarily for internal team use. The portions that may be useful for participants of the 
-[Ends of Prosody conference](https://cdh.princeton.edu/events/the-ends-of-prosody/) are documented
-[here](https://princeton-cdh.github.io/corppa/eop-docs.html).
+**WARNING:** This code is primarily for internal team use.
+Specific portions that may be useful are included in the
+[Ends of Prosody utilities](https://princeton-cdh.github.io/corppa/eop-docs.html) documentation
+which was created for participates of the [Ends of Prosody](https://cdh.princeton.edu/events/the-ends-of-prosody/)
+conference.
 
 ## Basic Usage
 
