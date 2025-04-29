@@ -4,6 +4,16 @@ These Jupyter notebooks are provided with `corppa` to provide preliminary
 access and structural analysis of the poetry excerpt dataset generated 
 in part by this codebase.
 
+## PPA tutorial notebooks
+
+These notebooks provide an intro and overview of the PPA corpus
+and relevant corppa utilities.
+
+- [00_environment_check.ipynb](00_environment_check.ipynb)
+- [01_corpus_overview.ipynb](01_corpus_overview.ipynb)
+- [02_filtering_pages.ipynb](02_filtering_pages.ipynb)
+
+
 ## Setup
 
 To run locally, you need a python environment with corppa and related
@@ -31,7 +41,7 @@ If you want to run treon locally, you can specify a directory or a specific path
 ```console
 treon notebooks/
 treon notebooks/poetry_excerpt_review.ipynb
-``
+``1
 
 Be aware that running treon locally will use whatever poem dataset path
 is configured in your local `corppa_config.yml` config file.
