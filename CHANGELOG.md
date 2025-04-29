@@ -22,7 +22,7 @@
 - `gvision_ocr` script to use Google Vision API to run OCR on local images (optional install `corppa[ocr]`)
 - `build_text_corpus` script to convert a directory of text files into a JSONL corpus
 - New utility function for extracting the page number from the filename of page-level content (e.g., text or image) (currently Gale/ECCO only)
-- relative path generator of files with one or more extensions within a directory
+- New utility function that returns a relative path generator of files with one or more extensions under a specified base directory
 ### Misc
 - Added GitHub Actions workflow to check Jupyter notebooks
 - Renamed the GitHub repository from `ppa-nlp` to `corppa`; early experimental work not included
