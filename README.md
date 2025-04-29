@@ -54,6 +54,13 @@ Filters can also be combined; for example, to get the original page 10 for every
 corppa-filter ppa_pages.jsonl my_subset_page10.jsonl --idfile my_ids.txt --include label=10
 ```
 
+## License
+
+This project is licensed under the [Apache 2.0 License](LICENSE).
+
+(c)2025 Trustees of Princeton University. Permission granted for non-commercial
+distribution online under a standard Open Source license.
+
 
 ## Development instructions
 
