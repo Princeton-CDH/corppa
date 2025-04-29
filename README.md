@@ -30,6 +30,12 @@ Installing `corppa` currently provides access to two command line scripts:
 * `corppa-filter`: For filtering a PPA page-level corpus. Corresponds to `corppa.ocr.gvision_ocr.py`.
 * `corppa-ocr`: For generating OCR text for images using Google Vision API. Corresponds to `corppa.utils.filter.py`.
 
+## License
+
+This project is licensed under the [Apache 2.0 License](LICENSE).
+
+(c)2025 Trustees of Princeton University. Permission granted for non-commercial
+distribution online under a standard Open Source license.
 
 ## Experimental Scripts
 
