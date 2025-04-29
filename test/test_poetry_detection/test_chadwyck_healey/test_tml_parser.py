@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 import pytest
 
 from corppa.poetry_detection.chadwyck_healey.tml_parser import (

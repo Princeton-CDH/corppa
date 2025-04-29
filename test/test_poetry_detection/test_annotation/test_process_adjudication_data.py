@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 import sys
 from inspect import isgenerator
 from unittest.mock import MagicMock, call, patch
