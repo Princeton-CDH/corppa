@@ -10,16 +10,16 @@
 - Prodigy custom command recipe for reporting on annotation progress
 - `process_adjudication_data` script to process reviewed annotation data
 ### Poetry Detection
-- code for parsing and reporting on tags/attributes in Chadwyck-Healey poetry corpus
-- dataclasses for `Span`, `Excerpt`, and `LabeledExcerpt`
-- evaluation code and documentation for comparing spans
+- Code for parsing and reporting on tags/attributes in Chadwyck-Healey poetry corpus
+- New `dataclasses` for `Span`, `Excerpt`, and `LabeledExcerpt`
+- Evaluation code and documentation for comparing spans
 - `merge_excerpts` script for combining labeled and unlabeled poem excerpts
-- code for working with passim (preparing corpus input files, running passim, working with the results)
-- polars utility methods for working with excerpt data
+- Code for working with passim (preparing corpus input files, running passim, working with the results)
+- Polars utility methods for working with excerpt data
 - `refmatcha` script for identifying excerpts based on matches in local reference corpora (preliminary)
+- Preliminary Jupyter notebooks for reviewing found poetry excerpt data
 ### Utilities
 - `collate_txt` script to create work-level text corpora files after running OCR
-- `gvision_ocr` script to use Google Vision API to run OCR on local images (optional install `corppa[ocr]`)
 - `build_text_corpus` script to convert a directory of text files into a JSONL corpus
 - New utility function for extracting the page number from the filename of page-level content (e.g., text or image) (currently Gale/ECCO only)
 - New utility function that returns a relative path generator of files with one or more extensions under a specified base directory
@@ -28,7 +28,7 @@
 - Renamed the GitHub repository from `ppa-nlp` to `corppa`; early experimental work not included
   in this package preserved in https://github.com/Princeton-CDH/ppa-nlp-archive
 - Increased use of Python type hinting
-
+- Configured codecov with separate reporting for tests and whole project, with different targets for coverage
 
 ## 0.3.0
 - New dependency: intspan
