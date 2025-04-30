@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Script to turn directories containing multiple text files into a single ``JSON``
 file containing text contents of all files with page numbers based

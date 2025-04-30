@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 
 *🎶🍵 matcha matcha poem / This script is gon / na find your poems / matcha matcha poem 🎶🍵*

@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 This script is used to prepare the page-level PPA corpus data for use in
 Prodigy annotation. It adds work-level metadata (title, author, year) in the
