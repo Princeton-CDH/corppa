@@ -1,0 +1,32 @@
+name: Check jupyter notebooks
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: '**/pyproject.toml'
+
+      - name: Install package with notebook dependencies
+        run: pip install -e ".[notebooks]"
+
+      # copy notebook config file to current directory
+      - name: Check jupyter notebooks with treon
+        run: cp notebooks/sample_data/test_config.yml ./corppa_config.yml
+
+      # run treon to confirm that notebooks run with current code
+      - name: Check jupyter notebooks with treon
+        run: treon notebooks/excerpt_overlap_review.ipynb notebooks/poetry_excerpt_review.ipynb

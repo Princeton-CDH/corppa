@@ -1,0 +1,32 @@
+page_id,ppa_span_start,ppa_span_end,ppa_span_text,detection_methods,notes,excerpt_id,poem_id,ref_corpus,ref_span_start,ref_span_end,ref_span_text,identification_methods
+nyp.33433082515796.00000542,419,525," 'Deep calleth
+unto deep at the noise of thy water-spouts; all thy waves and thy
+billows are gone over me.",passim,passim: 103 char matches,p@419:525,King-James-Bible_Psalms,internet_poems,63779,63883, Deep calleth unto deep at the noise of thy waterspouts: all thy waves and thy billows are gone over me.,passim
+mdp.39015025887855.00000522,8960,9042,"Shak.
+I think myself in better plight for a lender than
+Shak.
+you are.
+Sometimes a",passim,passim: 64 char matches,p@8960:9042,William-Shakespeare_The-Merry-Wives-of-Windsor,internet_poems,43963,44032,"stand I think myself in better plight for a lender than you are, the ",passim
+hvd.hwdqtw.00000477,1642,1694,"printed, Pray them all of pardon both erly and
+late.",passim,passim: 47 char matches,p@1642:1694,Z300286441,chadwyck-healey,250585,250636,reate; Praye them all of pardon both erly and late.,passim
+nyp.33433069256851.00000877,2316,2475,"Tell me, | captive, | why in | anguish
+Foes have dragged thee | here to | dwell,
+Where poor | Christians, as they | languish,
+Hear no sound of | sabbath | bell",adjudication,refmatcha: single match on text,a@2316:2475,Z300624604,chadwyck-healey,385,522,"Tell me captive why in anguish
+Foes have dragged thee here to dwell 
+Where poor Christians as they languish
+Hear no sound of Sabbath bell",refmatcha
+nyp.33433069256851.00000877,2316,2475,"Tell me, | captive, | why in | anguish
+Foes have dragged thee | here to | dwell,
+Where poor | Christians, as they | languish,
+Hear no sound of | sabbath | bell",adjudication,refmatcha: single match on text,a@2316:2475,Thomas-Campbell_The-Turkish-Lady,internet_poems,385,522,"Tell me captive why in anguish
+Foes have dragged thee here to dwell 
+Where poor Christians as they languish
+Hear no sound of Sabbath bell",manual
+njp.32101072898503.00000304,373,498,"Break,
+-
+-
+Break, Break
+On thy cold gray stones, o sea!
+And I would that my tongue could utter
+The thoughts that arise in me.",adjudication,"",a@373:498,Alfred-Lord-Tennyson_Break-Break-Break,internet_poems,,,,manual

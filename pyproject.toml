@@ -5,43 +5,92 @@ build-backend = "hatchling.build"
 [project]
 name = "corppa"
 description = "Utilities for working with Princeton Prosody Archive full-text corpus"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 readme = "README.md"
-# license TBD
-#license.file = "LICENSE"
-#license = {text = "Apache-2"} 
+license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.11",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Information Analysis",
-    "Topic :: Text Processing",    
+    "Topic :: Text Processing",
     "Topic :: Utilities",
 ]
 dynamic = ["version"]
 dependencies = [
+  "ftfy",
 	"intspan",
 	"orjsonl",
 	"tqdm",
+  "biopython",
+  "pyyaml",
+  "polars",
 ]
 
 [project.optional-dependencies]
+type-checking = [
+  "mypy",
+  "types-tqdm",
+]
+doc = ["sphinx", "myst-parser"]
+ocr = ["google-cloud-vision"]
+poem_id = [
+  "pyarrow",
+  "unidecode",
+  "rapidfuzz",
+  # Conditional
+  'more-itertools; python_version < "3.12"',
+]
+passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
+chadwyck_healey = ["bs4", "lxml"]
+notebooks = ["jupyterlab", "itables", "treon", "polars"]
+dev = [
+  "pre-commit",
+  "ruff",
+  "corppa[type-checking]",
+  "corppa[test]",
+  "corppa[ocr]",
+  "corppa[poem_id]",
+  "corppa[passim]",
+  "corppa[chadwyck_healey]",
+  "corppa[doc]",
+  "corppa[notebooks]",
+]
 test = [
   "pytest",
-  "pytest-cov"
+  "pytest-cov",
+  "corppa[poem_id]",
+  "corppa[chadwyck_healey]",
+  "corppa[notebooks]",  
 ]
-ocr = ["google-cloud-vision"]
-dev = ["pre-commit", "corppa[test]", "corppa[ocr]"]
 
 [project.scripts]
 corppa-filter = "corppa.utils.filter:main"
 corppa-ocr = "corppa.ocr.gvision_ocr:main"
+collate-txt = "corppa.ocr.collate_txt:main"
+refmatcha = "corppa.poetry_detection.refmatcha:main"
+merge-excerpts = "corppa.poetry_detection.merge_excerpts:main"
 
 [tool.hatch.version]
 path = "src/corppa/__init__.py"
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
 [tool.ruff]
 # configure src path so ruff import fixes can identify local imports
 src = ["src"]
+
+[tool.hatch.metadata]
+# so passim can be installed from GitHub (i.e., direct reference)
+allow-direct-references = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "# pragma: no cover",
+    # skip command-line configuration for main method on scripts
+    "if __name__ == .__main__.:"
+]

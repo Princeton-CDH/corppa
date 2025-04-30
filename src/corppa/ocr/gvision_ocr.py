@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 
 """
 This script OCRs images using the Google Vision API.
@@ -9,53 +12,33 @@ import io
 import os
 import pathlib
 import sys
+from collections.abc import Iterable
+from typing import cast
 
 from tqdm import tqdm
 
-from corppa.utils.path_utils import get_ppa_source, get_vol_dir
+from corppa.utils.path_utils import find_relative_paths, get_ppa_source, get_vol_dir
 
 # Attempt to import Google Cloud Vision Python Client
 try:
     from google.cloud import vision as google_vision
 except ImportError:
-    google_vision = None
+    google_vision = None  # type: ignore
 
 # Workaround (hopefully temporary) to surpress some logging printed to stderr
 os.environ["GRPC_VERBOSITY"] = "NONE"
 
 
-def image_relpath_generator(image_dir, exts, follow_symlinks=True):
-    """
-    This generator method finds all images in image_dir with file extensions
-    in exts (case insensitive). For each of these images, the method yields
-    the relative path with respect to image_dir.
-
-    For example, if image_dir = "a/b/c/images" and there are image files at the
-    following paths: "a/b/c/images/alpha.jpg", "a/b/c/images/d/beta.jpg"
-    The generate will produce these two items: "alpha.jpg" and "d/beta.jpg"
-    """
-    # Create lowercase extension set from passed in exts
-    ext_set = {ext.lower() for ext in exts}
-
-    # Using pathlib.walk over glob because (1) it allows us to find files with
-    # multiple extensions in a single walk of the directory and (2) lets us
-    # leverage additional functionality of pathlib.
-    for dirpath, dirs, files in image_dir.walk(follow_symlinks=follow_symlinks):
-        # Check the files in walked directory
-        for file in files:
-            ext = os.path.splitext(file)[1]
-            if ext.lower() in ext_set:
-                filepath = dirpath.joinpath(file)
-                yield filepath.relative_to(image_dir)
-        # For future walking, remove hidden directories
-        dirs[:] = [d for d in dirs if d[0] != "."]
-
-
-def ocr_image_via_gvision(gvision_client, input_image, out_txt, out_json):
+def ocr_image_via_gvision(
+    gvision_client: "google_vision.ImageAnnotatorClient",
+    input_image: pathlib.Path,
+    out_txt: pathlib.Path,
+    out_json: pathlib.Path,
+) -> None:
     """
     Perform OCR for input image using the Google Cloud Vision API via the provided client.
-    The plaintext output and json response of the OCR call are written to out_txt and
-    out_json paths respectively.
+    The plaintext output and json response of the OCR call are written to ``out_txt`` and
+    ``out_json`` paths respectively.
     """
     # TODO: Clean up code duplication. This check is needed, since this method relies on
     #       both an existing client as well as API calls directly.
@@ -93,7 +76,13 @@ def ocr_image_via_gvision(gvision_client, input_image, out_txt, out_json):
             )
 
 
-def ocr_images(in_dir, out_dir, exts, ocr_limit=0, show_progress=True):
+def ocr_images(
+    in_dir: pathlib.Path,
+    out_dir: pathlib.Path,
+    exts: Iterable[str],
+    ocr_limit: int = 0,
+    show_progress: bool = True,
+) -> dict[str, int]:
     """
     OCR images in in_dir with extension exts to out_dir. If ocr_limit > 0,
     stop after OCRing ocr_limit images.
@@ -126,7 +115,9 @@ def ocr_images(in_dir, out_dir, exts, ocr_limit=0, show_progress=True):
 
     ocr_count = 0
     skip_count = 0
-    for image_relpath in image_relpath_generator(in_dir, exts):
+    for image_relpath in find_relative_paths(in_dir, exts):
+        # Signal to mypy that image_relpath is a Path object
+        image_relpath = cast(pathlib.Path, image_relpath)
         # Refresh progress bar
         if show_progress:
             progress_bar.refresh()
@@ -159,7 +150,7 @@ def ocr_images(in_dir, out_dir, exts, ocr_limit=0, show_progress=True):
                 # Close progress bar before raising error
                 progress_bar.close()
                 print(
-                    f"Error: An error encountered while OCRing {imagefile.stem}",
+                    f"Error: An error encountered while OCRing {image_file.stem}",
                     file=sys.stderr,
                 )
                 raise
@@ -177,11 +168,18 @@ def ocr_images(in_dir, out_dir, exts, ocr_limit=0, show_progress=True):
     return {"ocr_count": ocr_count, "skip_count": skip_count}
 
 
-def ocr_volumes(vol_ids, in_dir, out_dir, exts, ocr_limit=0, show_progress=True):
+def ocr_volumes(
+    vol_ids: list[str],
+    in_dir: pathlib.Path,
+    out_dir: pathlib.Path,
+    exts: Iterable[str],
+    ocr_limit: int = 0,
+    show_progress: bool = True,
+) -> None:
     """
-    OCR images for volumes vol_ids with extension exts to out_dir. Assumes in_dir
-    follows the PPA directory conventions (see corppa.utils.path_utils for more
-    details). If ocr_limit > 0, stop after OCRing ocr_limit images.
+    OCR images for volumes ``vol_ids`` with extension exts to ``out_dir``. Assumes ``in_dir``
+    follows the PPA directory conventions (see :py:mod:`corppa.utils.path_utils` for more
+    details). If ``ocr_limit > 0``, stop after OCRing ``ocr_limit`` images.
     """
     n_vols = len(vol_ids)
     current_ocr_limit = ocr_limit

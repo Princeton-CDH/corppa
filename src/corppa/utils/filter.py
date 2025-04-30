@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Utility for filtering PPA full-text corpus to work with a subset of
 pages.
@@ -15,17 +18,14 @@ pages specified in page-level filtering.
 
 Filter methods can be run via command-line or python code. Filtering takes a jsonl file
 (compressed or not) as input, and will produce a jsonl file (compressed or not) as output.
-The input and output filenames can use any extension supported by any extension supported
-by :mod:`orjsonl`, with or without compression; e.g. `.jsonl`, `.jsonl.gz`, `.jsonl.bz2`, etc.
+The input and output filenames can use any extension supported by :mod:`orjsonl`, with or
+without compression (e.g. ``.jsonl``, ``.jsonl.gz``, ``.jsonl.bz2``).
 
-Example command line usages:
-```
-corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --idfile my_ids.txt
-```
+Example command line usages: ::
 
-```
-corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --pg-file pages.csv --include key=value
-```
+    corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --idfile my_ids.txt
+
+    corppa-filter path/to/ppa_pages.jsonl output/ppa_subset_pages.jsonl --pg-file pages.csv --include key=value
 """
 
 import argparse
@@ -107,8 +107,13 @@ def filter_pages(
         if include_filter:
             # multiple include filters use OR logic:
             # if include filter does not apply, skip this page
-            if not any(page[key] == val for key, val in include_filter.items()):
-                continue
+            try:
+                if not any(page[key] == val for key, val in include_filter.items()):
+                    continue
+            except KeyError as err:
+                raise Exception(
+                    f"Key not found, choose from {','.join(page.keys())}: {err}"
+                )
 
         # if key-value pairs for exclusion are specified, filter
         if exclude_filter:

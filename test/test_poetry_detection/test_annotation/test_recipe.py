@@ -24,7 +24,8 @@ sys.modules["prodigy"] = mock_prodigy
 mock_prodigy_preprocess = MagicMock()
 sys.modules["prodigy.components.preprocess"] = mock_prodigy_preprocess
 
-from corppa.poetry_detection.annotation.recipe import (
+# These imports need to happen after the mocks above; tell ruff to ignore
+from corppa.poetry_detection.annotation.recipe import (  # noqa: E402
     ReviewStream,
     add_image,
     add_images,
@@ -274,8 +275,8 @@ class TestReviewStream:
             match="Cannot create review example without one or more annotated versions",
         ):
             ReviewStream.create_review_example([])
-            mock_get_session_name.assert_not_called()
-            mock_add_session_prefix.assert_not_called()
+        mock_get_session_name.assert_not_called()
+        mock_add_session_prefix.assert_not_called()
 
         # Single, minimal example
         mock_get_session_name.return_value = "session_name"
