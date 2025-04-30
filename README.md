@@ -1,5 +1,6 @@
 # corppa
 [![DOI](https://zenodo.org/badge/697470107.svg)](https://doi.org/10.5281/zenodo.15312547)
+[![unit tests](https://github.com/Princeton-CDH/corppa/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/Princeton-CDH/corppa/actions/workflows/unit_tests.yml)
 
 This repository is research software developed as part of the [Ends of Prosody](https://cdh.princeton.edu/projects/the-ends-of-prosody/), which is associated with the [Princeton Prosody Archive](https://prosody.princeton.edu/) (PPA). This software is particularly focused on research and work related to PPA full-text and page image corpora.
 
@@ -26,8 +27,8 @@ pip install git+https://github.com/Princeton-CDH/corppa.git#egg=corppa
 ### Scripts
 
 Installing `corppa` currently provides access to two command line scripts:
-* `corppa-filter`: For filtering a PPA page-level corpus. Corresponds to `corppa.ocr.gvision_ocr.py`.
-* `corppa-ocr`: For generating OCR text for images using Google Vision API. Corresponds to `corppa.utils.filter.py`.
+* `corppa-filter`: For filtering a PPA page-level corpus. (Corresponds to `corppa.utils.filter.py`)
+* `corppa-ocr`: For generating OCR text for images using Google Vision API. (Corresponds to `corppa.ocr.gvision_ocr.py`, requires optional dependencies)
 
 ## License
 
