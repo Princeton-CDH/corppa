@@ -9,6 +9,7 @@ import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
+
 _htid_encode_map = {":": "+", "/": "=", ".": ","}
 _htid_encode_table = str.maketrans(_htid_encode_map)
 _htid_decode_map = {v: k for k, v in _htid_encode_map.items()}
@@ -43,6 +44,7 @@ def decode_htid(encoded_htid: str) -> str:
     character replacements: ::
 
         "+" --> ":", "=" --> "/", "," --> "."
+
     """
     if "." not in encoded_htid:
         raise ValueError(f"Invalid encoded htid '{encoded_htid}'")

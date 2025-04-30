@@ -10,6 +10,8 @@ Specific portions that may be useful are included in the
 which was created for participates of the [Ends of Prosody](https://cdh.princeton.edu/events/the-ends-of-prosody/)
 conference.
 
+For early experimental work on this project that is not included in the corppa python package, see https://github.com/Princeton-CDH/ppa-nlp-archive
+
 ## Basic Usage
 
 ### Installation

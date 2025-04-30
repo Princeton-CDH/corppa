@@ -4,7 +4,6 @@ on:
   push: # run on push to main and PR
     branches:
       - main
-      - develop
   pull_request:
 
 env:
