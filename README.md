@@ -1,4 +1,5 @@
 # corppa
+[![DOI](https://zenodo.org/badge/697470107.svg)](https://doi.org/10.5281/zenodo.15312547)
 
 This repository is research software developed as part of the [Ends of Prosody](https://cdh.princeton.edu/projects/the-ends-of-prosody/), which is associated with the [Princeton Prosody Archive](https://prosody.princeton.edu/) (PPA). This software is particularly focused on research and work related to PPA full-text and page image corpora.
 
@@ -20,10 +21,6 @@ Use pip to install as a python package directly from GitHub.  Use a branch or ta
 
 ```sh
 pip install git+https://github.com/Princeton-CDH/corppa.git#egg=corppa
-```
-or
-```sh
-pip install git+https://github.com/Princeton-CDH/corppa.git@v0.1#egg=corppa
 ```
 
 ### Scripts
