@@ -57,6 +57,13 @@ brew install hashicorp/tap/copywrite
 
 Once installed, you can apply the copyright notice to all files without this notice by running `copywrite headers` (note that it does not update existing files even if the configuration has changed).
 
+## Notebooks
+For notebooks, authorship and copyright information should be added manually.
+The following template was used for existing notebooks within the first cell.
+```
+# [Title]
+By [Authors]
 
-
+(c)2025 Trustees of Princeton University. Permission granted for non-commercial distribution online under the [Apache 2.0 License](https://github.com/Princeton-CDH/corppa/blob/feature/license-headers/LICENSE).
+```
 
