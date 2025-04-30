@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 import sys
 from collections import defaultdict
 from unittest.mock import MagicMock, call, patch

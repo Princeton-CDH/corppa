@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Create a passim-friendly version of the input corpus. In addition to specifying
 the initial input corpus and output corpus files (JSONL), a name for this corpus

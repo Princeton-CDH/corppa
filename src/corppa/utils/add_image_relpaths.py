@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 This script adds image relative paths to the PPA full-text corpus. Optionally,
 a file extension (e.g., ``.jpg``) can be provided to be used for all relative
