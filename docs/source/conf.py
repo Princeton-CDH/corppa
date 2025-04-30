@@ -6,10 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+from corppa import __version__
+
 project = "corppa"
-copyright = "2024, Princeton CDH RSE Team"
-author = "Princeton CDH RSE Team"
-release = "0.3"
+copyright = "2024,2025 Center for Digital Humanities, Princeton University"
+author = "Center for Digital Humanities RSE Team, Princeton University"
+release = __version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
