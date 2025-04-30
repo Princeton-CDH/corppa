@@ -55,7 +55,7 @@ brew tap hashicorp/tap
 brew install hashicorp/tap/copywrite
 ```
 
-Once installed, you can apply the copyright notice to all files without this notice by running `copywrite headers` (note that id does not update existing files even if the configuration has changed).
+Once installed, you can apply the copyright notice to all files without this notice by running `copywrite headers` (note that it does not update existing files even if the configuration has changed).
 
 
 
