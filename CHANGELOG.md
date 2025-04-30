@@ -5,7 +5,7 @@
 - Now licensed under Apache 2
 ### Documentation
 - Set up Sphinx documentation
-  - New documentation page specifically for Ends of Prosody participants
+- New documentation page specifically for Ends of Prosody participants
 - Improved code documentation throughout the code
 - Tutorial notebooks by @WHaverals to provide orientation to PPA data and related corppa functionality
 - Split out developer documentation from main README
