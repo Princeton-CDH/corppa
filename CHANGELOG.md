@@ -9,7 +9,6 @@
 - Improved code documentation throughout the code
 - Tutorial notebooks by @WHaverals to provide orientation to PPA data and related corppa functionality
 - Split out developer documentation from main README
--
 ### Annotation
 - Prodigy custom command recipe for reporting on annotation progress
 - `process_adjudication_data` script to process reviewed annotation data
