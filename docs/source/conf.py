@@ -27,6 +27,7 @@ extensions = [
 ]
 
 source_suffix = [".rst", ".md"]
+# Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 exclude_patterns = []
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
@@ -46,3 +47,24 @@ autodoc_mock_imports = [
 
 html_theme = "alabaster"
 html_static_path = ["_static"]
+
+html_theme_options = {
+    # "description": "",
+    "github_user": "Princeton-CDH",
+    "github_repo": "corppa",
+    # "codecov_button": True,  # enable once code coverage is higher
+}
+
+# refs: http://alabaster.readthedocs.io/en/latest/installation.html#sidebars
+html_sidebars = {
+    "**": [
+        "about.html",
+        "navigation.html",
+        "localtoc.html",
+        "searchbox.html",
+        "sidebar_footer.html",
+    ],
+}
+
+
+
