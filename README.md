@@ -1,5 +1,6 @@
 # corppa
 [![DOI](https://zenodo.org/badge/697470107.svg)](https://doi.org/10.5281/zenodo.15312547)
+[![Release](https://img.shields.io/github/v/release/Princeton-CDH/corppa)](https://github.com/Princeton-CDH/corppa/releases)
 [![unit tests](https://github.com/Princeton-CDH/corppa/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/Princeton-CDH/corppa/actions/workflows/unit_tests.yml)
 
 This repository is research software developed as part of the [Ends of Prosody](https://cdh.princeton.edu/projects/the-ends-of-prosody/), which is associated with the [Princeton Prosody Archive](https://prosody.princeton.edu/) (PPA). This software is particularly focused on research and work related to PPA full-text and page image corpora.
