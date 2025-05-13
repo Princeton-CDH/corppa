@@ -47,6 +47,7 @@ poem_id = [
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
 notebooks = ["jupyterlab", "itables", "treon", "polars"]
+marimo = ["marimo", "marimo[lsp]"]
 dev = [
   "pre-commit",
   "ruff",
@@ -58,6 +59,7 @@ dev = [
   "corppa[chadwyck_healey]",
   "corppa[doc]",
   "corppa[notebooks]",
+  "corppa[marimo]",
 ]
 test = [
   "pytest",
@@ -94,3 +96,32 @@ exclude_lines = [
     # skip command-line configuration for main method on scripts
     "if __name__ == .__main__.:"
 ]
+
+[tool.ruff.lint]
+select = [
+# ruff defaults
+"E4",
+"E7",
+"E9",
+"F",
+# isort
+"I",
+]
+# Can use to ignore specific rules within above selection
+ignore = []
+
+[tool.marimo.display]
+cell_output = "below"
+
+[tool.marimo.runtime]
+# Add project source directory to Python path
+pythonpath = ["src"]
+
+[tool.marimo.save]
+format_on_save = true
+
+[tool.marimo.diagnostics]
+enabled = true
+
+[tool.marimo.experimental]
+lsp = true
