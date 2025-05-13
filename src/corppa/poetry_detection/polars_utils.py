@@ -28,20 +28,21 @@ FIELD_TYPES["identification_methods"] = pl.List
 
 #: Table of included PPA work-level field names and their names for use downstream
 PPA_FIELDS = {
-    "work_id": "ppa_work_id",
-    "source_id": "ppa_source_id",
-    "cluster_id": "ppa_cluster_id",
-    "title": "ppa_work_title",
-    "author": "ppa_work_author",
-    "pub_year": "ppa_work_year",
-    "source": "ppa_source",
-    "collections": "ppa_collections",
+    "ppa_work_id": "ppa_work_id",
+    "ppa_source_id": "ppa_source_id",
+    "ppa_cluster_id": "ppa_cluster_id",
+    "ppa_work_title": "ppa_work_title",
+    "ppa_work_author": "ppa_work_author",
+    "ppa_work_year": "ppa_work_year",
+    "ppa_source": "ppa_source",
+    "ppa_collections": "ppa_collections",
 }
 #: Table of included reference poem field names and their names for use downstream
 POEM_FIELDS = {
     "poem_id": "poem_id",
     "author": "poem_author",
     "title": "poem_title",
+    "ref_corpus": "ref_corpus",
 }
 
 
