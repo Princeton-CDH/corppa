@@ -76,7 +76,7 @@ merge-excerpts = "corppa.poetry_detection.merge_excerpts:main"
 path = "src/corppa/__init__.py"
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
+testpaths = ["tests"]
 
 [tool.ruff]
 # configure src path so ruff import fixes can identify local imports
