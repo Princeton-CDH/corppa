@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 from dataclasses import replace
@@ -423,8 +423,8 @@ class TestExcerpt:
         mock_pairwise_aligner.assert_called_once_with(
             mismatch_score=-0.5,
             gap_score=-0.5,
-            query_left_gap_score=0,
-            query_right_gap_score=0,
+            left_deletion_score=0,
+            right_deletion_score=0,
         )
         mock_aligner.align.assert_called_once_with("page_text hello", "excerpt_text")
         # Check result

@@ -1,7 +1,6 @@
 # Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
-import pathlib
 from unittest.mock import call, patch
 
 import pytest
@@ -129,7 +128,8 @@ def test_extract_passim_spans(mock_orjsonl, mock_get_span, tmp_path):
     results = list(extract_passim_spans(passim_dir, disable_progress=True))
     assert results == ["r1", "r2", "r3"]
     assert mock_orjsonl.stream.call_count == 2
-    mock_orjsonl.stream.assert_has_calls([call(input_a), call(input_b)])
+    # NOTE: passes locally in this order but fails on GitHub due to ordering
+    mock_orjsonl.stream.assert_has_calls([call(input_a), call(input_b)], any_order=True)
     assert mock_get_span.call_count == 3
     mock_get_span.assert_has_calls([call("a1"), call("b1"), call("b2")])
 

@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "corppa"
 description = "Utilities for working with Princeton Prosody Archive full-text corpus"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",    
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -41,8 +41,6 @@ poem_id = [
   "pyarrow",
   "unidecode",
   "rapidfuzz",
-  # Conditional
-  'more-itertools; python_version < "3.12"',
 ]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.5
+
+- Now supports and tested against Python 3.12 and 3.12; dropped 3.11
+
+### Misc
+- Use uv for python dependency management in for unit test and Jupyter notebook
+  check Github Actions workflows
+- Added pre-commit hook to validate GitHub Actions workflow files
+
+
 ## 0.4.0
 - Now supports and tested against both Python 3.11 and 3.12
 - Now licensed under Apache 2

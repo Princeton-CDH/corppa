@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -36,12 +36,7 @@ import pathlib
 import re
 import sys
 from glob import iglob
-
-try:
-    from itertools import batched
-except ImportError:
-    from more_itertools import batched  # type: ignore[no-redef]
-
+from itertools import batched
 from time import perf_counter
 
 import polars as pl
