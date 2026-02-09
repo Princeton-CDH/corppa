@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 This module provides custom recipes for Prodigy annotation. These were
 created with page-level annotation in mind and assume a page is associated

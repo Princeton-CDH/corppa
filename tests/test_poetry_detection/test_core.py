@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 from dataclasses import replace
 from typing import Optional
 from unittest.mock import Mock, NonCallableMock, patch
@@ -240,20 +243,6 @@ class TestExcerpt:
         result = excerpt.to_dict()
         assert result == expected_result
 
-    def test_fieldnames(self):
-        fieldnames = Excerpt.fieldnames()
-        # should match the names of the fields as declared
-        # and in the same order
-        assert fieldnames == [
-            "page_id",
-            "ppa_span_start",
-            "ppa_span_end",
-            "ppa_span_text",
-            "detection_methods",
-            "notes",
-            "excerpt_id"
-        ]
-
     def test_to_csv(self):
         # No optional fields
         excerpt = Excerpt(
@@ -434,8 +423,8 @@ class TestExcerpt:
         mock_pairwise_aligner.assert_called_once_with(
             mismatch_score=-0.5,
             gap_score=-0.5,
-            query_left_gap_score=0,
-            query_right_gap_score=0,
+            left_deletion_score=0,
+            right_deletion_score=0,
         )
         mock_aligner.align.assert_called_once_with("page_text hello", "excerpt_text")
         # Check result

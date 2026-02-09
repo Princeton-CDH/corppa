@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 This script merges labeled and unlabeled poem excerpts, combining
 notes for any merged excerpts, and merging duplicate poem identifications

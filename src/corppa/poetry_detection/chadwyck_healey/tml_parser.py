@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Script for parsing Chadwyck-Healey custom poem (.TML) files. For an input directory
 of poem (.TML) files, this script does two things:

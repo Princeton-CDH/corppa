@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Script for running passim. Requires Java 8*/11/17 because of Spark dependency.
 

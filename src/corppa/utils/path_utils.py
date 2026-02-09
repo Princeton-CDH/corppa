@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 General-purpose methods for working with paths, PPA identifiers, and directories
 """
@@ -40,6 +43,7 @@ def decode_htid(encoded_htid: str) -> str:
     character replacements: ::
 
         "+" --> ":", "=" --> "/", "," --> "."
+
     """
     if "." not in encoded_htid:
         raise ValueError(f"Invalid encoded htid '{encoded_htid}'")
@@ -53,11 +57,14 @@ def get_ppa_source(vol_id: str) -> str:
     For a given volume id, return the corresponding source.
     Assume:
     * Gale volume ids begin with ``"CW0"`` or ``"CB0"``
+    * EEBO-TCP volume ids begin with ``A``
     * Hathitrust volume ids contain a ``"."``
     """
     # Note that this is fairly brittle.
     if vol_id.startswith("CW0") or vol_id.startswith("CB0"):
         return "Gale"
+    elif vol_id.startswith("A"):
+        return "EEBO-TCP"
     elif "." in vol_id:
         return "HathiTrust"
     else:

@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 This script processes the adjudication data produced by Prodigy for our
 poetry detection task into two outputs:

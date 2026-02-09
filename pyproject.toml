@@ -5,15 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "corppa"
 description = "Utilities for working with Princeton Prosody Archive full-text corpus"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 readme = "README.md"
-# license TBD
-#license.file = "LICENSE"
-#license = {text = "Apache-2"}
+license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",    
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -43,8 +41,6 @@ poem_id = [
   "pyarrow",
   "unidecode",
   "rapidfuzz",
-  # Conditional
-  'more-itertools; python_version < "3.12"',
 ]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
@@ -81,7 +77,7 @@ corppa-compile-dataset = "corppa.poetry_detection.compile_dataset:main"
 path = "src/corppa/__init__.py"
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
+testpaths = ["tests"]
 
 [tool.ruff]
 # configure src path so ruff import fixes can identify local imports
@@ -97,4 +93,3 @@ exclude_lines = [
     # skip command-line configuration for main method on scripts
     "if __name__ == .__main__.:"
 ]
-

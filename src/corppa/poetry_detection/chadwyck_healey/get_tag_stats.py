@@ -1,3 +1,6 @@
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Collect tag-attribute counts for the Chadwyck Healey corpus and output
 them to a .jsonl file

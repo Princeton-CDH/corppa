@@ -1,4 +1,7 @@
 #! /bin/sh
+# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# SPDX-License-Identifier: Apache-2.0
+
 
 # For the images specified in the input jsonl, copy and transform images
 # in from the input directory to the output directory, according to the

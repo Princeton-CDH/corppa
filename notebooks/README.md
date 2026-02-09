@@ -1,8 +1,13 @@
 # corppa demo notebooks
 
-These Jupyter notebooks are provided with `corppa` to provide preliminary
+The Jupyter notebooks in this folder are included to provide preliminary
 access and structural analysis of the poetry excerpt dataset generated 
 in part by this codebase.
+
+The [ppa-tutorial](ppa-tutorial) folder includes a separate set of notebooks
+with orientation to working the PPA full-text corpus and metadata and using
+relevant `corppa` utilities.
+
 
 ## Setup
 
