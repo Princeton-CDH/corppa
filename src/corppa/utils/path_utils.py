@@ -9,7 +9,6 @@ import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-
 _htid_encode_map = {":": "+", "/": "=", ".": ","}
 _htid_encode_table = str.maketrans(_htid_encode_map)
 _htid_decode_map = {v: k for k, v in _htid_encode_map.items()}
