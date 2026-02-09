@@ -54,7 +54,14 @@ def load_compilation_config():
             sys.exit(-1)
 
     # output directory
-    output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
+    try:
+        output_data_dir = pathlib.Path(
+            config_opts["compiled_dataset"]["output_data_dir"]
+        )
+    except KeyError as err:
+        raise ValueError(
+            "Configuration error: config file requires `compiled_dataset.output_data_dir` path"
+        )
     if not output_data_dir.exists():
         raise ValueError(
             f"Configuration error: compiled dataset path {output_data_dir} does not exist"
@@ -72,12 +79,10 @@ def load_compilation_config():
 
     # source directories
     try:
-        source_base_dir = pathlib.Path(
-            config_opts["compiled_dataset"]["source_base_dir"]
-        )
+        source_base_dir = pathlib.Path(config_opts["data_ingredients_dir"])
     except KeyError:
         print(
-            "Configuration error: `compiled_dataset.source_base_dir` not found in config file",
+            "Configuration error: `data_ingredients_dir` not found in config file",
             file=sys.stderr,
         )
         sys.exit(-1)
