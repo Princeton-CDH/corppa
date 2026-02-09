@@ -7,9 +7,7 @@ import pytest
 
 from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
 from corppa.poetry_detection.refmatcha import (
-    CHADWYCK_HEALEY_CSV,
     META_PARQUET_FILE,
-    POETRY_FOUNDATION_CSV,
     SCRIPT_ID,
     TEXT_PARQUET_FILE,
     compile_metadata,
@@ -64,17 +62,17 @@ excerpt_earth = Excerpt(
 
 ref_poetry_data = [
     {
-        "id": "Z200653845",
+        "poem_id": "Z200653845",
         "text": """By his wonderful work's we see plainly enough
 That the earth is the Lord's and the fullness thereof;
 When hungry and thirsty we're ready to faint,
 He seeth our need and prevents our complaint;""",
-        "source": "chadwyck-healey",
+        "ref_corpus": "chadwyck-healey",
     },
     {
-        "id": "King-James-Bible_Psalms",
+        "poem_idid": "King-James-Bible_Psalms",
         "text": "He hath made his wonderful works to be remembered",
-        "source": "internet-poems",
+        "ref_corpus": "internet-poems",
     },
 ]
 
@@ -123,8 +121,8 @@ def test_identify_excerpt(reference_df):
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df)
     assert isinstance(id_result, LabeledExcerpt)
-    assert id_result.poem_id == ref_poetry_data[0]["id"]
-    assert id_result.ref_corpus == ref_poetry_data[0]["source"]
+    assert id_result.poem_id == ref_poetry_data[0]["poem_id"]
+    assert id_result.ref_corpus == ref_poetry_data[0]["ref_corpus"]
     # these are from the searchable version of the input text
     assert id_result.ref_span_start == 50
     assert id_result.ref_span_end == 97
@@ -137,7 +135,7 @@ def test_identify_excerpt(reference_df):
         "The earth    is the\nLords\t\tand the fullness thereof"
     )
     id_result = identify_excerpt(excerpt_row, reference_df)
-    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.poem_id == ref_poetry_data[0]["poem_id"]
 
     # no match
     excerpt_row["search_text"] = "Disdain forbids me and my dread of shame"
@@ -169,7 +167,7 @@ def test_identify_excerpt_first_line(reference_df):
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df, "first_line")
     assert isinstance(id_result, LabeledExcerpt)
-    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.poem_id == ref_poetry_data[0]["poem_id"]
     assert id_result.ref_span_start == 50
     # end and text adjusted based on length of search text
     assert id_result.ref_span_end == 142
@@ -189,7 +187,7 @@ def test_identify_excerpt_last_line(reference_df):
 
     # single match
     id_result = identify_excerpt(excerpt_row, reference_df, "last_line")
-    assert id_result.poem_id == ref_poetry_data[0]["id"]
+    assert id_result.poem_id == ref_poetry_data[0]["poem_id"]
     # start and text adjusted based on length of search text
     assert id_result.ref_span_start == 50
     assert id_result.ref_span_end == 142
@@ -220,8 +218,10 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
     )
     mock_multimatch.return_value = (ref_match_df.limit(1), reason)
     id_result = identify_excerpt(excerpt_row, reference_df)
-    assert id_result.poem_id == ref_poetry_data[0]["id"]
-    assert id_result.ref_corpus == ref_poetry_data[0]["source"]
+    print(id_result)
+    print(ref_poetry_data)
+    assert id_result.poem_id == ref_poetry_data[0]["poem_id"]
+    assert id_result.ref_corpus == ref_poetry_data[0]["ref_corpus"]
     assert id_result.ref_span_text == "matched text"
     assert id_result.ref_span_start == 10
     assert id_result.ref_span_end == 20
@@ -233,31 +233,35 @@ def test_identify_excerpt_multiple(mock_multimatch, reference_df):
 def test_multiple_matches():
     # title + author match (ignore case, punctuation)
     reference_data = [
-        {"author": "James Thomson", "title": "Winter", "source": "internet-poems"},
-        {"author": "James Thomson", "title": "WINTER.", "source": "chadwyck-healey"},
+        {"author": "James Thomson", "title": "Winter", "ref_corpus": "internet-poems"},
+        {
+            "author": "James Thomson",
+            "title": "WINTER.",
+            "ref_corpus": "chadwyck-healey",
+        },
     ]
     match, reason = multiple_matches(pl.from_dicts(reference_data))
     assert reason == "all rows match author + title"
     # first match is returned
-    assert match["source"][0] == "internet-poems"
+    assert match["ref_corpus"][0] == "internet-poems"
 
-    # first source is prioritized when everything matches
+    # first reference corpus is prioritized when everything matches
     reference_data.reverse()
     match, reason = multiple_matches(pl.from_dicts(reference_data))
     # first match is returned
-    assert match["source"][0] == "chadwyck-healey"
+    assert match["ref_corpus"][0] == "chadwyck-healey"
 
     # similar title; current logic can't match this
     reference_data = [
         {
             "author": "Robert Burns",
             "title": "Stay My Charmer Can You Leave",
-            "source": "internet-poems",
+            "ref_corpus": "internet-poems",
         },
         {
             "author": "Robert Burns",
             "title": "STAY, MY CHARMER",
-            "source": "chadwyck-healey",
+            "ref_corpus": "chadwyck-healey",
         },
     ]
     match, reason = multiple_matches(pl.from_dicts(reference_data))
@@ -269,40 +273,22 @@ def test_multiple_matches():
         {
             "author": "James Hogg",
             "title": "Mador of the Moor",
-            "source": "internet-poems",
+            "ref_corpus": "internet-poems",
         },
         {
             "author": "James Hogg",
             "title": "The Palmers Morning Hymn",
-            "source": "internet-poems",
+            "ref_corpus": "internet-poems",
         },
         {
             "author": "James Hogg",
             "title": "MADOR OF THE MOOR. ",
-            "source": "chadwyck-healey",
+            "ref_corpus": "chadwyck-healey",
         },
     ]
     match, reason = multiple_matches(pl.from_dicts(reference_data))
     assert reason == "majority match author + title (2 out of 3)"
-    assert match["source"][0] == "internet-poems"
-
-    # poetry foundation title mismatch
-    # majority match
-    reference_data = [
-        {
-            "author": "William Shakespeare",
-            "title": "As You Like It",
-            "source": "internet-poems",
-        },
-        {
-            "author": "William Shakespeare",
-            "title": "Song: Blow, blow thou...",
-            "source": "poetry-foundation",
-        },
-    ]
-    match, reason = multiple_matches(pl.from_dicts(reference_data))
-    assert reason == "duplicate author but not title; excluding Poetry Foundation"
-    assert match["source"][0] == "internet-poems"
+    assert match["ref_corpus"][0] == "internet-poems"
 
 
 @pytest.fixture
@@ -338,18 +324,11 @@ def chadwyck_healey_csv(tmp_path):
     return ch_meta_csv
 
 
-@pytest.fixture
-def poetry_foundation_csv(tmp_path):
-    "fixture to create a test version of the poetry foundation csv file"
-    pfound_csv = tmp_path / POETRY_FOUNDATION_CSV
-    pfound_csv.parent.mkdir(exist_ok=True)
-    pfound_csv.write_text(""",Author,Title,Poetry Foundation ID,Content
-0,Wendy Videlock,!,55489,"Dear Writers, I’m compiling the first in what I hope ...\"""")
-    return pfound_csv
-
-
 def test_compile_text(
-    tmp_path, capsys, internet_poem, chadwyck_healey_poem, poetry_foundation_csv
+    tmp_path,
+    capsys,
+    internet_poem,
+    chadwyck_healey_poem,
 ):
     os.chdir(tmp_path)
     # output file to be created
@@ -370,21 +349,9 @@ def test_compile_text(
     assert text_row["id"] == internet_poem.stem
     assert text_row["text"].startswith("ARMA virumque cano")
     assert text_row["source"] == "internet_poems"
-    text_row = text_df.row(2, named=True)
-    assert text_row["id"] == "55489"
-    assert text_row["text"].startswith("Dear Writers, I’m compiling")
-    assert text_row["source"] == "poetry-foundation"
-
-    # should get a warning if poetry foundation csv is missing
-    poetry_foundation_csv.unlink()
-    compile_text(tmp_path, text_file)
-    captured = capsys.readouterr()
-    assert "Poetry Foundation csv file not found for text compilation" in captured.err
 
 
-def test_compile_metadata(
-    tmp_path, capsys, internet_poem, poetry_foundation_csv, chadwyck_healey_csv
-):
+def test_compile_metadata(tmp_path, capsys, internet_poem, chadwyck_healey_csv):
     os.chdir(tmp_path)
     # output file to be created
     metadata_file = tmp_path / "metadata.parquet"
@@ -405,21 +372,12 @@ def test_compile_metadata(
     assert poem_meta["author"] == "Virgil"
     assert poem_meta["title"] == "Aeneid"
     assert poem_meta["source"] == "internet_poems"
-    poem_meta = meta_df.row(2, named=True)
-    assert poem_meta["id"] == "55489"
-    assert poem_meta["source"] == "poetry-foundation"
-    assert poem_meta["author"] == "Wendy Videlock"
-    assert poem_meta["title"] == "!"
 
     # when CSVs are not found, should see error messages
-    poetry_foundation_csv.unlink()
     chadwyck_healey_csv.unlink()
     compile_metadata(tmp_path, metadata_file)
     captured = capsys.readouterr()
     assert "Chadwyck-Healey csv file not found for metadata compilation" in captured.err
-    assert (
-        "Poetry Foundation csv file not found for metadata compilation" in captured.err
-    )
 
 
 def test_process(
@@ -427,7 +385,6 @@ def test_process(
     capsys,
     internet_poem,
     chadwyck_healey_poem,
-    poetry_foundation_csv,
     chadwyck_healey_csv,
 ):
     # minimal test to run process code
