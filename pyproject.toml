@@ -41,8 +41,6 @@ poem_id = [
   "pyarrow",
   "unidecode",
   "rapidfuzz",
-  # Conditional
-  'more-itertools; python_version < "3.12"',
 ]
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
