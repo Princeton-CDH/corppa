@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -304,8 +304,8 @@ class Excerpt:
         aligner = PairwiseAligner(
             mismatch_score=-0.5,
             gap_score=-0.5,
-            query_left_gap_score=0,  # no penalty for gaps to the left of the excerpt
-            query_right_gap_score=0,  # no penlty for gaps to the right of the excerpt
+            left_deletion_score=0,  # no penalty for gaps to the left of the excerpt
+            right_deletion_score=0,  # no penlty for gaps to the right of the excerpt
         )
         # List of best alignments, there can be more than one
         results = aligner.align(page_text, self.ppa_span_text)
