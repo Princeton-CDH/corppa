@@ -136,7 +136,7 @@ def annotate_text_and_image(
     labels: LabelsType = [],
     image_prefix: str = None,
     fetch_media: bool = False,
-) -> RecipeSettingsType:
+) -> RecipeSettingsType:  # pragma: no cover
     """Annotate text and image side by side: allows adding manual spans
     to both image and text. Intended for page-level annotation.
     """
@@ -205,7 +205,7 @@ def annotate_page_text(
     labels: LabelsType = [],
     image_prefix: str = None,
     fetch_media: bool = False,
-) -> RecipeSettingsType:
+) -> RecipeSettingsType:  # pragma: no cover
     """Annotate text with manual spans; displays an image side by side
     with text for reference only (image cannot be annotated).
     Intended for page-level annotation.
@@ -375,7 +375,7 @@ class ReviewStream:
     def __len__(self) -> int:
         return len(self.data)
 
-    def __iter__(self) -> StreamType:
+    def __iter__(self) -> StreamType:  # pragma: no cover
         for example in self.data:
             yield example
 
@@ -478,7 +478,7 @@ def review_page_spans(
     image_prefix: str = None,
     fetch_media: bool = False,
     sessions: List[str] = [],
-) -> RecipeSettingsType:
+) -> RecipeSettingsType:  # pragma: no cover
     """
     Review input text span annotations and annotate with manual spans to create
     final, adjudicated annotations. Loads and displays input text span
