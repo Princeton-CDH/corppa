@@ -71,6 +71,7 @@ corppa-ocr = "corppa.ocr.gvision_ocr:main"
 collate-txt = "corppa.ocr.collate_txt:main"
 refmatcha = "corppa.poetry_detection.refmatcha:main"
 merge-excerpts = "corppa.poetry_detection.merge_excerpts:main"
+corppa-compile-dataset = "corppa.poetry_detection.compile_dataset:main"
 
 [tool.hatch.version]
 path = "src/corppa/__init__.py"
