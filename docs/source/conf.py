@@ -65,6 +65,3 @@ html_sidebars = {
         "sidebar_footer.html",
     ],
 }
-
-
-

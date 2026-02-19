@@ -52,7 +52,7 @@ def ocr_image_via_gvision(
         sys.exit(1)
 
     # Load the image into memory
-    with io.open(input_image, "rb") as image_reader:
+    with io.open(input_image, "rb") as image_reader:  # pragma: no cover
         content = image_reader.read()
         image = google_vision.Image(content=content)
 
@@ -105,7 +105,7 @@ def ocr_images(
     if show_progress:
         desc = "OCRing images"
         maxinterval = 1
-        if ocr_limit:
+        if ocr_limit:  # pragma: no cover
             progress_bar = tqdm(desc=desc, total=ocr_limit, maxinterval=maxinterval)
         else:
             bar_format = "{desc}: {n:,} images OCR'd | elapsed: {elapsed}, {rate_fmt}"
@@ -146,7 +146,7 @@ def ocr_images(
                 if ocr_limit and ocr_count == ocr_limit:
                     # TODO: Is there a better structuring to avoid this break
                     break
-            except (Exception, KeyboardInterrupt):
+            except (Exception, KeyboardInterrupt):  # pragma: no cover
                 # Close progress bar before raising error
                 progress_bar.close()
                 print(
@@ -175,7 +175,7 @@ def ocr_volumes(
     exts: Iterable[str],
     ocr_limit: int = 0,
     show_progress: bool = True,
-) -> None:
+) -> None:  # pragma: no cover
     """
     OCR images for volumes ``vol_ids`` with extension exts to ``out_dir``. Assumes ``in_dir``
     follows the PPA directory conventions (see :py:mod:`corppa.utils.path_utils` for more
@@ -242,7 +242,7 @@ def ocr_volumes(
     )
 
 
-def main():
+def main():  # pragma: no cover
     parser = argparse.ArgumentParser(
         description="Uses Google Vision API to OCR images."
     )

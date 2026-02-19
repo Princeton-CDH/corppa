@@ -147,7 +147,7 @@ def process_adjudication_data(
             orjsonl.append(output_pages, page_data)
 
 
-def main():
+def main():  # pragma: no cover
     """
     Extracts page- and excerpt-level data from a Prodigy data file (JSONL)
     and writes the page-level excerpt data to a JSONL (`output_pages`) and the

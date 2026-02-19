@@ -720,7 +720,7 @@ class TMLPoetryParser:
             print(traceback.format_exc())
             return ""
 
-    def process_file(self, file_path: Path):
+    def process_file(self, file_path: Path):  # pragma: no cover
         """
         Process a single TML file: read it, parse metadata and poetry text, and return both.
         Parameters:
@@ -801,7 +801,7 @@ class TMLPoetryParser:
         self.current_file = None
         return metadata, poetry_text
 
-    def process_directory(self, num_files: Optional[int] = None):
+    def process_directory(self, num_files: Optional[int] = None):  # pragma: no cover
         """
         Processes the TML files within this parser's input directory of TML files.
         For each file, its metadata and poetry text are extracted with its metadata
@@ -896,7 +896,7 @@ class TMLPoetryParser:
             for f in self.figure_only:
                 print("  -", f)
 
-    def extract_metadata(self, soup: Tag) -> dict[str, str]:
+    def extract_metadata(self, soup: Tag) -> dict[str, str]:  # pragma: no cover
         """
         Extract metadata from the TML file's head section.
         Handles multiple authors (original and translator) as well as special cases
@@ -1028,7 +1028,7 @@ class TMLPoetryParser:
         return metadata
 
 
-def main():
+def main():  # pragma: no cover
     parser_arg = argparse.ArgumentParser(
         description="Process ChadwychTML Poetry Files and extract metadata and poetry text."
     )

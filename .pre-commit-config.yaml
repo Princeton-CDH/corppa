@@ -9,3 +9,8 @@ repos:
       - id: ruff
         args: [ --select, I, --fix, --exit-non-zero-on-fix ]
       - id: ruff-format
+  # validate GitHub Actions workflow files
+  - repo: https://github.com/mpalmer/action-validator
+    rev: v0.8.0
+    hooks:
+      - id: action-validator
