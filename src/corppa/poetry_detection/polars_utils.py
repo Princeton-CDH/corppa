@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -34,6 +34,7 @@ PPA_FIELDS = {
     "ppa_work_title": "ppa_work_title",
     "ppa_work_author": "ppa_work_author",
     "ppa_work_year": "ppa_work_year",
+    "ppa_work_type": "ppa_work_type",
     "ppa_source": "ppa_source",
     "ppa_collections": "ppa_collections",
 }

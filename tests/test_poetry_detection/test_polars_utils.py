@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026 Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 import csv
@@ -221,43 +221,33 @@ def test_extract_page_meta():
 def test_load_meta_df(tmp_path):
     # Prepare metadata file
     ppa_meta = tmp_path / "ppa_meta.csv"
-    csv_fields = [
-        "work_id",
-        "source_id",
-        "cluster_id",
-        "title",
-        "author",
-        "pub_year",
-        "collections",
-        "work_type",
-        "source",
-    ]
+
     rows = [
         {
-            "work_id": "work_a",
-            "source_id": "work_a",
-            "cluster_id": "cluster_a",
-            "title": "title_a",
-            "author": "author_a",
-            "pub_year": "1899",
-            "collections": "['Linguistic', 'Literary']",
-            "work_type": "full-work",
-            "source": "source_a",
+            "ppa_work_id": "work_a",
+            "ppa_source_id": "work_a",
+            "ppa_cluster_id": "cluster_a",
+            "ppa_work_title": "title_a",
+            "ppa_work_author": "author_a",
+            "ppa_work_year": "1899",
+            "ppa_collections": "['Linguistic', 'Literary']",
+            "ppa_work_type": "full-work",
+            "ppa_source": "source_a",
         },
         {
-            "work_id": "work_b-p7",
-            "source_id": "work_b",
-            "cluster_id": "cluster_b",
-            "title": "title_b",
-            "author": "author_b",
-            "pub_year": "1507",
-            "collections": "['Uncategorized']",
-            "work_type": "excerpt",
-            "source": "source_b",
+            "ppa_work_id": "work_b-p7",
+            "ppa_source_id": "work_b",
+            "ppa_cluster_id": "cluster_b",
+            "ppa_work_title": "title_b",
+            "ppa_work_author": "author_b",
+            "ppa_work_year": "1507",
+            "ppa_collections": "['Uncategorized']",
+            "ppa_work_type": "excerpt",
+            "ppa_source": "source_b",
         },
     ]
     with ppa_meta.open("w", encoding="utf-8") as file:
-        csv_writer = csv.DictWriter(file, fieldnames=csv_fields)
+        csv_writer = csv.DictWriter(file, fieldnames=list(PPA_FIELDS.keys()))
         csv_writer.writeheader()
         csv_writer.writerows(rows)
 
@@ -276,10 +266,10 @@ def test_load_meta_df(tmp_path):
         load_meta_df(missing_csv, PPA_FIELDS)
 
     # Error Case: Input file is missing required field
-    for missing_fields in [["author"], ["pub_year", "source"]]:
+    for missing_fields in [["ppa_work_author"], ["ppa_source", "ppa_work_year"]]:
         bad_csv = tmp_path / "missing_fields.csv"
         with bad_csv.open("w", encoding="utf-8") as file:
-            bad_fields = list(set(csv_fields) - set(missing_fields))
+            bad_fields = list(set(PPA_FIELDS.keys()) - set(missing_fields))
             csv_writer = csv.DictWriter(
                 file, fieldnames=bad_fields, extrasaction="ignore"
             )
@@ -435,7 +425,7 @@ def test_add_poems_meta(mock_load_meta_df):
                 row[field] = "value"
         bad_df = pl.DataFrame(bad_rows)
         # Test error case
-        err_msg = f"Input DataFrame missing the following required fields: "
+        err_msg = "Input DataFrame missing the following required fields: "
         err_msg += ", ".join(missing_fields)
         with pytest.raises(ValueError, match=err_msg):
             add_ref_poems_meta(bad_df, "poem_meta")
