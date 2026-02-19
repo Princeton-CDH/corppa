@@ -52,7 +52,6 @@ import pathlib
 import sys
 
 import polars as pl
-from tqdm import tqdm
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER
 from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_dataframe
@@ -119,11 +118,14 @@ def merge_excerpts(
     # group by page id and excerpt id to get potential matches
     # use aggregation to get the count of excerpts in each group,
     # then split input dataframe into singletons and merge candidates
-    grouped = df.group_by(["page_id", "excerpt_id"]).agg(pl.len().alias("group_size"))
+    # NOTE: span start/end to merge across systems, because excerpt id includes detection method
+    grouped = df.group_by(["page_id", "ppa_span_start", "ppa_span_end"]).agg(
+        pl.len().alias("group_size")
+    )
     # any excerpts with group size one will not be merged;
     # add to output df and don't process further
     output_df = (
-        df.join(grouped, on=["page_id", "excerpt_id"])
+        df.join(grouped, on=["page_id", "ppa_span_start", "ppa_span_end"])
         .filter(pl.col("group_size").eq(1))
         .drop("group_size")
     )
@@ -132,70 +134,71 @@ def merge_excerpts(
 
     # any excerpts with group size > 1 are candidates for merging
     merge_candidates = (
-        df.join(grouped, on=["page_id", "excerpt_id"])
+        df.join(grouped, on=["page_id", "ppa_span_start", "ppa_span_end"])
         .filter(pl.col("group_size").gt(1))
         .drop("group_size")
     )
 
-    merge_groups = merge_candidates.group_by(["page_id", "excerpt_id"])
+    merge_groups = merge_candidates.group_by(
+        ["page_id", "ppa_span_start", "ppa_span_end"]
+    )
     num_merge_groups = merge_groups.len().height
     if verbose:
         print(
-            f"Identified {merge_candidates.height:,} merge candidates in {num_merge_groups:,} groups.\n"
+            f"Identified {merge_candidates.height:,} merge candidates in {num_merge_groups:,} groups."
         )
 
-    progress_groups = tqdm(
-        merge_groups,
-        total=num_merge_groups,
-        desc="Merging...",
-        disable=disable_progress,
+    merged_excerpts = (
+        merge_groups.agg(
+            pl.first("ppa_span_text"),  # should match exactly
+            pl.col("detection_methods")
+            .explode()
+            .unique(),  # combine in a single list, no repeats
+            # combine notes but don't repeat duplicate info (like passim char match count)
+            pl.col("notes").explode().unique().sort().str.join("; "),
+            # construct merged excerpt id manually; c= prefix for combined
+            pl.concat_str(
+                pl.lit("c@"),
+                pl.col("ppa_span_start").first(),
+                pl.lit(":"),
+                pl.col("ppa_span_end").first(),
+            ).alias("excerpt_id"),
+            pl.col("poem_id").explode().unique().sort().str.join("; "),
+            pl.col("ref_corpus").explode().unique().sort().str.join("; "),
+            # use first reference span and text so numbers are useful; ignore nulls
+            pl.col("ref_span_start").drop_nulls().first(),
+            pl.col("ref_span_end").drop_nulls().first(),
+            pl.col("ref_span_text").drop_nulls().first(),
+            # combine unique list of id methods
+            pl.col("identification_methods")
+            .explode()
+            .unique()
+            .drop_nulls(),  # combine in a single list, no repeats, ignore nulls (not identified before merging)
+            # OMIT: we don't have these until we join
+            # pl.col("poem_author").explode().unique().sort().str.join("; "),
+            # pl.col("poem_title").explode().unique().sort().str.join("; "),
+            pl.len().alias("group_size"),  # count number in the group
+        )
+        .with_columns(
+            # add
+            notes=pl.concat_str(
+                pl.col("notes"),
+                pl.lit("; merge: ppa exact span "),
+                pl.col("group_size"),
+                pl.lit("excerpts"),
+            ),
+        )
+        .drop("group_size")  # drop group size column
     )
-    merge_count = 0
-    for group, data in progress_groups:
-        # group is a tuple of values for page id, excerpt id, poem id
-        # data is a df of the grouped rows for this set
 
-        # sort so any empty values for optional reference fields are first,
-        # then fill values backward - i.e., treat nulls as duplicates,
-        # but keep unlabeled excerpts first
-        data = data.sort(
-            "poem_id",
-            "ref_corpus",
-            "ref_span_start",
-            "ref_span_end",
-            "ref_span_text",
-            nulls_last=False,
-        ).select(pl.all().backward_fill())
+    if verbose:
+        multi_id = merged_excerpts.filter(pl.col("poem_id").str.contains(";")).height
+        print(
+            f"{merged_excerpts.height:,} merged excerpts; {multi_id:,} with multiple poem ids."
+        )
 
-        # in case this set of excerpts has multiple different poem ids
-        # which should be merged with each other, group again on poem id
-        for poem_group, poem_data in data.group_by(["poem_id"]):
-            # group of 1 : no merge, add to the output
-            if poem_data.height == 1:
-                output_df.extend(poem_data)
-            # otherwise, look for repeats
-            else:
-                # combine if everything is the same but methods, and notes
-                # (other values must either be the same or don't conflict because they were unset)
-                repeat_counts = poem_data.with_columns(
-                    duplicate=poem_data.drop(
-                        "detection_methods", "identification_methods", "notes"
-                    ).is_duplicated()
-                )
-                # repeats will be consolidated
-                repeats = repeat_counts.filter(pl.col("duplicate")).drop("duplicate")
-                # any non-repeats should be included in output as-is
-                output_df.extend(
-                    repeat_counts.filter(~pl.col("duplicate")).drop("duplicate")
-                )
-
-                if not repeats.is_empty():
-                    repeats = combine_duplicate_methods_notes(repeats)
-                    # add one copy of the consolidated information to the merge df
-                    output_df.extend(repeats[:1])
-                    merge_count += 1
-                    progress_groups.set_postfix_str(f"Merged {merge_count:,}")
-
+    # add the merged records to the output
+    output_df.extend(merged_excerpts)
     return output_df
 
 

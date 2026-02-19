@@ -61,7 +61,7 @@ def load_compilation_config():
     except KeyError as err:
         raise ValueError(
             "Configuration error: config file requires `compiled_dataset.output_data_dir` path"
-        )
+        ) from err
     if not output_data_dir.exists():
         raise ValueError(
             f"Configuration error: compiled dataset path {output_data_dir} does not exist"
