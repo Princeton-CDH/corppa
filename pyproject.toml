@@ -25,7 +25,7 @@ dependencies = [
 	"intspan",
 	"orjsonl",
 	"tqdm",
-  "biopython",
+  "biopython>=1.86",
   "pyyaml",
   "polars",
 ]
