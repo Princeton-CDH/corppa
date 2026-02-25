@@ -56,13 +56,11 @@ def load_compilation_config():
 
     # output directory
     try:
-        output_data_dir = pathlib.Path(
-            config_opts["compiled_dataset"]["output_data_dir"]
-        )
+        output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
     except KeyError as err:
         raise ValueError(
             "Configuration error: config file requires `compiled_dataset.output_data_dir` path"
-        )
+        ) from err
     if not output_data_dir.exists():
         raise ValueError(
             f"Configuration error: compiled dataset path {output_data_dir} does not exist"

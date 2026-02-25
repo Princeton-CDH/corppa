@@ -32,7 +32,7 @@ def _(get_config, pathlib):
     # load local configuration options to get path to data
     config_opts = get_config()
 
-    data_dir = pathlib.Path(config_opts["compiled_dataset"]["output_data_dir"])
+    data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
     if not data_dir.exists() or not data_dir.is_dir():
         raise ValueError(
             f"Data directory {data_dir} not found. "
