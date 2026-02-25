@@ -1,18 +1,16 @@
 import marimo
 
-__generated_with = "0.13.7"
-app = marimo.App()
+__generated_with = "0.19.11"
+app = marimo.App(width="medium")
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(
-        r"""
+    mo.md(r"""
     # Exploring Poetry Excerpt Data
 
     This notebook is for exploring the poetry excerpt data to aid data play at Ends of Prosody.
-    """
-    )
+    """)
     return
 
 
@@ -24,23 +22,9 @@ def _():
     import polars as pl
 
     from corppa.config import get_config
-    from corppa.poetry_detection.polars_utils import (
-        add_ppa_works_meta,
-        add_ref_poems_meta,
-        extract_page_meta,
-        load_excerpts_df,
-    )
+    from corppa.poetry_detection.polars_utils import load_excerpts_df
 
-    return (
-        add_ppa_works_meta,
-        add_ref_poems_meta,
-        extract_page_meta,
-        get_config,
-        load_excerpts_df,
-        mo,
-        pathlib,
-        pl,
-    )
+    return get_config, load_excerpts_df, mo, pathlib, pl
 
 
 @app.cell
@@ -48,7 +32,7 @@ def _(get_config, pathlib):
     # load local configuration options to get path to data
     config_opts = get_config()
 
-    data_dir = pathlib.Path(config_opts["poem_dataset"]["data_dir"])
+    data_dir = pathlib.Path(config_opts["compiled_dataset"]["output_data_dir"])
     if not data_dir.exists() or not data_dir.is_dir():
         raise ValueError(
             f"Data directory {data_dir} not found. "
@@ -66,20 +50,13 @@ def _(get_config, pathlib):
 
 
 @app.cell
-def _(
-    add_ppa_works_meta,
-    add_ref_poems_meta,
-    data_paths,
-    extract_page_meta,
-    load_excerpts_df,
-):
-    # load the excerpts into a polars dataframe
-    excerpts_df = load_excerpts_df(data_paths["excerpts"])
-    # add poem metadata
-    excerpts_df = add_ref_poems_meta(excerpts_df, data_paths["poem_meta"])
-    # add PPA metadata
-    excerpts_df = add_ppa_works_meta(
-        extract_page_meta(excerpts_df), data_paths["ppa_work_metadata"]
+def _(data_paths, load_excerpts_df):
+    # load the excerpts into a polars dataframe,
+    # and join poem & ppa work-level metadata
+    excerpts_df = load_excerpts_df(
+        data_paths["excerpts"],
+        ppa_works_meta=data_paths["ppa_work_metadata"],
+        ref_poems_meta=data_paths["poem_meta"],
     )
     excerpts_df
     return (excerpts_df,)
@@ -115,7 +92,15 @@ def _(excerpts_df, pl):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""## View page-level statistics""")
+    mo.md(r"""
+    ## View page-level statistics
+    """)
+    return
+
+
+@app.cell
+def _(excerpts_df):
+    excerpts_df.columns
     return
 
 
@@ -127,9 +112,9 @@ def _(excerpts_df, pl):
             pl.count("excerpt_id").alias("num_excerpts"),
             pl.n_unique("excerpt_id").alias("num_distinct_excerpts"),
             pl.n_unique("poem_id").alias("num_poems"),
-            pl.first("ppa_work_title"),
-            pl.first("ppa_work_author"),
-            pl.first("ppa_work_year"),
+            pl.first("ppa_title"),  # previously ppa_work_title
+            pl.first("ppa_author"),  # previously ppa_work_author
+            pl.first("ppa_pub_year"),
         )
         .sort("num_distinct_excerpts", descending=True)
     )
@@ -140,7 +125,9 @@ def _(excerpts_df, pl):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""## View work-level statistics""")
+    mo.md(r"""
+    ## View work-level statistics
+    """)
     return
 
 
@@ -153,9 +140,9 @@ def _(excerpts_df, pl):
             pl.n_unique("excerpt_id").alias("num_distinct_excerpts"),
             pl.n_unique("poem_id").alias("num_poems"),
             pl.n_unique("page_id").alias("num_pages_with_poems"),
-            pl.first("ppa_work_title"),
-            pl.first("ppa_work_author"),
-            pl.first("ppa_work_year"),
+            pl.first("ppa_title"),
+            pl.first("ppa_author"),
+            pl.first("ppa_pub_year"),
         )
         .sort("num_distinct_excerpts", descending=True)
     )
@@ -166,7 +153,9 @@ def _(excerpts_df, pl):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""## View poetry-level statistics""")
+    mo.md(r"""
+    ## View poetry-level statistics
+    """)
     return
 
 
@@ -191,7 +180,9 @@ def _(excerpts_df, pl):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md("""## View poem author statistics""")
+    mo.md("""
+    ## View poem author statistics
+    """)
     return
 
 
