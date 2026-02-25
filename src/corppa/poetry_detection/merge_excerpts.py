@@ -191,7 +191,82 @@ def merge_excerpts(
     # combined merged records with the output
     # use a diagonal concat instead of vstack/extend
     # to avoid having to reconcile columns first
-    return pl.concat([output_df, merged_output_df], how="diagonal")
+    output_df = pl.concat([output_df, merged_output_df], how="diagonal")
+
+    # now identify & merge partial overlap
+    overlaps_df = (
+        output_df
+        # Filter to excerpts on pages with multiple excerpts
+        .filter(pl.col("page_id").is_duplicated())
+        .join_where(
+            # excerpts_df,
+            output_df,
+            # (1) Excerpts have same page ID
+            pl.col("page_id") == pl.col("page_id_right"),
+            # (2) Excerpts overlap
+            ## Left's start index < Right's end index
+            pl.col("ppa_span_start") < pl.col("ppa_span_end_right"),
+            ## Right's start index < Left's end index
+            pl.col("ppa_span_start_right") < pl.col("ppa_span_end"),
+            ## Distinct excerpts (excludes self-matches)
+            pl.col("excerpt_id") != pl.col("excerpt_id_right"),
+        )
+        .with_columns(
+            # make a sorted combined id so we can drop duplicate copies of the same pair
+            # (but why doesn't this make the set half the size?)
+            combined_id=pl.concat_list(
+                pl.col("excerpt_id"), pl.col("excerpt_id_right").sort()
+            )
+        )
+        .unique("combined_id")
+        .with_columns(
+            # calculate length of the overlap: smaller end minus larger start
+            overlap_len=pl.min_horizontal(
+                pl.col("ppa_span_end"), pl.col("ppa_span_end_right")
+            ).sub(
+                pl.max_horizontal(
+                    pl.col("ppa_span_start"), pl.col("ppa_span_start_right")
+                )
+            ),
+        )
+        .with_columns(
+            overlap_factor=pl.col("overlap_len").truediv(
+                pl.max_horizontal(
+                    pl.col("ppa_span_text").str.len_chars(),
+                    pl.col("ppa_span_text_right").str.len_chars(),
+                )
+            )
+        )
+        # filter to high overlap / high confidence
+        .filter(pl.col("overlap_factor").gt(0.98), pl.col("overlap_len").gt(10))
+    )
+    # OHHHH can this be used to identify groups,
+    # and then we add a column and group by and use the same
+    # logic as before? with a different merge method (and handle mismatched spans)
+
+    print(overlaps_df)
+    # now consolidate the merged pairs into a new merged excerpt
+    overlaps_df = overlaps_df.with_columns(
+        # page id unchanged
+        # use outer / most expansive bounds
+        ppa_span_start=pl.min_horizontal(
+            pl.col("ppa_span_start"), pl.col("ppa_span_start_right")
+        ),
+        ppa_span_end=pl.max_horizontal(
+            pl.col("ppa_span_end"), pl.col("ppa_span_end_right")
+        ),
+        ppa_span_text=pl.col(
+            "ppa_span_text"
+        ),  # take the longest of left/right? or, harder, combine...
+        detection_methods=pl.col("detection_methods").list.add(
+            pl.col("detection_methods_right").explod()
+        ),
+    )
+
+    if verbose:
+        print(f"{overlaps_df.height:,} pairs with significant overlap.")
+
+    return output_df
 
 
 def merge_excerpt_files(
