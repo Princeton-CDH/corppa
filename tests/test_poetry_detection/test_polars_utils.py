@@ -215,6 +215,12 @@ def test_load_meta_df(tmp_path):
         row_dict = {f"pfx_{f}": row[f] for f in fields}
         assert result_df.row(i, named=True) == row_dict
 
+    # Subset of fields
+    subset_fields = {"foo": "my_foo"}
+    result_df = load_meta_df(test_data_file, subset_fields)
+    # Check column names
+    assert result_df.columns == list(subset_fields.values())
+
     # Error Case: Input file does not exist
     missing_csv = tmp_path / "missing.csv"
     with pytest.raises(ValueError, match=f"Input file {missing_csv} does not exist"):
