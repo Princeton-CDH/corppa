@@ -148,7 +148,7 @@ def merge_excerpts(
             f"Identified {merge_candidates.height:,} merge candidates in {num_merge_groups:,} groups."
         )
 
-    merged_excerpts = (
+    merged_output_df = (
         merge_groups.agg(
             pl.first("ppa_span_text"),  # should match exactly
             pl.col("detection_methods")
@@ -157,12 +157,14 @@ def merge_excerpts(
             # combine notes but don't repeat duplicate info (like passim char match count)
             pl.col("notes").explode().unique().sort().str.join("; "),
             # construct merged excerpt id manually; c= prefix for combined
+            # (although strictly speaking should only be  if > 1 detection method)
             pl.concat_str(
                 pl.lit("c@"),
                 pl.col("ppa_span_start").first(),
                 pl.lit(":"),
                 pl.col("ppa_span_end").first(),
             ).alias("excerpt_id"),
+            # TODO: better to pick first non-null and put alternates in a separate field?
             pl.col("poem_id").explode().unique().sort().str.join("; "),
             pl.col("ref_corpus").explode().unique().sort().str.join("; "),
             # use first reference span and text so numbers are useful; ignore nulls
@@ -183,23 +185,24 @@ def merge_excerpts(
             # add
             notes=pl.concat_str(
                 pl.col("notes"),
-                pl.lit("; merge: ppa exact span "),
+                pl.lit("; merge: ppa exact span, "),
                 pl.col("group_size"),
-                pl.lit("excerpts"),
+                pl.lit(" excerpts"),
             ),
         )
         .drop("group_size")  # drop group size column
     )
 
     if verbose:
-        multi_id = merged_excerpts.filter(pl.col("poem_id").str.contains(";")).height
+        multi_id = merged_output_df.filter(pl.col("poem_id").str.contains(";")).height
         print(
-            f"{merged_excerpts.height:,} merged excerpts; {multi_id:,} with multiple poem ids."
+            f"{merged_output_df.height:,} merged excerpts; {multi_id:,} with multiple poem ids."
         )
 
-    # add the merged records to the output
-    output_df.extend(merged_excerpts)
-    return output_df
+    # combined merged records with the output
+    # use a diagonal concat instead of vstack/extend
+    # to avoid having to reconcile columns first
+    return pl.concat([output_df, merged_output_df], how="diagonal")
 
 
 def merge_excerpt_files(input_files, output_file):
