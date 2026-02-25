@@ -158,7 +158,7 @@ class Excerpt:
                 f"PPA span's start index {self.ppa_span_start} must be less than its end index {self.ppa_span_end}"
             )
 
-        # Check that dectection method set is not empty
+        # Check that detection method set is not empty
         if not self.detection_methods:
             raise ValueError("Must specify at least one detection method")
 
@@ -347,7 +347,7 @@ class LabeledExcerpt(Excerpt):
         # Check that identification method set is not empty
         if not self.identification_methods:
             raise ValueError("Must specify at least one identification method")
-        # Check that both reference span indicies are set or unset
+        # Check that both reference span indices are set or unset
         if (self.ref_span_start is None) ^ (self.ref_span_end is None):
             raise ValueError("Reference span's start and end index must both be set")
         # Check reference span indices if set
