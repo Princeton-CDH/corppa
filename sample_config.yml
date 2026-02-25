@@ -11,7 +11,7 @@
 compiled_dataset:
   # NOTE: currently requires an absolute path, since jupyter
   # notebooks will try to load relative to the notebook
-  output_data_dir: "/path/to/ppa-found-poems/data/"
+  data_dir: "/path/to/ppa-found-poems/data/"
 
 # paths to reference corpora metadata and text
 reference_corpora:

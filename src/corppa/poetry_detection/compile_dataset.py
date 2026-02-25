@@ -26,9 +26,10 @@ import pathlib
 import shutil
 import sys
 
+import polars as pl
+
 from corppa.config import get_config
 from corppa.poetry_detection.merge_excerpts import merge_excerpt_files
-from corppa.poetry_detection.ppa_works import load_ppa_works_df
 
 # from corppa.utils.path_utils import find_relative_paths
 from corppa.poetry_detection.ref_corpora import save_poem_metadata
@@ -55,13 +56,11 @@ def load_compilation_config():
 
     # output directory
     try:
-        output_data_dir = pathlib.Path(
-            config_opts["compiled_dataset"]["output_data_dir"]
-        )
+        output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
     except KeyError as err:
         raise ValueError(
             "Configuration error: config file requires `compiled_dataset.output_data_dir` path"
-        )
+        ) from err
     if not output_data_dir.exists():
         raise ValueError(
             f"Configuration error: compiled dataset path {output_data_dir} does not exist"
@@ -146,7 +145,15 @@ def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
 
 
 def save_ppa_metadata(input_file: pathlib.Path, output_file: pathlib.Path):
-    load_ppa_works_df(input_file).write_csv(output_file)
+    # copy as-is, do not rename or subset any fields
+    # NOTE: currently assumes and only supports PPA metadata in csv format
+    if input_file.suffix != ".csv":
+        raise ValueError(
+            f"PPA metadata must be loaded as CSV, got {input_file.suffix.lstrip('.')}"
+        )
+    ppa_meta_df = pl.read_csv(input_file)
+    # TODO: add aggregate counts here
+    ppa_meta_df.write_csv(output_file)
 
 
 def compress_file(uncompressed_file, compressed_file):

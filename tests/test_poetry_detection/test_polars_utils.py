@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024,2025 Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 import csv
@@ -10,10 +10,7 @@ import pytest
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
 from corppa.poetry_detection.polars_utils import (
     POEM_FIELDS,
-    PPA_FIELDS,
-    add_ppa_works_meta,
     add_ref_poems_meta,
-    extract_page_meta,
     fix_data_types,
     has_poem_ids,
     load_excerpts_df,
@@ -194,92 +191,46 @@ def test_load_excerpts_df(mock_add_ppa_meta, mock_add_poem_meta, tmp_path):
         load_excerpts_df(datafile)
 
 
-def test_extract_page_meta():
-    ppa_page_ids = ["A01224.100", "yale.39002088447587.00000050", "CW0111540239.0092"]
-    excerpts_df = pl.DataFrame(
-        [
-            {"page_id": page_id, "excerpt_id": f"excerpt_{i}"}
-            for i, page_id in enumerate(ppa_page_ids)
-        ]
-    )
-    results = extract_page_meta(excerpts_df)
-    # Check column names
-    assert set(results.columns) == set(excerpts_df.columns) | {
-        "ppa_work_id",
-        "page_num",
-    }
-    # Check row contents
-    for i, page_id in enumerate(ppa_page_ids):
-        work_id, page_num = page_id.rsplit(".", maxsplit=1)
-        expected_row = excerpts_df.row(i, named=True) | {
-            "ppa_work_id": work_id,
-            "page_num": int(page_num),
-        }
-        assert results.row(i, named=True) == expected_row
-
-
 def test_load_meta_df(tmp_path):
-    # Prepare metadata file
-    ppa_meta = tmp_path / "ppa_meta.csv"
-    csv_fields = [
-        "work_id",
-        "source_id",
-        "cluster_id",
-        "title",
-        "author",
-        "pub_year",
-        "collections",
-        "work_type",
-        "source",
-    ]
+    # Prepare test metadata file with arbitrary fields
+    test_data_file = tmp_path / "test_meta.csv"
+    fields = ["foo", "bar", "baz"]
+
     rows = [
-        {
-            "work_id": "work_a",
-            "source_id": "work_a",
-            "cluster_id": "cluster_a",
-            "title": "title_a",
-            "author": "author_a",
-            "pub_year": "1899",
-            "collections": "['Linguistic', 'Literary']",
-            "work_type": "full-work",
-            "source": "source_a",
-        },
-        {
-            "work_id": "work_b-p7",
-            "source_id": "work_b",
-            "cluster_id": "cluster_b",
-            "title": "title_b",
-            "author": "author_b",
-            "pub_year": "1507",
-            "collections": "['Uncategorized']",
-            "work_type": "excerpt",
-            "source": "source_b",
-        },
+        {"foo": "a", "bar": "one", "baz": "zed"},
+        {"foo": "b", "bar": "two", "baz": "omega"},
     ]
-    with ppa_meta.open("w", encoding="utf-8") as file:
-        csv_writer = csv.DictWriter(file, fieldnames=csv_fields)
+    with test_data_file.open("w", encoding="utf-8") as file:
+        csv_writer = csv.DictWriter(file, fieldnames=fields)
         csv_writer.writeheader()
         csv_writer.writerows(rows)
 
-    # Typical Case:
-    result_df = load_meta_df(ppa_meta, PPA_FIELDS)
+    # Typical Case: rename
+    field_names = {f: f"pfx_{f}" for f in fields}
+    result_df = load_meta_df(test_data_file, field_names)
     # Check column names
-    assert result_df.columns == list(PPA_FIELDS.values())
+    assert result_df.columns == list(field_names.values())
     # Check row contents
     for i, row in enumerate(rows):
-        row_dict = {v: row[k] for k, v in PPA_FIELDS.items()}
+        row_dict = {f"pfx_{f}": row[f] for f in fields}
         assert result_df.row(i, named=True) == row_dict
+
+    # Subset of fields
+    subset_fields = {"foo": "my_foo"}
+    result_df = load_meta_df(test_data_file, subset_fields)
+    # Check column names
+    assert result_df.columns == list(subset_fields.values())
 
     # Error Case: Input file does not exist
     missing_csv = tmp_path / "missing.csv"
     with pytest.raises(ValueError, match=f"Input file {missing_csv} does not exist"):
-        load_meta_df(missing_csv, PPA_FIELDS)
+        load_meta_df(missing_csv, fields)
 
     # Error Case: Input file is missing required field
-    for missing_fields in [["author"], ["pub_year", "source"]]:
+    for missing_fields in [["foo"], ["bar", "foo"]]:
         bad_csv = tmp_path / "missing_fields.csv"
         with bad_csv.open("w", encoding="utf-8") as file:
-            bad_fields = list(set(csv_fields) - set(missing_fields))
+            bad_fields = list(set(fields) - set(missing_fields))
             csv_writer = csv.DictWriter(
                 file, fieldnames=bad_fields, extrasaction="ignore"
             )
@@ -289,67 +240,7 @@ def test_load_meta_df(tmp_path):
         missing_str = ", ".join(missing_fields)
         err_msg = f"Input CSV is missing the following required fields: {missing_str}"
         with pytest.raises(ValueError, match=err_msg):
-            load_meta_df(bad_csv, PPA_FIELDS)
-
-
-@patch("corppa.poetry_detection.polars_utils.load_meta_df")
-def test_add_ppa_works_meta(mock_load_meta_df):
-    # Construct test inputs
-    excerpts_df = pl.DataFrame(
-        [
-            {
-                "page_id": "page_a",
-                "excerpt_id": "ex_1",
-                "ppa_work_id": "work_a",
-            },
-            {
-                "page_id": "page_b",
-                "excerpt_id": "ex_1",
-                "ppa_work_id": "work_b",
-            },
-            {
-                "page_id": "page_a",
-                "excerpt_id": "ex_2",
-                "ppa_work_id": "work_a",
-            },
-        ]
-    )
-    ppa_meta_rows = []
-    for i in ["a", "b", "c"]:
-        ppa_meta_rows.append(
-            {
-                "ppa_work_id": f"work_{i}",
-                "ppa_author": f"author_{i}",
-                "ppa_title": f"title_{i}",
-            }
-        )
-    ppa_meta_df = pl.DataFrame(ppa_meta_rows)
-    # Set-up mock object
-    mock_load_meta_df.return_value = ppa_meta_df
-
-    results = add_ppa_works_meta(excerpts_df, "ppa_meta")
-    mock_load_meta_df.assert_called_once_with("ppa_meta", PPA_FIELDS)
-    # Check columns
-    assert set(results.columns) == set(excerpts_df.columns) | set(ppa_meta_df.columns)
-    # Check row contents
-    assert results.height == 3
-    assert results.row(0, named=True) == (
-        excerpts_df.row(0, named=True) | ppa_meta_rows[0]
-    )
-    assert results.row(1, named=True) == (
-        excerpts_df.row(1, named=True) | ppa_meta_rows[1]
-    )
-    assert results.row(2, named=True) == (
-        excerpts_df.row(2, named=True) | ppa_meta_rows[0]
-    )
-
-    # Error case: missing `ppa_work_id` field
-    mock_load_meta_df.reset_mock()
-    err_msg = "Missing ppa_work_id field; use extract_page_meta to extract it."
-    with pytest.raises(ValueError, match=err_msg):
-        bad_df = pl.DataFrame([{"excerpt_id": "a"}, {"excerpt_id": "b"}])
-        add_ppa_works_meta(bad_df, "ppa_meta")
-    mock_load_meta_df.assert_not_called()
+            load_meta_df(bad_csv, field_names)
 
 
 @patch("corppa.poetry_detection.polars_utils.load_meta_df")
@@ -435,7 +326,7 @@ def test_add_poems_meta(mock_load_meta_df):
                 row[field] = "value"
         bad_df = pl.DataFrame(bad_rows)
         # Test error case
-        err_msg = f"Input DataFrame missing the following required fields: "
+        err_msg = "Input DataFrame missing the following required fields: "
         err_msg += ", ".join(missing_fields)
         with pytest.raises(ValueError, match=err_msg):
             add_ref_poems_meta(bad_df, "poem_meta")
