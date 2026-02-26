@@ -30,6 +30,7 @@ import polars as pl
 
 from corppa.config import get_config
 from corppa.poetry_detection.merge_excerpts import merge_excerpt_files
+from corppa.poetry_detection.ppa_works import extract_page_meta
 
 # from corppa.utils.path_utils import find_relative_paths
 from corppa.poetry_detection.ref_corpora import save_poem_metadata
@@ -144,7 +145,9 @@ def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
     # ]
 
 
-def save_ppa_metadata(input_file: pathlib.Path, output_file: pathlib.Path):
+def save_ppa_metadata(
+    input_file: pathlib.Path, output_file: pathlib.Path, excerpts_file: pathlib.Path
+):
     # copy as-is, do not rename or subset any fields
     # NOTE: currently assumes and only supports PPA metadata in csv format
     if input_file.suffix != ".csv":
@@ -152,7 +155,28 @@ def save_ppa_metadata(input_file: pathlib.Path, output_file: pathlib.Path):
             f"PPA metadata must be loaded as CSV, got {input_file.suffix.lstrip('.')}"
         )
     ppa_meta_df = pl.read_csv(input_file)
-    # TODO: add aggregate counts here
+
+    # get work-level aggregate excerpt totals
+    excerpts_df = (
+        extract_page_meta(pl.scan_csv(excerpts_file))
+        .group_by("ppa_work_id")
+        .agg(
+            pl.col("excerpt_id").n_unique().alias("num_excerpts"),
+            pl.col("poem_id").n_unique().alias("num_poems"),
+            # unique poet ids might also be nice, but requires a join
+            # and our metadata is messy (variant names won't necessarily dedupe)
+        )
+    ).collect()
+
+    # combine the totals with ppa work metadata
+    ppa_meta_df = ppa_meta_df.join(
+        excerpts_df, left_on="work_id", right_on="ppa_work_id", how="left"
+    ).with_columns(
+        # fill any missing values with zeroes
+        pl.col("num_excerpts").fill_null(pl.lit(0)),
+        pl.col("num_poems").fill_null(pl.lit(0)),
+    )
+
     ppa_meta_df.write_csv(output_file)
 
 
@@ -214,7 +238,9 @@ def main():
     if compilation_steps is None or "ppa_metadata" in compilation_steps:
         print("\n## PPA work-level metadata")
         save_ppa_metadata(
-            compile_opts["source_ppa_metadata"], compile_opts["ppa_metadata_file"]
+            compile_opts["source_ppa_metadata"],
+            compile_opts["ppa_metadata_file"],
+            excerpts_file=compile_opts["compressed_excerpt_file"],
         )
 
     print("\nRemember to commit and push the updated data files")
