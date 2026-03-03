@@ -139,9 +139,11 @@ def merge_excerpts(
         .drop("group_size")
     )
 
-    merge_groups = merge_candidates.group_by(
-        ["page_id", "ppa_span_start", "ppa_span_end"]
-    )
+    # sort by page then poem id, with nulls last, to ensure we select
+    # a non-null poem id and reference data
+    merge_groups = merge_candidates.sort(
+        "page_id", "poem_id", "ref_span_start", nulls_last=True
+    ).group_by(["page_id", "ppa_span_start", "ppa_span_end"], maintain_order=True)
     num_merge_groups = merge_groups.len().height
     if verbose:
         print(
@@ -157,20 +159,27 @@ def merge_excerpts(
             # combine notes but don't repeat duplicate info (like passim char match count)
             pl.col("notes").explode().unique().sort().str.join("; "),
             # construct merged excerpt id manually; c= prefix for combined
-            # (although strictly speaking should only be  if > 1 detection method)
+            # (although strictly speaking should only be if > 1 detection method)
             pl.concat_str(
                 pl.lit("c@"),
                 pl.col("ppa_span_start").first(),
                 pl.lit(":"),
                 pl.col("ppa_span_end").first(),
             ).alias("excerpt_id"),
-            # TODO: better to pick first non-null and put alternates in a separate field?
-            pl.col("poem_id").explode().unique().sort().str.join("; "),
-            pl.col("ref_corpus").explode().unique().sort().str.join("; "),
+            # pick the first poem id (relies on previous sorting)
+            pl.col("poem_id").explode().unique().first(),
+            # and store all others in alt poem ids field
+            pl.col("poem_id")
+            .explode()
+            .unique()
+            .drop_nulls()
+            .slice(1)
+            .alias("alt_poem_ids"),
+            pl.col("ref_corpus").explode().first(),
             # use first reference span and text so numbers are useful; ignore nulls
-            pl.col("ref_span_start").drop_nulls().first(),
-            pl.col("ref_span_end").drop_nulls().first(),
-            pl.col("ref_span_text").drop_nulls().first(),
+            pl.col("ref_span_start").first(),
+            pl.col("ref_span_end").first(),
+            pl.col("ref_span_text").first(),
             # combine unique list of id methods
             pl.col("identification_methods")
             .explode()
@@ -182,19 +191,24 @@ def merge_excerpts(
             pl.len().alias("group_size"),  # count number in the group
         )
         .with_columns(
-            # add
             notes=pl.concat_str(
                 pl.col("notes"),
                 pl.lit("; merge: ppa exact span, "),
                 pl.col("group_size"),
                 pl.lit(" excerpts"),
             ),
+            # if alt poem ids is empty, replace with None
+            alt_poem_ids=pl.when(pl.col("alt_poem_ids").list.len() > 0)
+            .then(pl.col("alt_poem_ids"))
+            .otherwise(pl.lit(None)),
         )
         .drop("group_size")  # drop group size column
     )
 
     if verbose:
-        multi_id = merged_output_df.filter(pl.col("poem_id").str.contains(";")).height
+        multi_id = merged_output_df.filter(
+            pl.col("alt_poem_ids").list.len().gt(0)
+        ).height
         print(
             f"{merged_output_df.height:,} merged excerpts; {multi_id:,} with multiple poem ids."
         )
@@ -250,6 +264,7 @@ def merge_excerpt_files(input_files, output_file):
         identification_methods=pl.col("identification_methods")
         .list.sort()
         .list.join(MULTIVAL_DELIMITER),
+        alt_poem_ids=pl.col("alt_poem_ids").list.join(MULTIVAL_DELIMITER),
     )
 
     labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())

@@ -11,7 +11,7 @@
 compiled_dataset:
   # NOTE: currently requires an absolute path, since jupyter
   # notebooks will try to load relative to the notebook
-  output_data_dir: "/path/to/ppa-found-poems/data/"
+  data_dir: "/path/to/ppa-found-poems/data/"
 
 # paths to reference corpora metadata and text
 reference_corpora:
@@ -35,4 +35,4 @@ reference_corpora:
   other:
     # Provide a URL or local path to "Other Poems" metadata
     # Use a URL if you want to pull directly from google sheets as CSV or
-    metadata_path: "https://docs.google.com/spreadsheets/d/..." or "/path/to/other.csv"
+    metadata_path: "https://docs.google.com/spreadsheets/d/..."  # or "/path/to/other.csv"

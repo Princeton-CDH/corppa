@@ -55,12 +55,10 @@ def load_compilation_config():
 
     # output directory
     try:
-        output_data_dir = pathlib.Path(
-            config_opts["compiled_dataset"]["output_data_dir"]
-        )
+        output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
     except KeyError as err:
         raise ValueError(
-            "Configuration error: config file requires `compiled_dataset.output_data_dir` path"
+            "Configuration error: config file requires `compiled_dataset.data_dir` path"
         ) from err
     if not output_data_dir.exists():
         raise ValueError(
@@ -160,6 +158,11 @@ def compress_file(uncompressed_file, compressed_file):
 
 def main():
     parser = argparse.ArgumentParser(description="Compile PPA found-poems dataset")
+    parser.add_argument(
+        "--compress-excerpts",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     # add an argument group to allow easily specifying specific steps
     step_arg_group = parser.add_argument_group(
         "Step",
@@ -191,14 +194,15 @@ def main():
         # merge into a single uncompressed csv
         # (polars doesn't currently support writing directly to a csv.gz)
         merge_excerpt_files(excerpt_sources, compile_opts["compiled_excerpt_file"])
-        # compress the resulting file
-        print(
-            f"Compressing excerpt data... ({compile_opts['compiled_excerpt_file']} → {compile_opts['compressed_excerpt_file']})"
-        )
-        compress_file(
-            compile_opts["compiled_excerpt_file"],
-            compile_opts["compressed_excerpt_file"],
-        )
+        # compress the resulting file if requested
+        if args.compress_excerpts:
+            print(
+                f"Compressing excerpt data... ({compile_opts['compiled_excerpt_file']} → {compile_opts['compressed_excerpt_file']})"
+            )
+            compress_file(
+                compile_opts["compiled_excerpt_file"],
+                compile_opts["compressed_excerpt_file"],
+            )
 
     if compilation_steps is None or "poem_metadata" in compilation_steps:
         print("\n## Compiling reference corpora metadata")

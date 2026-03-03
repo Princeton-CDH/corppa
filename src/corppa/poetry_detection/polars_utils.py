@@ -25,6 +25,7 @@ FIELD_TYPES = LabeledExcerpt.field_types()
 # override set types with list, since Polars does not have a set type
 FIELD_TYPES["detection_methods"] = pl.List
 FIELD_TYPES["identification_methods"] = pl.List
+FIELD_TYPES["alt_poem_ids"] = pl.List
 
 #: Table of included PPA work-level field names and their names for use downstream
 PPA_FIELDS = {
@@ -61,6 +62,7 @@ def fix_data_types(df):
     """
     # Get expected field types for columns that match Labeled/Excerpt fields
     df_types = {column: FIELD_TYPES.get(column) for column in df.columns}
+    print(df_types)
     for c, ctype in df_types.items():
         # For list (set) types, split strings on multival delimiter to convert to list
         if ctype is pl.List:

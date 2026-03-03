@@ -105,7 +105,8 @@ def field_real_type(field_type) -> type:
     # if Optional or Union, return the first non-none type
     ftypes = get_args(field_type)
     if ftypes:
-        return [arg for arg in ftypes if arg != types.NoneType][0]
+        # union type could be another annotation, so return field type
+        return field_real_type([arg for arg in ftypes if arg != types.NoneType][0])
 
     # if we get here, this is an input we can't handle
     raise TypeError(f"Cannot determine real type for '{field_type}'")
@@ -128,6 +129,9 @@ def input_to_set(input_val: list | str | set) -> set:
             return set(input_val.split(MULTIVAL_DELIMITER))
         case set():
             return input_val
+        # None is possible for optional set fields
+        case None:
+            return None
         case _:
             raise ValueError(f"Unexpected value type '{type(input_val).__name__}'")
 
@@ -254,7 +258,7 @@ class Excerpt:
         set_fields = [k for k, v in cls_field_types.items() if v is set]
         for field_name in set_fields:
             try:
-                input_args[field_name] = input_to_set(input_args[field_name])
+                input_args[field_name] = input_to_set(input_args.get(field_name))
             except ValueError as err:
                 raise ValueError(f"{err} for {field_name}")
 
@@ -337,6 +341,7 @@ class LabeledExcerpt(Excerpt):
     ref_span_start: Optional[int] = None
     ref_span_end: Optional[int] = None
     ref_span_text: Optional[str] = None
+    alt_poem_ids: Optional[set[str]] = None
 
     # Identification methods
     identification_methods: set[str]

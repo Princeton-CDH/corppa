@@ -104,14 +104,15 @@ def test_merge_excerpts_1ex_2labels(capsys):
 
     # id methods should be combined
     merged_excerpt.identification_methods == excerpt1_label1.identification_methods & excerpt1_label2.identification_methods
-    # multiple poem id currently combined in one field  (TODO: alt poem id field?)
-    assert merged_excerpt.poem_id == "; ".join(
-        [excerpt1_label1.poem_id, excerpt1_label2.poem_id]
-    )
+    # first poem id is selected as primary
+    assert merged_excerpt.poem_id == excerpt1_label1.poem_id
+    # alternate poem ids collected in a separate field
+    assert merged_excerpt.alt_poem_ids == {excerpt1_label2.poem_id}
+
     # all other fields should be unchanged
     for field in LabeledExcerpt.fieldnames():
         # all other fields should have the same content in the merged excerpt
-        if field not in ["notes", "poem_id", "identification_methods"]:
+        if field not in ["notes", "poem_id", "identification_methods", "alt_poem_ids"]:
             assert getattr(merged_excerpt, field) == getattr(excerpt1_label1, field)
 
 
@@ -198,13 +199,13 @@ def test_merge_excerpts_multiple_diff_labels(capsys):
     # identification methods should be combined
     merged_excerpt.identification_methods == excerpt1_label1.identification_methods & excerpt1_label2.identification_methods
 
-    # multiple poem id currently combined in one field  (NOTE: update if we add alt poem id field)
-    assert merged_excerpt.poem_id == "; ".join(
-        [excerpt1_label1.poem_id, excerpt1_label2.poem_id]
-    )
+    # first poem id chosen as primary; others collected as alternate
+    assert merged_excerpt.poem_id == excerpt1_label1.poem_id
+    assert merged_excerpt.alt_poem_ids == {excerpt1_label2.poem_id}
+
     for field in LabeledExcerpt.fieldnames():
         # all other fields should have the same content in the merged excerpt
-        if field not in ["notes", "poem_id", "identification_methods"]:
+        if field not in ["notes", "poem_id", "identification_methods", "alt_poem_ids"]:
             assert getattr(merged_excerpt, field) == getattr(excerpt1_label1, field)
 
 
@@ -237,9 +238,10 @@ def test_merge_different_labels():
     # distinct poem ids combined when span matches exactly
     merged = merge_excerpts(df)
     assert len(merged) == 1
-    assert merged.row(0, named=True)["poem_id"] == "; ".join(
-        [alt_poem_id, excerpt1_label1.poem_id]
-    )
+    merged_result = merged.row(0, named=True)
+    # based on current sort logic, alt poem id will be chosen as primary poem id
+    assert merged_result["poem_id"] == alt_poem_id
+    assert merged_result["alt_poem_ids"] == [excerpt1_label1.poem_id]
 
 
 # revise to merge labeled + unlabeled excerpts
@@ -292,9 +294,9 @@ def test_merge_unlabeled_labeled_excerpts():
         expected_merge_note,
     ]:
         assert note in merged_excerpt["notes"]
-    assert merged_excerpt["poem_id"] == "; ".join(
-        [excerpt1_label1.poem_id, excerpt1_label2.poem_id]
-    )
+
+    assert merged_excerpt["poem_id"] == excerpt1_label1.poem_id
+    assert merged_excerpt["alt_poem_ids"] == [excerpt1_label2.poem_id]
 
 
 def test_merge_excerpts():
