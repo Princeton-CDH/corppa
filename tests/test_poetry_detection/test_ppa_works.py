@@ -5,8 +5,7 @@ import polars as pl
 import pytest
 
 from corppa.poetry_detection.ppa_works import (
-    PPA_FIELDS,
-    add_ppa_work_meta,
+    add_ppa_works_meta,
     extract_page_meta,
     load_ppa_works_df,
 )
@@ -80,11 +79,14 @@ def test_load_ppa_works_df(tmp_path):
         csv_writer.writerows(rows)
 
     result_df = load_ppa_works_df(ppa_meta)
-    # Check column names
-    assert result_df.columns == list(PPA_FIELDS.values())
+    # Check column names are prefixed
+    prefixed_fields = [f"ppa_{field}" for field in csv_fields]
+    assert result_df.columns == prefixed_fields
     # Check row contents
     for i, row in enumerate(rows):
-        row_dict = {v: row[k] for k, v in PPA_FIELDS.items()}
+        # the input dict with prefixed field name should
+        # be equivalent to the dataframe row
+        row_dict = {f"ppa_{k}": v for k, v in row.items()}
         assert result_df.row(i, named=True) == row_dict
 
     # Error Case: Input file does not exist
@@ -92,26 +94,24 @@ def test_load_ppa_works_df(tmp_path):
     with pytest.raises(ValueError, match=f"Input file {missing_csv} does not exist"):
         load_ppa_works_df(missing_csv)
 
-    # Error Case: Input file is missing field
-    ## Single field
-    for missing_fields in [["author"], ["pub_year", "source"]]:
-        bad_csv = tmp_path / "missing_fields.csv"
-        with bad_csv.open("w", encoding="utf-8") as file:
-            bad_fields = list(set(csv_fields) - set(missing_fields))
-            csv_writer = csv.DictWriter(
-                file, fieldnames=bad_fields, extrasaction="ignore"
-            )
-            csv_writer.writeheader()
-            csv_writer.writerows(rows)
+    # Error Case: Input file is missing required work_id field
+    bad_csv = tmp_path / "missing_fields.csv"
+    with bad_csv.open("w", encoding="utf-8") as file:
+        # subset of fields; does not include work_id
+        bad_fields = ["author", "title"]
+        csv_writer = csv.DictWriter(file, fieldnames=bad_fields, extrasaction="ignore")
+        csv_writer.writeheader()
+        csv_writer.writerows(rows)
 
-        missing_str = ", ".join(missing_fields)
-        err_msg = f"Input CSV is missing the following required fields: {missing_str}"
-        with pytest.raises(ValueError, match=err_msg):
-            load_ppa_works_df(bad_csv)
+    # close the file to write content to disk before loading
+    err_msg = "Input CSV is missing required `work_id` field"
+    with pytest.raises(ValueError, match=err_msg):
+        load_ppa_works_df(bad_csv)
 
 
+@patch("corppa.poetry_detection.ppa_works.extract_page_meta")
 @patch("corppa.poetry_detection.ppa_works.load_ppa_works_df")
-def test_add_ppa_work_meta(mock_load_ppa_df):
+def test_add_ppa_works_meta(mock_load_ppa_df, mock_extract_page_meta):
     # Construct test inputs
     excerpts_df = pl.DataFrame(
         [
@@ -145,7 +145,7 @@ def test_add_ppa_work_meta(mock_load_ppa_df):
     # Set-up mock object
     mock_load_ppa_df.return_value = ppa_meta_df
 
-    results = add_ppa_work_meta(excerpts_df, "ppa_meta")
+    results = add_ppa_works_meta(excerpts_df, "ppa_meta")
     mock_load_ppa_df.assert_called_once_with("ppa_meta")
     # Check columns
     assert set(results.columns) == set(excerpts_df.columns) | set(ppa_meta_df.columns)
@@ -159,11 +159,12 @@ def test_add_ppa_work_meta(mock_load_ppa_df):
     assert results.row(2, named=True) == (
         excerpts_df.row(2, named=True) | ppa_meta_rows[0]
     )
+    mock_extract_page_meta.assert_not_called()
 
-    # Error case: missing `ppa_work_id` field
+    # If missing `ppa_work_id` field, automatically calls
+    # extract_page_meta before joining
     mock_load_ppa_df.reset_mock()
-    err_msg = "Missing ppa_work_id field; use extract_page_meta to extract it."
-    with pytest.raises(ValueError, match=err_msg):
-        bad_df = pl.DataFrame([{"excerpt_id": "a"}, {"excerpt_id": "b"}])
-        add_ppa_work_meta(bad_df, "ppa_meta")
-    mock_load_ppa_df.assert_not_called()
+    unextracted_page_id_df = pl.DataFrame([{"excerpt_id": "a"}, {"excerpt_id": "b"}])
+    add_ppa_works_meta(unextracted_page_id_df, "ppa_meta")
+    mock_extract_page_meta.assert_called_once()
+    mock_load_ppa_df.assert_called()

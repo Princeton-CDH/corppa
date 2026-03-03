@@ -23,10 +23,10 @@ class TestSpan:
         # Invalid range: end index < start index
         error_message = "Start index must be less than end index"
         with pytest.raises(ValueError, match=error_message):
-            span = Span(9, 2, "label")
+            Span(9, 2, "label")
         # Invalid range: end index = < start index
         with pytest.raises(ValueError, match=error_message):
-            span = Span(2, 2, "label")
+            Span(2, 2, "label")
 
     def test_len(self):
         assert len(Span(2, 5, "label")) == 3

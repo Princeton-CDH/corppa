@@ -1,22 +1,10 @@
 """
-Module containing PPA work-level metadata utilities
+PPA work-level metadata utilities
 """
 
-from pathlib import Path
+import pathlib
 
 import polars as pl
-
-# Table of included PPA work-level field names and their fieldnames for use downstream
-PPA_FIELDS = {
-    "work_id": "ppa_work_id",
-    "source_id": "ppa_source_id",
-    "cluster_id": "ppa_cluster_id",
-    "title": "ppa_work_title",
-    "author": "ppa_work_author",
-    "pub_year": "ppa_work_year",
-    "source": "ppa_source",
-    "collections": "ppa_collections",
-}
 
 
 def extract_page_meta(excerpts_df: pl.DataFrame) -> pl.DataFrame:
@@ -31,41 +19,34 @@ def extract_page_meta(excerpts_df: pl.DataFrame) -> pl.DataFrame:
     return out_df
 
 
-def load_ppa_works_df(file: Path) -> pl.DataFrame:
+def load_ppa_works_df(file: pathlib.Path) -> pl.DataFrame:
     """
-    Loads PPA work-level metadata (``CSV``) as a polars DataFrame containing only the
-    fields in :data:`PPA_FIELDS` that have been
-    renamed to its corresponding values.
+    Loads PPA work-level metadata (``CSV``) as a polars DataFrame;
+    must include `work_id` field.
     """
     # Check that file exists
     if not file.is_file():
         raise ValueError(f"Input file {file} does not exist")
     # Load in CSV
     ppa_works_df = pl.read_csv(file)
-    # Check that all required fields exist
-    missing_fields = PPA_FIELDS.keys() - set(ppa_works_df.columns)
-    if missing_fields:
-        missing_str = ", ".join(sorted(missing_fields))
-        raise ValueError(
-            f"Input CSV is missing the following required fields: {missing_str}"
-        )
-    # Select and rename fields
-    ppa_works_df = ppa_works_df.select(PPA_FIELDS.keys()).rename(PPA_FIELDS)
-    return ppa_works_df
+    # We could check for expected fields, but the only
+    # field *required* for joining with excerpts is work_id
+    if "work_id" not in ppa_works_df.columns:
+        raise ValueError("Input CSV is missing required `work_id` field")
+    # Rename all fields to prefix with ppa_
+    return ppa_works_df.rename(lambda column_name: f"ppa_{column_name}")
 
 
-def add_ppa_work_meta(
+def add_ppa_works_meta(
     excerpts_df: pl.DataFrame,
-    ppa_works_csv: Path,
+    ppa_works_csv: pathlib.Path,
 ) -> pl.DataFrame:
     """
-    Combines found poem excerpt data (:class:`polars.DataFrame`) with PPA
+    Combine found poem excerpt data (:class:`polars.DataFrame`) with PPA
     work-level metadata (``CSV``) and returns the resulting ``DataFrame``.
     """
-    # Check for ppa_work_id field
+    # Check for ppa_work_id field; if not present, extract it
     if "ppa_work_id" not in excerpts_df.columns:
-        raise ValueError(
-            "Missing ppa_work_id field; use extract_page_meta to extract it."
-        )
+        excerpts_df = extract_page_meta(excerpts_df)
     ppa_works_meta = load_ppa_works_df(ppa_works_csv)
     return excerpts_df.join(ppa_works_meta, on="ppa_work_id", how="left")

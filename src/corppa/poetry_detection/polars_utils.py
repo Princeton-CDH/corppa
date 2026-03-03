@@ -1,15 +1,20 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 """
 Polars methods for working with excerpt data
 """
 
+import logging
 import pathlib
 
 import polars as pl
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER, Excerpt, LabeledExcerpt
+from corppa.poetry_detection.ppa_works import add_ppa_works_meta
+
+logger = logging.getLogger(__name__)
+
 
 #: List of required fields for excerpt data
 REQ_EXCERPT_FIELDS = set(Excerpt.fieldnames(required_only=True))
@@ -27,22 +32,12 @@ FIELD_TYPES["detection_methods"] = pl.List
 FIELD_TYPES["identification_methods"] = pl.List
 FIELD_TYPES["alt_poem_ids"] = pl.List
 
-#: Table of included PPA work-level field names and their names for use downstream
-PPA_FIELDS = {
-    "work_id": "ppa_work_id",
-    "source_id": "ppa_source_id",
-    "cluster_id": "ppa_cluster_id",
-    "title": "ppa_work_title",
-    "author": "ppa_work_author",
-    "pub_year": "ppa_work_year",
-    "source": "ppa_source",
-    "collections": "ppa_collections",
-}
 #: Table of included reference poem field names and their names for use downstream
 POEM_FIELDS = {
     "poem_id": "poem_id",
     "author": "poem_author",
     "title": "poem_title",
+    "ref_corpus": "ref_corpus",
 }
 
 
@@ -62,7 +57,6 @@ def fix_data_types(df):
     """
     # Get expected field types for columns that match Labeled/Excerpt fields
     df_types = {column: FIELD_TYPES.get(column) for column in df.columns}
-    print(df_types)
     for c, ctype in df_types.items():
         # For list (set) types, split strings on multival delimiter to convert to list
         if ctype is pl.List:
@@ -103,22 +97,10 @@ def standardize_dataframe(df: pl.DataFrame) -> pl.DataFrame:
     return df.select(LABELED_EXCERPT_FIELDS)
 
 
-def extract_page_meta(excerpts_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Extracts PPA page metadata (i.e., PPA work ID and page number) from each excerpt's
-    ``page_id`` and combines it with the input excerpts ``DataFrame``.
-    """
-    out_df = excerpts_df.with_columns(
-        ppa_work_id=pl.col("page_id").str.extract(r"^(.*)\.\d+$", 1),
-        page_num=pl.col("page_id").str.extract(r"(\d+)$").cast(pl.Int64),
-    )
-    return out_df
-
-
 def load_meta_df(file: pathlib.Path, fields_table: dict[str, str]) -> pl.DataFrame:
     """
     Loads specified metadata file (``CSV``) as a polars DataFrame. The columns of the
-    resulting DataFrame are dictacted by the fields_table whose keys specify the
+    resulting DataFrame are dictated by the fields_table whose keys specify the
     metadata fields to be selected and whose values indicate what they should be
     renamed to.
     """
@@ -139,23 +121,6 @@ def load_meta_df(file: pathlib.Path, fields_table: dict[str, str]) -> pl.DataFra
         # Select and rename fields
         df = df.select(fields_table.keys()).rename(fields_table)
     return df
-
-
-def add_ppa_works_meta(
-    excerpts_df: pl.DataFrame,
-    ppa_works_csv: pathlib.Path,
-) -> pl.DataFrame:
-    """
-    Combines found poem excerpt data (:class:`polars.DataFrame`) with PPA
-    work-level metadata (``CSV``) and returns the resulting ``DataFrame``.
-    """
-    # Check for ppa_work_id field
-    if "ppa_work_id" not in excerpts_df.columns:
-        raise ValueError(
-            "Missing ppa_work_id field; use extract_page_meta to extract it."
-        )
-    ppa_works_meta = load_meta_df(ppa_works_csv, PPA_FIELDS)
-    return excerpts_df.join(ppa_works_meta, on="ppa_work_id", how="left")
 
 
 def add_ref_poems_meta(
@@ -191,7 +156,7 @@ def load_excerpts_df(
     Optionally, combine PPA work-level and reference poem metadata to the
     returned DataFrame.
 
-    Currently, assume input file is a (possible compresed) `CSV` file.
+    Currently, assume input file is a (possibly compressed) `CSV` file.
     """
     # Load input file as a polars dataframe
     df = pl.read_csv(excerpts_file)
