@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 import csv
@@ -174,6 +174,23 @@ def test_merge_excerpts_two_different_labels():
     # input excerpts should both be present unchanged in the output
     assert excerpt1_label1 in result_excerpts
     assert excerpt2_label1 in result_excerpts
+
+
+def test_merge_passim_match_len():
+    # passim match length should take precedence over sort by poem id
+    long_excerpt1 = replace(
+        excerpt1_label1, poem_id="z", notes="passim: 442 char matches"
+    )
+    shorter_excerpt2 = replace(
+        excerpt1_label1, poem_id="a", notes="passim: 213 char matches"
+    )
+    df = pl.from_dicts([shorter_excerpt2.to_dict(), long_excerpt1.to_dict()])
+    merged = merge_excerpts(df)
+    # expect one row
+    assert len(merged) == 1
+    # longer match should take precedence
+    merged_excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    assert merged_excerpt.poem_id == long_excerpt1.poem_id
 
 
 def test_merge_excerpts_multiple_diff_labels(capsys):
