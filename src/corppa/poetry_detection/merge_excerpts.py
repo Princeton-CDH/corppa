@@ -18,9 +18,11 @@ Merging logic is as follows:
   combination of `page_id`, `ppa_span_start`, and `ppa_span_end`)
   even when poem identifications differ, and combined as follows:
 
-     - Excerpts are sorted by `poem_id`, and `ref_span_start` with nulls last,
-       and the reference information is taken from the first excerpt (`poem_id`,
-       `ref_span_start`, `ref_span_end`, `ref_span_text`, `ref_corpus`).
+     - Excerpts are sorted by `poem_id`, `ref_span_start`, and passim
+       match length with nulls last and longest passim match first.
+       Reference information (`poem_id`, `ref_span_start`, `ref_span_end`, 
+       `ref_span_text`, `ref_corpus`) is taken from the first excerpt in 
+       the group.
      - When merged excerpts have different poem identifications, all unique
        poem ids after the first are collected into `alt_poem_ids`
      - The `detection_methods` and `identification_methods` fields are combined
@@ -35,7 +37,10 @@ labeled_excerpts.csv -o merged_excerpts.csv
 
 Limitations:
 
-- Currently supports CSV input and output only
+- Merge logic collapses different poem ids that may not correspond;
+  they may be subsets of the same poem, different editions, or entirely
+  different poems.
+- Currently supports CSV input and output only.
 
 """
 
