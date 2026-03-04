@@ -57,7 +57,7 @@ def test_load_ppa_works_df(tmp_path):
             "title": "title_a",
             "author": "author_a",
             "pub_year": 1899,
-            "collections": "['Linguistic', 'Literary']",
+            "collections": "Linguistic;Literary",
             "work_type": "full-work",
             "source": "source_a",
         },
@@ -68,7 +68,7 @@ def test_load_ppa_works_df(tmp_path):
             "title": "title_b",
             "author": "author_b",
             "pub_year": 1507,
-            "collections": "['Uncategorized']",
+            "collections": "Uncategorized",
             "work_type": "excerpt",
             "source": "source_b",
         },
@@ -87,7 +87,15 @@ def test_load_ppa_works_df(tmp_path):
         # the input dict with prefixed field name should
         # be equivalent to the dataframe row
         row_dict = {f"ppa_{k}": v for k, v in row.items()}
-        assert result_df.row(i, named=True) == row_dict
+
+        result_dict = result_df.row(i, named=True)
+        # collections field is converted to list; test separately
+        assert result_dict["ppa_collections"] == row_dict["ppa_collections"].split(";")
+        # delete to compare
+        del result_dict["ppa_collections"]
+        copy_dict = row_dict.copy()
+        del copy_dict["ppa_collections"]
+        assert result_dict == copy_dict
 
     # Error Case: Input file does not exist
     missing_csv = tmp_path / "missing.csv"

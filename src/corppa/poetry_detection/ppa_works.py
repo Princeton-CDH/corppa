@@ -33,6 +33,11 @@ def load_ppa_works_df(file: pathlib.Path) -> pl.DataFrame:
     # field *required* for joining with excerpts is work_id
     if "work_id" not in ppa_works_df.columns:
         raise ValueError("Input CSV is missing required `work_id` field")
+
+    # split delimited collection field to convert to list
+    ppa_works_df = ppa_works_df.with_columns(
+        collections=pl.col("collections").str.split(";")
+    )
     # Rename all fields to prefix with ppa_
     return ppa_works_df.rename(lambda column_name: f"ppa_{column_name}")
 
