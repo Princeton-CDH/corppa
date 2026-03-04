@@ -331,3 +331,25 @@ def test_add_poems_meta(mock_load_meta_df):
         with pytest.raises(ValueError, match=err_msg):
             add_ref_poems_meta(bad_df, "poem_meta")
         mock_load_meta_df.assert_not_called()
+
+    # join on alternate field names
+    alt_excerpts_df = excerpts_df.with_columns(
+        alt_poem_id=pl.col("poem_id"), alt_ref_corpus=pl.col("ref_corpus")
+    )
+    with patch.object(alt_excerpts_df, "join") as mock_join:
+        add_ref_poems_meta(
+            alt_excerpts_df, "poem_meta", "alt_poem_id", "alt_ref_corpus", "_alt"
+        )
+        mock_join.assert_called_once_with(
+            poem_meta_df,
+            left_on=["alt_poem_id", "alt_ref_corpus"],
+            right_on=["poem_id", "ref_corpus"],
+            how="left",
+            suffix="_alt",
+        )
+
+    # validation on custom fields
+    with pytest.raises(ValueError, match="required fields: alt_poem_id"):
+        add_ref_poems_meta(excerpts_df, "poem_meta", "alt_poem_id")
+    with pytest.raises(ValueError, match="required fields: alt_ref_corpus"):
+        add_ref_poems_meta(excerpts_df, "poem_meta", ref_corpus_field="alt_ref_corpus")
