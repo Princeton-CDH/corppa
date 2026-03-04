@@ -2,6 +2,7 @@ import os.path
 import pathlib
 import tarfile
 from collections.abc import Generator
+from typing import Optional
 
 import polars as pl
 
@@ -273,7 +274,9 @@ def compile_metadata_df() -> pl.DataFrame:
     return poem_metadata
 
 
-def save_poem_metadata(output_file: pathlib.Path):
+def save_poem_metadata(
+    output_file: pathlib.Path, excerpts_df: Optional[pl.DataFrame] = None
+):
     """Generate and save compiled poetry metadata as a data file in the
     poem dataset.
     """
@@ -293,6 +296,23 @@ def save_poem_metadata(output_file: pathlib.Path):
     for value, count in total_by_corpus.iter_rows():
         # row is a tuple of value, count;  convert reference corpus id to name
         totals.append(f"{ref_corpus_names[value]}: {count:,}")
+
+    # when excerpt data is present, calculate & include aggregate totals
+    if excerpts_df is not None:
+        # get work-level aggregate excerpt totals
+        # (only includes primary poem ids, not alt poem ids)
+        excerpt_totals_df = excerpts_df.group_by("poem_id").agg(
+            pl.col("excerpt_id").n_unique().alias("num_excerpts"),
+            pl.col("ppa_work_id").n_unique().alias("num_ppa_works"),
+            pl.col("page_id").n_unique().alias("num_ppa_pages"),
+        )
+        # combine the totals with poem metadata
+        df = df.join(excerpt_totals_df, on="poem_id", how="left").with_columns(
+            # fill any missing values with zeroes
+            pl.col("num_excerpts").fill_null(pl.lit(0)),
+            pl.col("num_ppa_works").fill_null(pl.lit(0)),
+            pl.col("num_ppa_pages").fill_null(pl.lit(0)),
+        )
 
     print(f"{df.height:,} poem metadata entries ({'; '.join(totals)})")
     df.write_csv(output_file, include_bom=True)

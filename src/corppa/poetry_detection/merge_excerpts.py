@@ -194,7 +194,9 @@ def merge_excerpts(
     return pl.concat([output_df, merged_output_df], how="diagonal")
 
 
-def merge_excerpt_files(input_files, output_file):
+def merge_excerpt_files(
+    input_files: list[pathlib.Path], output_file: pathlib.Path
+) -> pl.DataFrame:
     total_excerpts = 0
     input_dfs = []
 
@@ -259,7 +261,11 @@ def merge_excerpt_files(input_files, output_file):
         # row is a tuple of value, count
         print(f"\t{row[0]}: {row[1]:,}")
 
+    # polars supports compression; but not sure what version it
+    # was added in, and documentation says it is unstable. Use that in future
     excerpts.write_csv(output_file)
+    # return excerpt data frame
+    return excerpts
 
 
 def main():
