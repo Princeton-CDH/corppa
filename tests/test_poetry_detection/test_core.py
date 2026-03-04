@@ -643,6 +643,7 @@ class TestLabeledExcerpt:
             "ref_span_start",
             "ref_span_end",
             "ref_span_text",
+            "alt_poem_ids",
             "identification_methods",
         ]
 
@@ -665,6 +666,7 @@ class TestLabeledExcerpt:
                 "ref_span_end": int,
                 "ref_span_text": str,
                 "identification_methods": set,
+                "alt_poem_ids": set,
             }
         )
 

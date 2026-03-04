@@ -30,6 +30,7 @@ FIELD_TYPES = LabeledExcerpt.field_types()
 # override set types with list, since Polars does not have a set type
 FIELD_TYPES["detection_methods"] = pl.List
 FIELD_TYPES["identification_methods"] = pl.List
+FIELD_TYPES["alt_poem_ids"] = pl.List
 
 #: Table of included reference poem field names and their names for use downstream
 POEM_FIELDS = {
@@ -125,13 +126,18 @@ def load_meta_df(file: pathlib.Path, fields_table: dict[str, str]) -> pl.DataFra
 def add_ref_poems_meta(
     excerpts_df: pl.DataFrame,
     ref_poem_meta: pathlib.Path,
+    poem_id_field: str = "poem_id",
+    ref_corpus_field: str = "ref_corpus",
+    suffix: str | None = None,
 ) -> pl.DataFrame:
     """
     Combines found poem excerpt data (:class:`polars.DataFrame`) with reference
     poem metadata (``CSV``, possibly compressed) and returns the resulting
-    ``DataFrame``.
+    ``DataFrame``.  To join on alternate poem id or reference corpus fields
+    in the excerpt data (e.g., on `alt_poem_ids`), specify the field names,
+    and optionally specify a custom suffix when combining multiple poems.
     """
-    join_fields = ["poem_id", "ref_corpus"]
+    join_fields = [poem_id_field, ref_corpus_field]
     # Check for required fields
     missing_fields = set(join_fields) - set(excerpts_df.columns)
     if missing_fields:
@@ -140,7 +146,16 @@ def add_ref_poems_meta(
             f"Input DataFrame missing the following required fields: {missing_str}"
         )
     poems_meta_df = load_meta_df(ref_poem_meta, POEM_FIELDS)
-    return excerpts_df.join(poems_meta_df, on=join_fields, how="left")
+    optional_args = {}
+    if suffix is not None:
+        optional_args["suffix"] = suffix
+    return excerpts_df.join(
+        poems_meta_df,
+        left_on=join_fields,
+        right_on=["poem_id", "ref_corpus"],
+        how="left",
+        **optional_args,  # type: ignore[arg-type]
+    )
 
 
 def load_excerpts_df(
