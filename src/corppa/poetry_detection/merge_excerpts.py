@@ -105,7 +105,8 @@ def merge_excerpts(
     )
 
     # sort by page then poem id, with nulls last, to ensure we select
-    # a non-null poem id and reference data
+    # a non-null poem id and reference data;
+    # extract passim match length and sort longest passim matches first
     merge_groups = (
         merge_candidates.with_columns(
             # extract passim match length so we can prioritize longer matches

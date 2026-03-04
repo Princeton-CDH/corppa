@@ -134,7 +134,8 @@ def add_ref_poems_meta(
     Combines found poem excerpt data (:class:`polars.DataFrame`) with reference
     poem metadata (``CSV``, possibly compressed) and returns the resulting
     ``DataFrame``.  To join on alternate poem id or reference corpus fields
-    in the excerpt data, specify the field names.
+    in the excerpt data (e.g., on `alt_poem_ids`), specify the field names,
+    and optionally specify a custom suffix when combining multiple poems.
     """
     join_fields = [poem_id_field, ref_corpus_field]
     # Check for required fields
