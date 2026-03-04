@@ -1,4 +1,29 @@
 #!/usr/bin/env python
+"""
+This is a one-time / convenience script to subset the excerpt data
+with the goal of limiting to a smaller set of the data to make it easier
+to explore and see what we have.
+
+Excerpts are filtered as follows:
+
+- Analyze excerpt totals in PPA clusters to identify "low-variance" clusters,
+  where number of excerpts does not change significantly among the
+  works in the cluster.
+    - For low-variance clusters, limit excerpt data to the earliest work
+      in the cluster
+- Filter excerpts to include only those in associated with works in the
+  Literary and Original Bibliography collections
+- Exclude internet poems reference corpus (as a stop gap, not desirable ultimately)
+
+The script reports steps and numbers as it proceeds.
+
+NOTE: this script expects to be run on a compiled excerpt dataset
+that includes aggregate counts (`num_excerpts` and `num_poems`) in the
+PPA metadata.
+
+Results are saved to subset_excerpts.csv
+
+"""
 
 import pathlib
 
@@ -43,7 +68,7 @@ def main():
 
     # identify clusters with low variance in excerpts found in clustered works
     lowvariance_clusters_df = ppa_clusters_df.filter(
-        pl.col("excerpt_variance").le(50) | pl.col("poem_variance").le(30)
+        pl.col("excerpt_variance").le(15) | pl.col("poem_variance").le(10)
     )
 
     lowvariance_clusters = lowvariance_clusters_df["ppa_cluster_id"].to_list()
@@ -89,9 +114,8 @@ def main():
     )
     # extract page meta for joining but otherwise don't modify
     print(f"\nLoaded {excerpts_df.height:,} excerpts. ")
-
     subset_excerpts_df = excerpts_df.filter(
-        pl.col("ppa_work_id").is_in(selected_works["ppa_work_id"])
+        pl.col("ppa_work_id").is_in(selected_works["ppa_work_id"].implode())
     )
     print(f"\tFilter by low-variance cluster: {subset_excerpts_df.height:,} excerpts.")
 
@@ -101,7 +125,7 @@ def main():
         | pl.col("ppa_collections").list.contains("Original Bibliography")
     )
     subset_excerpts_df = subset_excerpts_df.filter(
-        pl.col("ppa_work_id").is_in(lit_ob_works["ppa_work_id"])
+        pl.col("ppa_work_id").is_in(lit_ob_works["ppa_work_id"].implode())
     )
     print(
         f"\tLimit to Literary and Original Bibliography collections: {subset_excerpts_df.height:,} excerpts."
