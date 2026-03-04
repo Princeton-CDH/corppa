@@ -1,0 +1,165 @@
+:root {
+	/* define highlight colors here as CSS variables */
+
+/* https://observablehq.com/@jotasolano/paul-tol-schemes */
+/* qualitative vibrant
+	["#EE7733","#0077BB","#33BBEE","#EE3377","#CC3311","#009988"] */
+	--light-highlight-color1: #EE7733;
+	--light-gradient-color1: rgba(238, 119, 51, 0.25);
+	--light-highlight-color2: #0077BB;
+	--light-gradient-color3: rgba(0, 119, 187, 0.25);
+	--light-highlight-color3: #009988;	
+	--light-gradient-color3: rgba(0, 153, 136, 0.25);
+	--light-highlight-color4: #EE3377;	
+	--light-gradient-color4: rgba(238, 51, 119, 0.25);
+	--light-highlight-color5: #33BBEE;	
+	--light-gradient-color5: rgba(51, 187, 238, 0.25);
+	--light-highlight-color6: #CC3311;		
+	--light-gradient-color6: rgba(204, 51, 17, 0.25);
+
+	/* qualitative bright
+["#4477AA","#EE6677","#228833","#CCBB44","#66CCEE","#AA3377"]  */
+	--dark-highlight-color1: #4477AA;
+	--dark-gradient-color1: rgba(68, 119, 170, 0.25);
+	--dark-highlight-color2: #EE6677;
+	--dark-gradient-color2: rgba(238, 102, 119, 0.25);
+	--dark-highlight-color3: #228833;
+	--dark-gradient-color3: rgba(34, 136, 51, 0.25);
+	--dark-highlight-color4: #CCBB44;
+	--dark-gradient-color4: rgba(204, 187, 68, 0.25);
+	--dark-highlight-color5: #66CCEE;
+	--dark-gradient-color5: rgba(102, 204, 238, 0.25);
+	--dark-highlight-color6: #AA3377;
+	--dark-gradient-color6: rgba(170, 51, 119, 0.25);
+
+}
+
+mark {
+	/* override default styles for mark; remove highlight/color, add underline */
+	background-color: transparent;
+
+
+	color: currentColor;
+
+	/* set separate styles so it is easier to override */
+	text-decoration-line: underline;
+	text-decoration-style: solid;
+	text-decoration-color: light-dark(var(--light-highlight-color1), var(--dark-highlight-color1));
+	text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+
+	--bg-gradient: light-dark(var(--light-highlight-color1), var(--dark-highlight-color1));
+    background: linear-gradient(90deg,var(--bg-gradient) 0%, rgba(0, 0, 0, 0) 10%, rgba(0, 0, 0, 0) 90%, var(--bg-gradient) 100%);    
+
+
+}
+
+
+mark.passim {
+	text-decoration-color: light-dark(var(--light-highlight-color3), var(--dark-highlight-color3));
+	text-decoration-style: dotted;
+	text-decoration-thickness: 2px;	 
+    text-underline-offset: 8px;	
+	--bg-gradient: light-dark(var(--light-highlight-color3), var(--dark-highlight-color3));    
+	/*background: linear-gradient(90deg,light-dark(var(--light-highlight-color3), var(--dark-highlight-color3)), rgba(0, 0, 0, 0) 25%);    */
+}
+
+
+mark.adjudication {
+	/*border-bottom: 2px solid light-dark(var(--light-highlight-color1), var(--dark-highlight-color1));*/
+	/*background: linear-gradient(90deg, light-dark(var(--light-highlight-color1), var(--dark-highlight-color1)), rgba(0, 0, 0, 0) 25%);*/
+
+	/*text-decoration-color: light-dark(var(--light-highlight-color3), var(--dark-highlight-color3));*/
+	/*text-decoration-style: dotted;*/
+	/*text-decoration-thickness: 4px;	 /* 2px dotted is hard to see*/*/
+    /*text-underline-offset: 4px;*/
+}
+
+
+
+section.page {
+	white-space: pre-line;
+	position: relative;
+}
+
+section.page header {
+	position: sticky;
+	z-index: 4; /* display over page text */
+	top: -1em;	  /* adjust for scrolling within marimo cell */
+	padding-top: 1em;
+	padding-bottom: 1em;
+	border-bottom: 1px solid currentColor;
+	/* background-color: var(--background);  not working */
+	background-color: light-dark(white, black);
+}
+
+
+p.info {
+	font-size: smaller;
+	position: absolute;
+	top: 1em;
+	right: 5px;
+}
+
+section header h1 {
+	font-weight: bold;
+}
+
+div.compare {
+	position: relative;
+}
+div.compare > div {
+	white-space: pre;
+
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+/* for any div after the first, make the text transparent to avoid artifacts
+ when text does not exactly align (although beware of texts that differ too much!) */
+div.compare :not(div:first-child()) {
+	/* comment color and uncomment opacity to test */
+	color: transparent;
+	/*opacity: 0.9;*/
+}
+
+div.compare div.spacer {
+	color: transparent;
+	position: relative;
+	opacity: 0;
+}
+
+.highlight2 mark {
+	text-decoration-color: light-dark(var(--light-highlight-color2), var(--dark-highlight-color2));
+	text-decoration-style: wavy;
+	text-decoration-thickness: 1px;	 /* 2px wavy looks too thick */
+}
+
+.highlight3 mark {
+	text-decoration-color: light-dark(var(--light-highlight-color3), var(--dark-highlight-color3));
+	text-decoration-style: dotted;
+	text-decoration-thickness: 4px;	 /* 2px dotted is hard to see*/
+    text-underline-offset: 4px;
+}
+
+.compare.multi div:nth-child(n+2) mark, .compare.secondary mark {
+	/* use wavy underlines for secondary highlights;
+	everything after the first div in a span-compare section, or secondary-span
+	 */
+	text-decoration-style: wavy;
+    text-underline-offset: 5px;
+	text-decoration-thickness: 1px;
+	text-decoration-color: light-dark(var(--light-highlight-color2), var(--dark-highlight-color3));
+}
+
+.compare.multi  div:nth-child(3) mark {
+	text-decoration-style: dotted;
+	text-decoration-color: light-dark(var(--light-highlight-color3), var(--dark-highlight-color3));
+}
+.compare.multi  div:nth-child(4) mark {
+	text-decoration-color: light-dark(var(--light-highlight-color4), var(--dark-highlight-color4));
+}
+.compare.multi  div:nth-child(5) mark {
+	text-decoration-color: light-dark(var(--light-highlight-color5), var(--dark-highlight-color5));
+}
