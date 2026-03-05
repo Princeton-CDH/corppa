@@ -68,6 +68,9 @@ def _(mo):
     mo.md(r"""
     ## Works: what proportion of PPA works have poetry detected?
 
+    Broad overview: this is just looking at works with any excerpts detected and those zero excerpts.
+
+    ---
     Use the toggle to control whether the bar charts are normalized or not (show as raw counts or as the percent for that date).
 
     Mouse over to get counts; zoom in to see more detailed dates; double click to reset zoom.
@@ -83,7 +86,13 @@ def _(mo):
 
 
 @app.cell
-def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
+def _(ppa_works_year_df):
+    ppa_works_year_df
+    return
+
+
+@app.cell
+def _(alt, mo, pl, ppa_meta_df):
     ppa_works_year_df = ppa_meta_df.group_by("ppa_pub_year", "has_poetry").agg(
         count=pl.len(),
     )
@@ -95,16 +104,14 @@ def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
             x=alt.X("ppa_pub_year", title="Publication year").axis(
                 format="r"
             ),  # no commas in years
-            y=alt.Y("count", title="Number of works").stack(
-                "normalize" if normalize_works_toggle.value else "zero"
-            ),
+            y=alt.Y("count", title="Number of works").stack("normalize"),
             color=alt.Color("has_poetry", title="Has poetry"),
             tooltip=["count", "has_poetry"],
         )
         .properties(title="PPA works with detected poetry, by publication year")
         .interactive(bind_y=False)
     )
-    return
+    return (ppa_works_year_df,)
 
 
 @app.cell
@@ -134,6 +141,8 @@ def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
 def _(mo):
     mo.md(r"""
     ## Pages: what proportion of PPA pages have poetry detected?
+
+    If we look at the page level, how many pages in PPA have any poetry detected?
     """)
     return
 
@@ -243,7 +252,7 @@ def _(mo):
     mo.md(r"""
     ## Text: what proportion of PPA text has been detected as poetry?
 
-    If we look at page text at the character level, what portion of the text has been included in any of our detected excerpt spans?
+    If we look at page text at the character level, what portion of the text is been included in any of the detected poetry excerpt spans?
     """)
     return
 
