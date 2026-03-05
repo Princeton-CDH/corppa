@@ -108,21 +108,25 @@ def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
 
 
 @app.cell
-def _(alt, normalize_works_toggle, pl, ppa_meta_df):
+def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
     ppa_works_decade_df = ppa_meta_df.group_by("ppa_pub_decade", "has_poetry").agg(
         count=pl.len(),
     )
 
-    alt.Chart(ppa_works_decade_df).mark_bar(width=18).encode(
-        x=alt.X("ppa_pub_decade", title="Publication decade").axis(format="r"),
-        y=alt.Y("count", title="Number of works").stack(
-            "normalize" if normalize_works_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip="count",
-    ).properties(
-        title="PPA works with detected poetry, by publication decade"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(ppa_works_decade_df)
+        .mark_bar(width=18)
+        .encode(
+            x=alt.X("ppa_pub_decade", title="Publication decade").axis(format="r"),
+            y=alt.Y("count", title="Number of works").stack(
+                "normalize" if normalize_works_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip="count",
+        )
+        .properties(title="PPA works with detected poetry, by publication decade")
+        .interactive(bind_y=False)
+    )
     return
 
 
@@ -167,7 +171,7 @@ def _(data_paths, extract_page_meta, load_excerpts_df, pl, ppa_meta_df):
 
 
 @app.cell
-def _(alt, normalize_pages_toggle, pl, work_excerpt_pages_df):
+def _(alt, mo, normalize_pages_toggle, pl, work_excerpt_pages_df):
     # aggregate before graphing with altair
     ppa_pages_year_df = (
         work_excerpt_pages_df.group_by("ppa_pub_year")
@@ -181,23 +185,27 @@ def _(alt, normalize_pages_toggle, pl, work_excerpt_pages_df):
         .with_columns(has_poetry=pl.col.variable.eq("poetry_pages"))
     )
 
-    alt.Chart(ppa_pages_year_df).mark_bar().encode(
-        x=alt.X("ppa_pub_year", title="Publication year").axis(
-            format="r"
-        ),  # no commas in years
-        y=alt.Y("num_pages", title="Number of pages").stack(
-            "normalize" if normalize_pages_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip=["num_pages", "has_poetry"],
-    ).properties(
-        title="PPA pages with detected poetry, by publication year"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(ppa_pages_year_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("ppa_pub_year", title="Publication year").axis(
+                format="r"
+            ),  # no commas in years
+            y=alt.Y("num_pages", title="Number of pages").stack(
+                "normalize" if normalize_pages_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip=["num_pages", "has_poetry"],
+        )
+        .properties(title="PPA pages with detected poetry, by publication year")
+        .interactive(bind_y=False)
+    )
     return
 
 
 @app.cell
-def _(alt, normalize_pages_toggle, pl, work_excerpt_pages_df):
+def _(alt, mo, normalize_pages_toggle, pl, work_excerpt_pages_df):
     # same as above, but for decade instead of year
     ppa_pages_decade_df = (
         work_excerpt_pages_df.group_by("ppa_pub_decade")
@@ -211,18 +219,22 @@ def _(alt, normalize_pages_toggle, pl, work_excerpt_pages_df):
         .with_columns(has_poetry=pl.col.variable.eq("poetry_pages"))
     )
 
-    alt.Chart(ppa_pages_decade_df).mark_bar(width=18).encode(
-        x=alt.X("ppa_pub_decade", title="Publication decade").axis(
-            format="r"
-        ),  # no commas in years
-        y=alt.Y("num_pages", title="Number of pages").stack(
-            "normalize" if normalize_pages_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip=["num_pages", "has_poetry"],
-    ).properties(
-        title="PPA pages with detected poetry, by publication decade"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(ppa_pages_decade_df)
+        .mark_bar(width=18)
+        .encode(
+            x=alt.X("ppa_pub_decade", title="Publication decade").axis(
+                format="r"
+            ),  # no commas in years
+            y=alt.Y("num_pages", title="Number of pages").stack(
+                "normalize" if normalize_pages_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip=["num_pages", "has_poetry"],
+        )
+        .properties(title="PPA pages with detected poetry, by publication decade")
+        .interactive(bind_y=False)
+    )
     return
 
 
@@ -318,7 +330,7 @@ def _(excerpt_page_chars_df, pl, ppa_meta_df, ppa_pages_df):
 
 
 @app.cell
-def _(alt, normalize_text_toggle, pl, text_poetrylen_df):
+def _(alt, mo, normalize_text_toggle, pl, text_poetrylen_df):
     # aggregate before graphing with altair
     text_poetrylen_year_df = (
         text_poetrylen_df.group_by("ppa_pub_year")
@@ -332,23 +344,27 @@ def _(alt, normalize_text_toggle, pl, text_poetrylen_df):
         .with_columns(has_poetry=pl.col.variable.eq("poetry_chars"))
     )
 
-    alt.Chart(text_poetrylen_year_df).mark_bar().encode(
-        x=alt.X("ppa_pub_year", title="Publication year").axis(
-            format="r"
-        ),  # no commas in years
-        y=alt.Y("text_len", title="Number of characters").stack(
-            "normalize" if normalize_text_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip=["text_len", "has_poetry"],
-    ).properties(
-        title="PPA text with detected poetry, by publication year"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(text_poetrylen_year_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("ppa_pub_year", title="Publication year").axis(
+                format="r"
+            ),  # no commas in years
+            y=alt.Y("text_len", title="Number of characters").stack(
+                "normalize" if normalize_text_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip=["text_len", "has_poetry"],
+        )
+        .properties(title="PPA text detected as poetry, by publication year")
+        .interactive(bind_y=False)
+    )
     return
 
 
 @app.cell
-def _(alt, normalize_text_toggle, pl, text_poetrylen_df):
+def _(alt, mo, normalize_text_toggle, pl, text_poetrylen_df):
     # aggregate before graphing with altair
     text_poetrylen_decade_df = (
         text_poetrylen_df.group_by("ppa_pub_decade")
@@ -362,18 +378,22 @@ def _(alt, normalize_text_toggle, pl, text_poetrylen_df):
         .with_columns(has_poetry=pl.col.variable.eq("poetry_chars"))
     )
 
-    alt.Chart(text_poetrylen_decade_df).mark_bar(width=18).encode(
-        x=alt.X("ppa_pub_decade", title="Publication decade").axis(
-            format="r"
-        ),  # no commas in years
-        y=alt.Y("text_len", title="Number of characters").stack(
-            "normalize" if normalize_text_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip=["text_len", "has_poetry"],
-    ).properties(
-        title="PPA text with detected poetry, by publication decade"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(text_poetrylen_decade_df)
+        .mark_bar(width=18)
+        .encode(
+            x=alt.X("ppa_pub_decade", title="Publication decade").axis(
+                format="r"
+            ),  # no commas in years
+            y=alt.Y("text_len", title="Number of characters").stack(
+                "normalize" if normalize_text_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip=["text_len", "has_poetry"],
+        )
+        .properties(title="PPA text detected as poetry, by publication decade")
+        .interactive(bind_y=False)
+    )
     return
 
 
