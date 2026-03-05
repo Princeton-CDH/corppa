@@ -83,23 +83,27 @@ def _(mo):
 
 
 @app.cell
-def _(alt, normalize_works_toggle, pl, ppa_meta_df):
+def _(alt, mo, normalize_works_toggle, pl, ppa_meta_df):
     ppa_works_year_df = ppa_meta_df.group_by("ppa_pub_year", "has_poetry").agg(
         count=pl.len(),
     )
 
-    alt.Chart(ppa_works_year_df).mark_bar().encode(
-        x=alt.X("ppa_pub_year", title="Publication year").axis(
-            format="r"
-        ),  # no commas in years
-        y=alt.Y("count", title="Number of works").stack(
-            "normalize" if normalize_works_toggle.value else "zero"
-        ),
-        color=alt.Color("has_poetry", title="Has poetry"),
-        tooltip=["count", "has_poetry"],
-    ).properties(
-        title="PPA works with detected poetry, by publication year"
-    ).interactive(bind_y=False)
+    mo.ui.altair_chart(
+        alt.Chart(ppa_works_year_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("ppa_pub_year", title="Publication year").axis(
+                format="r"
+            ),  # no commas in years
+            y=alt.Y("count", title="Number of works").stack(
+                "normalize" if normalize_works_toggle.value else "zero"
+            ),
+            color=alt.Color("has_poetry", title="Has poetry"),
+            tooltip=["count", "has_poetry"],
+        )
+        .properties(title="PPA works with detected poetry, by publication year")
+        .interactive(bind_y=False)
+    )
     return
 
 
