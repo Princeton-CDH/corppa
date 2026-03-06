@@ -15,6 +15,9 @@ METADATA_SCHEMA = {
     "author": pl.String,
     "title": pl.String,
     "ref_corpus": pl.String,
+    "num_lines": pl.Int64,
+    "num_words": pl.Int64,
+    "char_len": pl.Int64,
 }
 
 
@@ -61,10 +64,12 @@ class BaseReferenceCorpus:
         corpus_opts.update(config_opts["reference_corpora"].get(self.corpus_id, {}))
         return corpus_opts
 
-    def get_metadata_df(self) -> pl.DataFrame:
+    def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         """Minimal common poetry metadata for use across reference corpora.
         Should return a :class:`pl.DataFrame` with poem_id, author, title, and
-        ref_corpus for each poem in this corpus."""
+        ref_corpus for each poem in this corpus.  Optionally, should
+        return information about poem length (number of characters and lines
+        in the text)."""
         raise NotImplementedError
 
     def get_text_corpus(self) -> Generator[dict[str, str]]:
@@ -136,8 +141,11 @@ class InternetPoems(LocalTextCorpus):
 
     # no init/validation needed beyond that provided by LocalTextCorpus
 
-    def get_metadata_df(self) -> pl.DataFrame:
+    def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         metadata = []
+
+        # TODO: can we use get_text_corpus here instead?
+        # (and make that work for tar file)
 
         # if configured text_dir is a directory, get list of names
         # from the filesystem
@@ -158,14 +166,25 @@ class InternetPoems(LocalTextCorpus):
             #   Firstname-Lastname_Poem-Title.txt
             #   Replace - with spaces and split on - to separate author/title
             author, title = poem_id.replace("-", " ").split("_", 1)
-            metadata.append(
-                {
-                    "poem_id": poem_id,
-                    "author": author,
-                    "title": title,
-                    "ref_corpus": self.corpus_id,
-                }
-            )
+            poem_metadata: dict[str, str | int] = {
+                "poem_id": poem_id,
+                "author": author,
+                "title": title,
+                "ref_corpus": self.corpus_id,
+            }
+            if poem_length:
+                # TODO: generalize to base class
+                with open(self.text_dir / f"{poem_id}.txt") as poemfile:
+                    text_content = poemfile.read()
+                    num_words = len(text_content.split())
+                    num_blank_lines = len(
+                        [line for line in text_content.splitlines() if line.strip()]
+                    )
+                    poem_metadata["num_lines"] = num_blank_lines
+                    poem_metadata["num_words"] = num_blank_lines
+                    poem_metadata["char_len"] = num_words
+            metadata.append(poem_metadata)
+
         return pl.from_dicts(metadata, schema=METADATA_SCHEMA)
 
 
@@ -195,9 +214,9 @@ class ChadwyckHealey(LocalTextCorpus):
                 f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
             )
 
-    def get_metadata_df(self) -> pl.DataFrame:
+    def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # disable schema inference; the fields we care about are all strings
-        return (
+        df = (
             pl.read_csv(self.metadata_path, infer_schema=False)
             # rename fields
             .rename({"title_main": "title", "id": "poem_id"})
@@ -212,6 +231,28 @@ class ChadwyckHealey(LocalTextCorpus):
             )
             .select(["poem_id", "author", "title", "ref_corpus"])
         )
+
+        if poem_length:
+            poem_lengths = []
+
+            # returns a generator of dicts with id and text string
+            # TODO: when called from compile script, might be nice to show progress bar
+            for poem in self.get_text_corpus():
+                poem_lengths.append(
+                    {
+                        "poem_id": poem["poem_id"],
+                        "num_lines": len(
+                            [line for line in poem["text"].splitlines() if line.strip()]
+                        ),
+                        "num_words": len(poem["text"].split()),
+                        "char_len": len(poem["text"]),
+                    }
+                )
+
+            poem_length_df = pl.from_dicts(poem_lengths)
+            df = df.join(poem_length_df, on="poem_id")
+
+        return df
 
 
 class OtherPoems(BaseReferenceCorpus):
@@ -240,7 +281,7 @@ class OtherPoems(BaseReferenceCorpus):
                 f"Configuration error: {self.corpus_name} 'metadata_path' is not set"
             )
 
-    def get_metadata_df(self) -> pl.DataFrame:
+    def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # polars can load csv directly from a url
         return pl.read_csv(self.metadata_path, schema=METADATA_SCHEMA).with_columns(
             ref_corpus=pl.lit(self.corpus_id)
@@ -261,17 +302,21 @@ def fulltext_corpora() -> list[BaseReferenceCorpus]:
     return [InternetPoems(), ChadwyckHealey()]
 
 
-def compile_metadata_df() -> pl.DataFrame:
+def compile_metadata_df(poem_length=False) -> pl.DataFrame:
     """Compile poetry metadata from all reference corpora into a single
     polars DataFrame with reference corpus ids."""
     # create an empty dataframe with the intended fields
-    poem_metadata = pl.DataFrame([], schema=METADATA_SCHEMA)
+    # poem_metadata = pl.DataFrame([], schema=METADATA_SCHEMA)
 
     # for each corpus, load poem metadata into a polars dataframe,
     # rename id to poem_id, and add a column with the corpus id
-    for ref_corpus in all_corpora():
-        poem_metadata.extend(ref_corpus.get_metadata_df())
-    return poem_metadata
+
+    # use a diagonal concat instead of vstack/extend
+    ref_corpora_dfs = [
+        ref_corpus.get_metadata_df(poem_length=poem_length)
+        for ref_corpus in all_corpora()
+    ]
+    return pl.concat(ref_corpora_dfs, how="diagonal")
 
 
 def save_poem_metadata(
@@ -286,7 +331,7 @@ def save_poem_metadata(
         output_verb = "Replacing"
     print(f"{output_verb} {output_file}")
 
-    df = compile_metadata_df()
+    df = compile_metadata_df(poem_length=True)
     ref_corpus_names = {
         ref_corpus.corpus_id: ref_corpus.corpus_name for ref_corpus in all_corpora()
     }
