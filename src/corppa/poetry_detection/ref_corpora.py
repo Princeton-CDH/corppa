@@ -1,13 +1,12 @@
 import os.path
 import pathlib
 import tarfile
-from collections.abc import Generator
 from typing import Optional
 
 import polars as pl
 
 from corppa.config import get_config
-from corppa.utils.build_text_corpus import build_text_corpus
+from corppa.utils.build_text_corpus import build_text_corpus, text_corpus_from_tarfile
 
 #: schema for reference corpora metadata :class:`pl.DataFrame`
 METADATA_SCHEMA = {
@@ -29,7 +28,7 @@ class BaseReferenceCorpus:
 
     corpus_id: str
     corpus_name: str
-    text_dir: pathlib.Path
+    text_path: pathlib.Path
     metadata_path: pathlib.Path | str
 
     def get_config_opts(self) -> dict:
@@ -72,7 +71,7 @@ class BaseReferenceCorpus:
         in the text)."""
         raise NotImplementedError
 
-    def get_text_corpus(self) -> Generator[dict[str, str]]:
+    def get_text_corpus(self) -> dict[str, str]:
         """Minimal text record for reference corpora.
         Should yield a dictionary with id and text for each poem in this
         corpus."""
@@ -93,36 +92,40 @@ class LocalTextCorpus(BaseReferenceCorpus):
         config_opts = self.get_config_opts()
 
         # get text directory for this reference corpus from app configuration
-        if "text_dir" in config_opts:
-            self.text_dir = pathlib.Path(config_opts["text_dir"])
-        # if text dir is not absolute, assume relative to ref_corpus base dir
-        if not self.text_dir.is_absolute():
-            self.text_dir = config_opts["base_dir"] / self.text_dir
+        if "text_path" in config_opts:
+            self.text_path = pathlib.Path(config_opts["text_path"])
+        # if text path is not absolute, assume relative to ref_corpus base dir
+        # TODO: shift relative path logic to config loader
+        if not self.text_path.is_absolute():
+            self.text_path = config_opts["base_dir"] / self.text_path
 
-        if not self.text_dir.exists():
+        if not self.text_path.exists():
             raise ValueError(
-                f"Configuration error: {self.corpus_name} path {self.text_dir} does not exist"
+                f"Configuration error: {self.corpus_name} path {self.text_path} does not exist"
             )
-        # TODO: allow tar.gz here; determine which and set a flag?
-        if not self.text_dir.is_dir() and not (
-            self.text_dir.is_file() and self.text_dir.name.endswith(".tar.gz")
+        # Currently supports directory and tar.gz file;
+        # might be nice to support zipfile as well
+        if not self.text_path.is_dir() and not (
+            self.text_path.is_file() and self.text_path.name.endswith(".tar.gz")
         ):
             raise ValueError(
-                f"Configuration error: {self.corpus_name} path {self.text_dir} is not a directory or a tar.gz"
+                f"Configuration error: {self.corpus_name} path {self.text_path} is not a directory or a tar.gz"
             )
 
-    def get_text_corpus(
-        self, disable_progress: bool = True
-    ) -> Generator[dict[str, str]]:
-        # if text_dir is tarball, raise not implemented error
-        if not self.text_dir.is_dir():
+    def get_text_corpus(self, disable_progress: bool = True) -> dict[str, str]:
+        # if text_path is tarball, raise not implemented error
+        if self.text_path.is_dir():
+            corpus_method = build_text_corpus
+        elif self.text_path.name.endswith(".tar.gz"):
+            corpus_method = text_corpus_from_tarfile
+        else:
             raise NotImplementedError(
-                "text corpus generation is not supported for tar.gz; configure a directory"
+                "text corpus generation is only supported for tar.gz and directories"
             )
         # build_text_corpus method returns id, so rename id to poem_id
         yield from (
             {"poem_id": p["id"], "text": p["text"]}
-            for p in build_text_corpus(self.text_dir, disable_progress=disable_progress)
+            for p in corpus_method(self.text_path, disable_progress=disable_progress)
         )
 
 
@@ -137,52 +140,33 @@ class InternetPoems(LocalTextCorpus):
     #: id for this reference corpus: internet_poems
     corpus_id: str = "internet_poems"
     corpus_name: str = "Internet Poems"
-    # inherits text_dir path
+    # inherits text_path
 
     # no init/validation needed beyond that provided by LocalTextCorpus
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         metadata = []
-
-        # TODO: can we use get_text_corpus here instead?
-        # (and make that work for tar file)
-
-        # if configured text_dir is a directory, get list of names
-        # from the filesystem
-        if self.text_dir.is_dir():
-            text_ids = [file.stem for file in self.text_dir.glob("*.txt")]
-        # otherwise, get from tar archive list
-        else:
-            with tarfile.open(str(self.text_dir), "r:gz") as text_archive:
-                text_ids = [
-                    os.path.splitext(os.path.basename(name))[0]
-                    for name in text_archive.getnames()
-                    if name.endswith(".txt")
-                ]
-
-        # filename without extension is poem identifier
-        for poem_id in text_ids:
+        # returns a generator of dicts with id and text string
+        # TODO: when called from compile script, might be nice to show progress bar
+        for poem in self.get_text_corpus():
             # filename format:
             #   Firstname-Lastname_Poem-Title.txt
             #   Replace - with spaces and split on - to separate author/title
-            author, title = poem_id.replace("-", " ").split("_", 1)
+            author, title = poem["poem_id"].replace("-", " ").split("_", 1)
             poem_metadata: dict[str, str | int] = {
-                "poem_id": poem_id,
+                "poem_id": poem["poem_id"],
                 "author": author,
                 "title": title,
                 "ref_corpus": self.corpus_id,
             }
             if poem_length:
-                # TODO: generalize to base class
-                with open(self.text_dir / f"{poem_id}.txt") as poemfile:
-                    text_content = poemfile.read()
-                    num_words = len(text_content.split())
-                    num_blank_lines = len(
-                        [line for line in text_content.splitlines() if line.strip()]
-                    )
-                    poem_metadata["num_lines"] = num_blank_lines
-                    poem_metadata["num_words"] = num_blank_lines
-                    poem_metadata["char_len"] = num_words
+                num_blank_lines = len(
+                    [line for line in poem["text"].splitlines() if line.strip()]
+                )
+                poem_metadata["num_lines"] = num_blank_lines
+                poem_metadata["num_words"] = len(poem["text"].split())
+                poem_metadata["char_len"] = len(poem["text"])
+
             metadata.append(poem_metadata)
 
         return pl.from_dicts(metadata, schema=METADATA_SCHEMA)
@@ -197,10 +181,10 @@ class ChadwyckHealey(LocalTextCorpus):
     #: id for this reference corpus: chadwyck-healey
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"
-    # inherits text_dir path
+    # inherits text_path
 
     def __init__(self):
-        # use LocalTextCorpus init to configure and validate text_dir
+        # use LocalTextCorpus init to configure and validate text_path
         super().__init__()
         # get configuration to set metadata path
         config_opts = self.get_config_opts()
