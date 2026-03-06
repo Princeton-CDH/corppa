@@ -303,7 +303,7 @@ def _(excerpts_df, pl):
             .over("page_id")  # limit to spans on a single page
         )
         .with_columns(
-            # because new_group is 1 or 0, cumulative sum gives each group on a page a unique groep id
+            # because new_group is 1 or 0, cumulative sum gives each group on a page a unique group id
             pl.col("new_group").cum_sum().alias("group_id").over("page_id")
         )
         .group_by("page_id", "group_id")
