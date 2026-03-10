@@ -211,7 +211,7 @@ class TestInternetPoems:
     ):
         mock_get_config_opts.return_value = {"text_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
-        meta_df = internet_poems.get_metadata_df()
+        meta_df = internet_poems.get_metadata_df(poem_length=True)
         assert isinstance(meta_df, pl.DataFrame)
         assert meta_df.schema == METADATA_SCHEMA
         assert meta_df.height == len(INTERNETPOEMS_TEXTS)
@@ -247,9 +247,32 @@ class TestInternetPoems:
         internetpoems_tarball,
     ):
         internet_poems = InternetPoems()
-        with pytest.raises(NotImplementedError, match="not supported for tar.gz"):
-            # returns a generator; use list to get to actually run
-            list(internet_poems.get_text_corpus())
+        # with pytest.raises(NotImplementedError, match="not supported for tar.gz"):
+        # returns a generator; use list to get to actually run
+        # convert to list, sort to ensure order matches fixture data
+        text_data = sorted(
+            list(internet_poems.get_text_corpus()), key=lambda x: x["poem_id"]
+        )
+        assert len(text_data) == len(INTERNETPOEMS_TEXTS)
+        assert text_data[0]["poem_id"] == INTERNETPOEMS_TEXTS[0]["id"]
+        assert text_data[0]["text"] == INTERNETPOEMS_TEXTS[0]["text"]
+
+    @patch.object(InternetPoems, "get_config_opts")
+    def test_get_text_unsupported(
+        self,
+        mock_get_config_opts,
+        tmp_path,
+        corppa_test_config_defaults,
+    ):
+        zipfile = tmp_path / "internet_poems.zip"
+        zipfile.touch()
+        mock_get_config_opts.return_value = {
+            "text_path": zipfile,
+            "base_dir": tmp_path / "ref-corpora",
+        }
+        with pytest.raises(ValueError, match=".*not a directory or a tar.gz"):
+            # checks configuration on init
+            InternetPoems()
 
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_text_corpus(
@@ -310,7 +333,8 @@ class TestChadwyckHealey:
         chadwyck_healey = ChadwyckHealey()
         meta_df = chadwyck_healey.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
-        assert meta_df.schema == METADATA_SCHEMA
+        # schema is a subset because we don't include poem lengths
+        assert all(key in METADATA_SCHEMA for key in meta_df.schema.keys())
         # csv fixture data currently has one row
         assert meta_df.height == 1
         # get the first row as a dict and check values
@@ -351,7 +375,8 @@ class TestOtherPoems:
         opoems = OtherPoems()
         meta_df = opoems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
-        assert meta_df.schema == METADATA_SCHEMA
+        # schema is a subset because we don't include poem lengths
+        assert all(key in METADATA_SCHEMA for key in meta_df.schema.keys())
         assert meta_df.height == len(OTHERPOEM_METADATA)
         # check values on the first row
         meta_row = meta_df.row(0, named=True)
@@ -448,6 +473,7 @@ def test_save_poem_metadata(
     otherpoems_metadata_df,
 ):
     # data fixtures should ensure that all the expected directories exist
+    # mock_get_config_opts.return_value = {"text_path": str(internetpoems_data_dir)}
 
     # add corpus id to other poems data frame and patch it to be returned
     otherpoems_metadata_df = otherpoems_metadata_df.with_columns(

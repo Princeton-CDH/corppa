@@ -1,12 +1,13 @@
-import os.path
+import logging
 import pathlib
-import tarfile
 from typing import Optional
 
 import polars as pl
 
 from corppa.config import get_config
 from corppa.utils.build_text_corpus import build_text_corpus, text_corpus_from_tarfile
+
+logger = logging.getLogger(__name__)
 
 #: schema for reference corpora metadata :class:`pl.DataFrame`
 METADATA_SCHEMA = {
@@ -219,8 +220,8 @@ class ChadwyckHealey(LocalTextCorpus):
         if poem_length:
             poem_lengths = []
 
-            # returns a generator of dicts with id and text string
-            # TODO: when called from compile script, might be nice to show progress bar
+            # text corpus returns a generator of dicts with id and text string
+            # NOTE: when called from compile script, might be nice to show progress bar
             for poem in self.get_text_corpus():
                 poem_lengths.append(
                     {
@@ -232,9 +233,13 @@ class ChadwyckHealey(LocalTextCorpus):
                         "char_len": len(poem["text"]),
                     }
                 )
-
-            poem_length_df = pl.from_dicts(poem_lengths)
-            df = df.join(poem_length_df, on="poem_id")
+            if poem_lengths:
+                poem_length_df = pl.from_dicts(poem_lengths)
+                df = df.join(poem_length_df, on="poem_id")
+            else:
+                logger.warning(
+                    "Poem length requested but none calculated (no text files found?)"
+                )
 
         return df
 
