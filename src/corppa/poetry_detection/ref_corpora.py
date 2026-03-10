@@ -339,6 +339,7 @@ def save_poem_metadata(
             pl.col("excerpt_id").n_unique().alias("num_excerpts"),
             pl.col("ppa_work_id").n_unique().alias("num_ppa_works"),
             pl.col("page_id").n_unique().alias("num_ppa_pages"),
+            # number of unique ppa authors would be nice, but requires joining ppa metadata
         )
         # combine the totals with poem metadata
         df = df.join(excerpt_totals_df, on="poem_id", how="left").with_columns(
