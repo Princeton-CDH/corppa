@@ -127,22 +127,26 @@ def _(pl, works_poems_df):
 @app.cell
 def _(alt, mo, work_poem_decade_stats_df):
     mo.ui.altair_chart(
-        alt.Chart(work_poem_decade_stats_df)
-        .mark_area(
-            opacity=0.4,
-            color="#f05b69",
-        )
-        .encode(
-            x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(format="r"),
-            y=alt.Y("lines_Q3", title="Number of lines (mean, Q1, Q3)"),
-            y2="lines_Q1",
-            tooltip=["lines_Q1", "mean_lines", "lines_Q2", "lines_Q3"],
-        )
-        + alt.Chart(work_poem_decade_stats_df)
-        .mark_line()
-        .encode(x="ppa_pub_decade", y="lines_Q2")
-        .properties(
-            title="Average and Quartile poem length (by lines) for poems cited in PPA works by PPA publication decade"
+        alt.layer(
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_area(
+                opacity=0.4,
+                color="#f05b69",
+            )
+            .encode(
+                x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(
+                    format="r"
+                ),
+                y=alt.Y("lines_Q3", title="Number of lines (mean, Q1, Q3)"),
+                y2="lines_Q1",
+                tooltip=["lines_Q1", "mean_lines", "lines_Q2", "lines_Q3"],
+            ),
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_line()
+            .encode(x="ppa_pub_decade", y="lines_Q2")
+            .properties(
+                title="Average and Quartile poem length (by lines) for poems cited in PPA works by PPA publication decade"
+            ),
         )
     )
     return
