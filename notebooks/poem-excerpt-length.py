@@ -24,10 +24,6 @@ def _():
 
     from corppa.config import get_config
     from corppa.poetry_detection.polars_utils import load_excerpts_df
-    from corppa.poetry_detection.ppa_works import (
-        extract_page_meta,
-        load_ppa_works_df,
-    )
 
     return alt, get_config, load_excerpts_df, mo, pathlib, pl
 
@@ -182,22 +178,26 @@ def _(mo):
 @app.cell
 def _(alt, mo, work_poem_decade_stats_df):
     mo.ui.altair_chart(
-        alt.Chart(work_poem_decade_stats_df)
-        .mark_area(
-            opacity=0.4,
-            color="#f05b69",
-        )
-        .encode(
-            x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(format="r"),
-            y=alt.Y("words_Q3", title="Number of words (mean, Q1, Q3)"),
-            y2="words_Q1",
-            tooltip=["words_Q1", "words_Q2", "words_Q3", "mean_words"],
-        )
-        + alt.Chart(work_poem_decade_stats_df)
-        .mark_line()
-        .encode(x="ppa_pub_decade", y="words_Q2")
-        .properties(
-            title="Average and Quartile poem length (by number of words) for poems cited in PPA works by PPA publication decade"
+        alt.layer(
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_area(
+                opacity=0.4,
+                color="#f05b69",
+            )
+            .encode(
+                x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(
+                    format="r"
+                ),
+                y=alt.Y("words_Q3", title="Number of words (mean, Q1, Q3)"),
+                y2="words_Q1",
+                tooltip=["words_Q1", "words_Q2", "words_Q3", "mean_words"],
+            ),
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_line()
+            .encode(x="ppa_pub_decade", y="words_Q2")
+            .properties(
+                title="Average and Quartile poem length (by number of words) for poems cited in PPA works by PPA publication decade"
+            ),
         )
     )
     return
@@ -206,22 +206,26 @@ def _(alt, mo, work_poem_decade_stats_df):
 @app.cell
 def _(alt, mo, work_poem_decade_stats_df):
     mo.ui.altair_chart(
-        alt.Chart(work_poem_decade_stats_df)
-        .mark_area(
-            opacity=0.4,
-            color="#f05b69",
-        )
-        .encode(
-            x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(format="r"),
-            y=alt.Y("chars_Q3", title="Number of characters (mean, Q1, Q3)"),
-            y2="chars_Q1",
-            tooltip=["chars_Q1", "chars_Q2", "chars_Q3", "mean_chars"],
-        )
-        + alt.Chart(work_poem_decade_stats_df)
-        .mark_line()
-        .encode(x="ppa_pub_decade", y="chars_Q2")
-        .properties(
-            title="Average and Quartile poem length (by number of characters) for poems cited in PPA works by PPA publication decade"
+        alt.layer(
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_area(
+                opacity=0.4,
+                color="#f05b69",
+            )
+            .encode(
+                x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(
+                    format="r"
+                ),
+                y=alt.Y("chars_Q3", title="Number of characters (mean, Q1, Q3)"),
+                y2="chars_Q1",
+                tooltip=["chars_Q1", "chars_Q2", "chars_Q3", "mean_chars"],
+            ),
+            alt.Chart(work_poem_decade_stats_df)
+            .mark_line()
+            .encode(x="ppa_pub_decade", y="chars_Q2")
+            .properties(
+                title="Average and Quartile poem length (by number of characters) for poems cited in PPA works by PPA publication decade"
+            ),
         )
     )
     return
@@ -318,7 +322,7 @@ def _(excerpts_df, pl):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Which poems are quoted from the most?
+    Which poems are quoted from the most?   (Sorting by sum of reference span lengths)
     """)
     return
 
@@ -328,6 +332,35 @@ def _(ref_merged_excerpts_df):
     ref_merged_excerpts_df.sort(
         "ref_span_len", descending=True, nulls_last=True
     ).select(
+        "ppa_work_id",
+        "poem_id",
+        "poem_author",
+        "poem_title",
+        "poem_char_len",
+        "ref_span_len",
+        "ref_percent",
+    )
+    return
+
+
+@app.cell
+def _(mo, pl, ref_merged_excerpts_df):
+    fully_quoted_poems = ref_merged_excerpts_df.filter(pl.col.ref_percent.ge(1)).height
+
+    mo.md(
+        f"""{fully_quoted_poems:,} poems are quoted in full 
+
+    (based on total reference span length and percentage of poem length, which may not match exactly)"""
+    )
+    return
+
+
+@app.cell
+def _(ref_merged_excerpts_df):
+    # which ones are quoted most?
+    # we have numbers of 100% here - guessing this is due to lack of alignment / different ways of counting characters
+
+    ref_merged_excerpts_df.sort("ref_percent", descending=True, nulls_last=True).select(
         "ppa_work_id",
         "poem_id",
         "poem_author",
@@ -369,38 +402,46 @@ def _(alt, excerpt_poem_chars_df, mo, pl):
     )
 
     mo.ui.altair_chart(
-        alt.Chart(ref_excerpts_stats_df)
-        .mark_area(
-            opacity=0.4,
-            color="#f05b69",
-        )
-        .encode(
-            x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(format="r"),
-            y=alt.Y("Q3_chars", title="Poem characters quoted (mean, Q1, Q3)"),
-            y2="Q1_chars",
-            tooltip=["Q1_chars", "mean_chars", "median_chars", "Q3_chars"],
-        )
-        + mean_median_reflength_chart
-    )
-    return (ref_excerpts_stats_df,)
-
-
-@app.cell
-def _(alt, mo, ref_excerpts_stats_df):
-    mo.ui.altair_chart(
-        (
+        alt.layer(
             alt.Chart(ref_excerpts_stats_df)
             .mark_area(
                 opacity=0.4,
-                color="#6252a0",
+                color="#f05b69",
             )
             .encode(
                 x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(
                     format="r"
                 ),
-                y=alt.Y("min_chars", title="Poem characters quoted (min/max length)"),
-                y2="max_chars",
-            )
+                y=alt.Y("Q3_chars", title="Poem characters quoted (mean, Q1, Q3)"),
+                y2="Q1_chars",
+                tooltip=["Q1_chars", "mean_chars", "median_chars", "Q3_chars"],
+            ),
+            mean_median_reflength_chart,
+        )
+    )
+    return (ref_excerpts_stats_df,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    We can graph the min/max, but the maximum length is quite large and changes the scale substantially.
+    """)
+    return
+
+
+@app.cell
+def _(alt, mo, ref_excerpts_stats_df):
+    mo.ui.altair_chart(
+        alt.Chart(ref_excerpts_stats_df)
+        .mark_area(
+            opacity=0.4,
+            color="#6252a0",
+        )
+        .encode(
+            x=alt.X("ppa_pub_decade", title="PPA Publication decade").axis(format="r"),
+            y=alt.Y("min_chars", title="Poem characters quoted (min/max length)"),
+            y2="max_chars",
         )
     )
     return
