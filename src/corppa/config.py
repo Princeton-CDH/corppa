@@ -29,11 +29,11 @@ DEFAULTS = {
         "base_dir": "ref-corpora",
         # paths are relative to base_dir
         "internet_poems": {
-            # tarball of directory of text files OR expanded directory
-            "text_dir": "internet_poems/internet_poems_texts.tar.gz"
+            # tarball of text files OR expanded directory
+            "text_path": "internet_poems/internet_poems_texts.tar.gz"
         },
         "chadwyck-healey": {
-            "text_dir": "chadwyck-healey/chadwyck-healey_texts.tar.gz",
+            "text_path": "chadwyck-healey/chadwyck-healey_texts.tar.gz",
             "metadata_path": "chadwyck-healey/chadwyck-healey.csv",
         },
         # other poems metadata_path configuration required

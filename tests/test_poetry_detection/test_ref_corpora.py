@@ -34,9 +34,9 @@ def corppa_test_config(tmp_path):
     reference_corpora:
         base_dir: {base_dir}
         internet_poems:
-            text_dir: {base_dir / "internet_poems2"}
+            text_path: {base_dir / "internet_poems2"}
         chadwyck-healey:
-            text_dir: "ch"
+            text_path: "ch"
             metadata_path: "ch/chadwyck-healey.csv"
         other:
             metadata_path: http://example.com/other-poems.csv
@@ -138,7 +138,7 @@ def internetpoems_data_dir(tmp_path):
     config_opts = config.get_config()
     # use the configured text data dir
     data_dir = pathlib.Path(
-        config_opts["reference_corpora"]["internet_poems"]["text_dir"]
+        config_opts["reference_corpora"]["internet_poems"]["text_path"]
     )
 
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -159,7 +159,7 @@ def internetpoems_tarball(tmp_path):
         text_file = internetpoems_data_dir / f"{sample['id']}.txt"
         text_file.write_text(sample["text"])
 
-    tarfile_name = config_opts["reference_corpora"]["internet_poems"]["text_dir"]
+    tarfile_name = config_opts["reference_corpora"]["internet_poems"]["text_path"]
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
     tarfile_path = base_dir / tarfile_name
     tarfile_path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,14 +180,14 @@ class TestInternetPoems:
         config_opts = config.get_config()
         # expected data_dir
         expected_data_dir = pathlib.Path(
-            config_opts["reference_corpora"]["internet_poems"]["text_dir"]
+            config_opts["reference_corpora"]["internet_poems"]["text_path"]
         )
 
         # init should succeed when directory exists
         expected_data_dir.mkdir(parents=True)
         internet_poems = InternetPoems()
-        assert isinstance(internet_poems.text_dir, pathlib.Path)
-        assert internet_poems.text_dir == expected_data_dir
+        assert isinstance(internet_poems.text_path, pathlib.Path)
+        assert internet_poems.text_path == expected_data_dir
 
         # error if it is not a directory : remove dir and create a regular file
         expected_data_dir.rmdir()
@@ -203,13 +203,13 @@ class TestInternetPoems:
         # should pass in reference corpus base directory
         assert "base_dir" in config_opts
         # should include ref_corpus specific options, where are in the test config
-        assert "text_dir" in config_opts
+        assert "text_path" in config_opts
 
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_metadata_df(
         self, mock_get_config_opts, tmp_path, corppa_test_config, internetpoems_data_dir
     ):
-        mock_get_config_opts.return_value = {"text_dir": str(internetpoems_data_dir)}
+        mock_get_config_opts.return_value = {"text_path": str(internetpoems_data_dir)}
         internet_poems = InternetPoems()
         meta_df = internet_poems.get_metadata_df()
         assert isinstance(meta_df, pl.DataFrame)
@@ -260,7 +260,7 @@ class TestInternetPoems:
         internetpoems_data_dir,
     ):
         mock_get_config_opts.return_value = {
-            "text_dir": str(internetpoems_data_dir),
+            "text_path": str(internetpoems_data_dir),
             "base_dir": tmp_path / "ref-corpora",
         }
         internet_poems = InternetPoems()
@@ -282,7 +282,7 @@ def chadwyck_healey_csv(tmp_path):
     # use the configured data paths or configured ref_corpus base_dir and defaults
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
     override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
-    data_dir = pathlib.Path(override_opts["text_dir"])
+    data_dir = pathlib.Path(override_opts["text_path"])
     ch_meta_csv = pathlib.Path(override_opts["metadata_path"])
 
     # in either case, make relative to base dir if not absolute
