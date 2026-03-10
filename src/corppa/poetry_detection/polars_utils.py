@@ -38,6 +38,9 @@ POEM_FIELDS = {
     "author": "poem_author",
     "title": "poem_title",
     "ref_corpus": "ref_corpus",
+    "num_lines": "poem_num_lines",
+    "num_words": "poem_num_words",
+    "char_len": "poem_char_len",
 }
 
 
