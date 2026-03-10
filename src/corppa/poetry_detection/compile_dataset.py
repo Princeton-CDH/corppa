@@ -254,6 +254,9 @@ def main():
         # if this step is called on its own, load excerpt data
         if excerpts_df is None:
             excerpts_df = load_compiled_excerpts(compile_opts)
+        else:
+            # ensure we have ppa work id / page id
+            excerpts_df = extract_page_meta(excerpts_df)
         save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
 
     if compilation_steps is None or "ppa_metadata" in compilation_steps:
@@ -261,6 +264,10 @@ def main():
         # if this step is called on its own, load excerpt/poem data
         if excerpts_df is None:
             excerpts_df = load_compiled_excerpts(compile_opts)
+        else:
+            # ensure we have ppa work id / page id
+            excerpts_df = extract_page_meta(excerpts_df)
+
         # join poem metadata so we can count unique poets (even if rough)
         excerpts_df = add_ref_poems_meta(
             excerpts_df, compile_opts["poem_metadata_file"]
