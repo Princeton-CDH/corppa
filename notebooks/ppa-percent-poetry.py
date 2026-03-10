@@ -208,13 +208,6 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    normalize_pages_toggle = mo.ui.switch(label="Normalize", value=True)
-    normalize_pages_toggle
-    return
-
-
-@app.cell
 def _(data_paths, extract_page_meta, load_excerpts_df, pl, ppa_meta_df):
     # load the excerpts into a polars dataframe and extract ppa work/page ids
     excerpts_df = extract_page_meta(
