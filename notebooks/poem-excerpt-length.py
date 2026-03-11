@@ -76,6 +76,12 @@ def _(get_config, load_excerpts_df, pathlib, pl):
 
 @app.cell
 def _(excerpts_df):
+    excerpts_df.select("ppa_work_id", "ppa_pub_year", "ppa_pub_decade")
+    return
+
+
+@app.cell
+def _(excerpts_df):
     # filter down to unique pairs of works + poems with decade and poem length field
     works_poems_df = excerpts_df.select(
         "ppa_work_id",
@@ -218,7 +224,7 @@ def _(alt):
                 offset=12
             ),  # add offset so axis does not crowd rectangle
             y2=f"{stat_field}_Q3",
-            x=alt.X(x_field, title=x_field_title),
+            x=alt.X(x_field, title=x_field_title).axis(format="r"),
             tooltip=stats_fields,
         )
         stroke_color = "orange"
@@ -311,14 +317,22 @@ def _(mo):
 def _(excerpts_df, pl):
     # instead of filtering to unique pairs of works + poems with decade and poem length field,
     # aggregate by poem id and get the earliest date it is quoted in the PPA
-    poems_firstquoted_df = excerpts_df.group_by("poem_id").agg(
-        pl.first("ppa_pub_decade"),
-        pl.first("poem_num_lines"),
-        pl.first("poem_num_words"),
-        pl.first("poem_char_len"),
-        pl.first("ppa_work_id"),
-        pl.first("poem_title"),
-        pl.first("poem_author"),
+    poems_firstquoted_df = (
+        # filter out the few PPA works with no publication date, then sort by publication year
+        excerpts_df.filter(~pl.col.ppa_pub_year.is_null())
+        .sort("ppa_pub_year")
+        # group by poem but maintain order so we can get the earliest PPA work an poem is found in
+        .group_by("poem_id", maintain_order=True)
+        .agg(
+            pl.first("ppa_pub_decade"),
+            pl.first("poem_num_lines"),
+            pl.first("poem_num_words"),
+            pl.first("poem_char_len"),
+            pl.first("ppa_work_id"),
+            pl.first("ppa_pub_year"),
+            pl.first("poem_title"),
+            pl.first("poem_author"),
+        )
     )
     poems_firstquoted_df
     return (poems_firstquoted_df,)
@@ -402,6 +416,70 @@ def _(custom_boxplot, mo, poems_firstquoted_stats_df):
         )
         .interactive()
     )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    As a way of checking & inspecting the above charts, what are the longest poems in each decade, based on first appearance in PPA?
+    """)
+    return
+
+
+@app.cell
+def _(mo, pl, poems_firstquoted_df):
+    mo.ui.table(
+        poems_firstquoted_df.sort(
+            "ppa_pub_decade",
+            "poem_num_lines",
+            descending=[False, True],
+            nulls_last=True,
+        )
+        .group_by("ppa_pub_decade", maintain_order=True)
+        .agg(
+            pl.first("poem_title"),
+            pl.first("poem_author"),
+            pl.first("poem_num_lines"),
+            pl.first("ppa_work_id"),
+            pl.first("poem_id"),
+        )
+        .cast({"ppa_pub_decade": pl.String}),  # cast decade to str for readability
+        label="Longest poem for each decade first quoted in PPA",
+        page_size=40,
+        selection=None,
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    How can Shelley's "The Cenci" be quoted in 1532 ? Is this really in our data?
+    """)
+    return
+
+
+@app.cell
+def _(excerpts_df, pl):
+    excerpts_df.filter(pl.col.poem_id.eq("Z200484006")).sort("ppa_pub_year")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Answer: yes, it is in our data. Passim matched this line from PPA:
+
+    > of this questyon (who dyd the dede) so whan there is no doubt but that the
+
+    with this line of Shelley:
+
+    > other Lurking among the rocks; there is no doubt But that the
+
+
+    Common text? **there is no doubt but that the**
+    """)
     return
 
 
@@ -519,7 +597,12 @@ def _(ref_merged_excerpts_df):
 
 @app.cell
 def _(mo, pl, ref_merged_excerpts_df):
-    fully_quoted_poems = ref_merged_excerpts_df.filter(pl.col.ref_percent.ge(1)).height
+    fully_quoted_poems = (
+        ref_merged_excerpts_df.filter(pl.col.ref_percent.ge(1))
+        .select("poem_id")
+        .unique()
+        .height
+    )
 
     mo.md(
         f"""{fully_quoted_poems:,} poems are quoted in full 
