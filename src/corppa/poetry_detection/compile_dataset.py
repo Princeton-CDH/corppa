@@ -39,6 +39,9 @@ DEFAULT_CONFIGS = {
     "source_ppa_metadata": "ppa-data/ppa_works.csv",
 }
 
+#: compile script config options, for run_step method type hints
+CompileOpts = dict[str, pathlib.Path]
+
 
 def load_compilation_config():
     """Load configuration for dataset compilation,
@@ -149,12 +152,6 @@ def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
     return list(excerpt_data_dir.glob("**/*.csv")) + list(
         excerpt_data_dir.glob("**/*.csv.gz")
     )
-    # wondered about using find_relative_paths here, but we actually
-    # want non-relative paths and we need to handle a two-part extension
-    # return [
-    #     excerpt_data_dir / rel_path
-    #     for rel_path in find_relative_paths(excerpt_data_dir, exts=[".csv", ".gz"]) # can we assume .gz == .csv.gz ?
-    # ]
 
 
 def save_ppa_metadata(
@@ -197,7 +194,57 @@ def compress_file(uncompressed_file, compressed_file):
     uncompressed_file.unlink()
 
 
-def main():
+def run_merge_step(
+    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None, compress_excerpts: bool
+) -> pl.DataFrame:
+    print("## Merging excerpts")
+    excerpt_sources = get_excerpt_sources(compile_opts["source_excerpt_data"])
+    excerpts_df = merge_excerpt_files(
+        excerpt_sources, compile_opts["compiled_excerpt_file"]
+    )
+    if compress_excerpts:
+        print(
+            f"Compressing excerpt data... {compile_opts['compiled_excerpt_file']} → {compile_opts['compressed_excerpt_file']}"
+        )
+        compress_file(
+            compile_opts["compiled_excerpt_file"],
+            compile_opts["compressed_excerpt_file"],
+        )
+    return excerpts_df
+
+
+def run_poem_metadata_step(
+    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None
+) -> pl.DataFrame:
+    print("\n## Compiling reference corpora metadata")
+    if excerpts_df is None:
+        excerpts_df = load_compiled_excerpts(compile_opts)
+    else:
+        excerpts_df = extract_page_meta(excerpts_df)
+    save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
+    return excerpts_df
+
+
+def run_ppa_metadata_step(
+    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None
+) -> pl.DataFrame:
+    print("\n## PPA work-level metadata")
+    if excerpts_df is None:
+        excerpts_df = load_compiled_excerpts(compile_opts)
+    else:
+        excerpts_df = extract_page_meta(excerpts_df)
+
+    excerpts_df = add_ref_poems_meta(excerpts_df, compile_opts["poem_metadata_file"])
+
+    save_ppa_metadata(
+        compile_opts["source_ppa_metadata"],
+        compile_opts["ppa_metadata_file"],
+        excerpts_df,
+    )
+    return excerpts_df
+
+
+def main(*args):
     parser = argparse.ArgumentParser(description="Compile PPA found-poems dataset")
     parser.add_argument(
         "--compress-excerpts",
@@ -223,65 +270,28 @@ def main():
             action="append_const",
             const=step,
         )
-    args = parser.parse_args()
-    compilation_steps = args.steps  # None or list of steps
+    args = parser.parse_args(args)
+    # if not specified, run all steps
+    compilation_steps = args.steps if args.steps else list(compilation_steps.keys())
 
     compile_opts = load_compilation_config()
 
     excerpts_df = None
 
-    if compilation_steps is None or "merge" in compilation_steps:
-        print("## Merging excerpts")
-        # find excerpt source files to be included in the compiled dataset file
-        excerpt_sources = get_excerpt_sources(compile_opts["source_excerpt_data"])
-        # merge into a single uncompressed csv
-        # (polars supports writing compressed csv, but documentation says it's unstable)
-        excerpts_df = merge_excerpt_files(
-            excerpt_sources, compile_opts["compiled_excerpt_file"]
-        )
-        # compress the resulting file if requested
-        if args.compress_excerpts:
-            print(
-                f"Compressing excerpt data... {compile_opts['compiled_excerpt_file']} → {compile_opts['compressed_excerpt_file']}"
-            )
-            compress_file(
-                compile_opts["compiled_excerpt_file"],
-                compile_opts["compressed_excerpt_file"],
-            )
+    if "merge" in compilation_steps:
+        excerpts_df = run_merge_step(compile_opts, excerpts_df, args.compress_excerpts)
 
-    if compilation_steps is None or "poem_metadata" in compilation_steps:
-        print("\n## Compiling reference corpora metadata")
-        # if this step is called on its own, load excerpt data
-        if excerpts_df is None:
-            excerpts_df = load_compiled_excerpts(compile_opts)
-        else:
-            # ensure we have ppa work id / page id
-            excerpts_df = extract_page_meta(excerpts_df)
-        save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
+    if "poem_metadata" in compilation_steps:
+        excerpts_df = run_poem_metadata_step(compile_opts, excerpts_df)
 
-    if compilation_steps is None or "ppa_metadata" in compilation_steps:
-        print("\n## PPA work-level metadata")
-        # if this step is called on its own, load excerpt/poem data
-        if excerpts_df is None:
-            excerpts_df = load_compiled_excerpts(compile_opts)
-        else:
-            # ensure we have ppa work id / page id
-            excerpts_df = extract_page_meta(excerpts_df)
+    if "ppa_metadata" in compilation_steps:
+        excerpts_df = run_ppa_metadata_step(compile_opts, excerpts_df)
 
-        # join poem metadata so we can count unique poets (even if rough)
-        excerpts_df = add_ref_poems_meta(
-            excerpts_df, compile_opts["poem_metadata_file"]
-        )
-
-        save_ppa_metadata(
-            compile_opts["source_ppa_metadata"],
-            compile_opts["ppa_metadata_file"],
-            excerpts_df,
-        )
-
-    print("\nRemember to commit and push the updated data files")
-    print(f"cd {compile_opts['output_data_dir'].parent} && git add data/*")
+    # probably not relevant anymore, not using git-lfs for this data...
+    print(f"Output files in {compile_opts['output_data_dir']}")
+    # print("\nRemember to commit and push the updated data files")
+    # print(f"cd {compile_opts['output_data_dir'].parent} && git add data/*")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

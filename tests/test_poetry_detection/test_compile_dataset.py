@@ -9,6 +9,7 @@ import pytest
 from corppa.poetry_detection.compile_dataset import (
     get_excerpt_sources,
     load_compiled_excerpts,
+    main,
     save_ppa_metadata,
 )
 
@@ -117,3 +118,48 @@ def test_load_compiled_excerpts_file_not_found(tmp_path):
 
     with pytest.raises(ValueError, match="Excerpt data file not found"):
         load_compiled_excerpts(config)
+
+
+@pytest.mark.parametrize(
+    "args,expected_calls",
+    [
+        ([], {"merge", "poem_metadata", "ppa_metadata"}),
+        (["--merge"], {"merge"}),
+        (["--poem_metadata"], {"poem_metadata"}),
+        (["--ppa_metadata"], {"ppa_metadata"}),
+    ],
+)
+@patch("corppa.poetry_detection.compile_dataset.run_ppa_metadata_step")
+@patch("corppa.poetry_detection.compile_dataset.run_poem_metadata_step")
+@patch("corppa.poetry_detection.compile_dataset.run_merge_step")
+@patch("corppa.poetry_detection.compile_dataset.load_compilation_config")
+def test_main(
+    mock_load_config,
+    mock_merge,
+    mock_poem,
+    mock_ppa,
+    args,
+    expected_calls,
+    tmp_path,
+):
+    mock_load_config.return_value = {
+        "test": "config",
+        "output_data_dir": tmp_path,
+    }
+
+    main(*args)
+
+    if "merge" in expected_calls:
+        mock_merge.assert_called_once()
+    else:
+        mock_merge.assert_not_called()
+
+    if "poem_metadata" in expected_calls:
+        mock_poem.assert_called_once()
+    else:
+        mock_poem.assert_not_called()
+
+    if "ppa_metadata" in expected_calls:
+        mock_ppa.assert_called_once()
+    else:
+        mock_ppa.assert_not_called()
