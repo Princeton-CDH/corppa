@@ -141,7 +141,7 @@ def load_compiled_excerpts(config) -> pl.DataFrame:
             # extract ppa work id and page number (needed for both poem and ppa metadata)
             return extract_page_meta(pl.read_csv(datafile))
     raise ValueError(
-        f"Excerpts data file not found (checked {config['compiled_excerpt_file']} and {config['compressed_excerpt_file']}"
+        f"Excerpt data file not found (checked {config['compiled_excerpt_file']} and {config['compressed_excerpt_file']}"
     )
 
 
