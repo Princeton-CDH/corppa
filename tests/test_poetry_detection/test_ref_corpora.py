@@ -497,3 +497,83 @@ def test_save_poem_metadata(
         save_poem_metadata(output_file)
         captured = capsys.readouterr()
         assert "Replacing" in captured.out
+
+
+def test_save_poem_metadata_with_excerpts(
+    tmp_path,
+    capsys,
+    corppa_test_config,
+    internetpoems_data_dir,
+    chadwyck_healey_csv,
+    otherpoems_metadata_df,
+):
+    # Test the case where excerpts_df is provided - tests aggregation logic
+
+    # add corpus id to other poems data frame and patch it to be returned
+    otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
+        ref_corpus=pl.lit(OtherPoems.corpus_id)
+    )
+
+    # Create sample excerpts dataframe with poem data
+    # Use poem IDs from the INTERNETPOEMS_TEXTS global variable
+    excerpts_df = pl.from_dicts(
+        [
+            # two excerpts for poem 0 from the same work, two different pages
+            {
+                "poem_id": INTERNETPOEMS_TEXTS[0]["id"],
+                "excerpt_id": "p@1:10",
+                "ppa_work_id": "work1",
+                "page_id": "page1",
+            },
+            {
+                "poem_id": INTERNETPOEMS_TEXTS[0]["id"],
+                "excerpt_id": "p@3:30",
+                "ppa_work_id": "work1",
+                "page_id": "page2",
+            },
+            # one excerpt for poem 2
+            {
+                "poem_id": INTERNETPOEMS_TEXTS[1]["id"],
+                "excerpt_id": "ex3",
+                "ppa_work_id": "work2",
+                "page_id": "page3",
+            },
+        ]
+    )
+
+    aggregation_fields = ["num_excerpts", "num_ppa_works", "num_ppa_pages"]
+
+    with patch.object(
+        OtherPoems, "get_metadata_df", return_value=otherpoems_metadata_df
+    ):
+        output_file = tmp_path / "poem_meta.csv"
+        save_poem_metadata(output_file, excerpts_df=excerpts_df)
+        assert output_file.exists()
+
+        # Read the output CSV and check for aggregate columns
+        result_df = pl.read_csv(output_file)
+        # all fields should be present
+        for field in aggregation_fields:
+            assert field in result_df.columns
+
+    # Check that poem with 2 excerpts has correct counts
+    psalms_row = result_df.filter(
+        pl.col("poem_id") == INTERNETPOEMS_TEXTS[0]["id"]
+    ).row(0, named=True)
+    # two excerpts from one work, different pages
+    assert psalms_row["num_excerpts"] == 2
+    assert psalms_row["num_ppa_works"] == 1
+    assert psalms_row["num_ppa_pages"] == 2
+
+    # Check that poem with 1 excerpt has correct counts
+    mary_row = result_df.filter(pl.col("poem_id") == INTERNETPOEMS_TEXTS[1]["id"]).row(
+        0, named=True
+    )
+    # one excerpt, all counts are 1
+    assert all(mary_row[value] == 1 for value in aggregation_fields)
+
+    # Check that poems without excerpts (from otherpoems) have zero counts
+    for poem_info in result_df.filter(
+        pl.col("poem_id").is_in(OTHERPOEM_METADATA[0])
+    ).iter_rows(named=True):
+        assert all(poem_info[value] == 0 for value in aggregation_fields)
