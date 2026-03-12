@@ -26,6 +26,7 @@ Example usage: ::
 
 import argparse
 import sys
+import tarfile
 from pathlib import Path
 
 import orjsonl
@@ -44,18 +45,46 @@ def get_text_record(text_file: Path) -> dict[str, str]:
 
 
 def build_text_corpus(
-    input_dir: Path, disable_progress: bool = False
+    input_path: Path, disable_progress: bool = False
 ) -> dict[str, str]:
     """
     Generates text records for each text file within input directory
     """
     progress_bar = tqdm(
-        input_dir.glob("**/*.txt"),
+        input_path.glob("**/*.txt"),
         bar_format="Read {n:,} pages{postfix} | elapsed: {elapsed}",
         disable=disable_progress,
     )
     for text_file in progress_bar:
         yield get_text_record(text_file)
+
+
+def text_corpus_from_tarfile(
+    input_path: Path, disable_progress: bool = False
+) -> dict[str, str]:
+    """
+    Generate text records for each text file within a tar.gz archive
+    """
+    # NOTE: could make compression optional, currently assumes gz
+    # NOTE: currently does not support progressbar
+    with tarfile.open(str(input_path), "r:gz") as tar_archive:
+        for member in tqdm(
+            tar_archive.getmembers(),
+            bar_format="Read {n:,} files{postfix} | elapsed: {elapsed}",
+            disable=disable_progress,
+        ):
+            # skip any OSX metadata files included in the archive
+            if "._" in member.name:
+                continue
+
+            # read contents of text files and yield filename and contents
+            if member.name.endswith(".txt"):
+                txtfile = tar_archive.extractfile(member)
+                if txtfile is not None:
+                    yield {
+                        "id": Path(member.name).stem,
+                        "text": txtfile.read().decode("utf-8"),
+                    }
 
 
 def save_text_corpus(
