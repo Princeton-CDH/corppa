@@ -118,6 +118,24 @@ class TestBaseReferenceCorpus:
             config_opts["base_dir"] == pathlib.Path(ingredients_dir) / ref_corpora_dir
         )
 
+    def test_calculate_poem_length(self):
+        # Test single line text
+        result = BaseReferenceCorpus.calculate_poem_length("Hello world test")
+        assert result == {"num_lines": 1, "num_words": 3, "char_len": 16}
+
+        # Test multi-line text with blank lines
+        text = "Line one here\nLine two here\n\nLine three"
+        result = BaseReferenceCorpus.calculate_poem_length(text)
+        assert result == {"num_lines": 3, "num_words": 8, "char_len": len(text)}
+
+        # Test empty text
+        result = BaseReferenceCorpus.calculate_poem_length("")
+        assert result == {"num_lines": 0, "num_words": 0, "char_len": 0}
+
+        # Test text with only blank lines
+        result = BaseReferenceCorpus.calculate_poem_length("   \n\n   ")
+        assert result == {"num_lines": 0, "num_words": 0, "char_len": 8}
+
 
 # fixture data for internet poems
 INTERNETPOEMS_TEXTS = [

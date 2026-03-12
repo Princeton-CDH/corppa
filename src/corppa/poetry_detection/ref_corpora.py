@@ -9,6 +9,7 @@ from corppa.utils.build_text_corpus import build_text_corpus, text_corpus_from_t
 
 logger = logging.getLogger(__name__)
 
+
 #: schema for reference corpora metadata :class:`pl.DataFrame`
 METADATA_SCHEMA = {
     "poem_id": pl.String,
@@ -63,6 +64,18 @@ class BaseReferenceCorpus:
         # include any options for this specific corpus
         corpus_opts.update(config_opts["reference_corpora"].get(self.corpus_id, {}))
         return corpus_opts
+
+    @staticmethod
+    def calculate_poem_length(text: str) -> dict[str, int]:
+        """Calculate poem length metrics from text content.  Takes the
+        text of the poem and returns a dictionary num_lines (non-blank lines),
+        num_words, and char_len.
+        """
+        return {
+            "num_lines": len([line for line in text.splitlines() if line.strip()]),
+            "num_words": len(text.split()),
+            "char_len": len(text),
+        }
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         """Minimal common poetry metadata for use across reference corpora.
@@ -161,12 +174,7 @@ class InternetPoems(LocalTextCorpus):
                 "ref_corpus": self.corpus_id,
             }
             if poem_length:
-                num_blank_lines = len(
-                    [line for line in poem["text"].splitlines() if line.strip()]
-                )
-                poem_metadata["num_lines"] = num_blank_lines
-                poem_metadata["num_words"] = len(poem["text"].split())
-                poem_metadata["char_len"] = len(poem["text"])
+                poem_metadata.update(self.calculate_poem_length(poem["text"]))
 
             metadata.append(poem_metadata)
 
@@ -226,11 +234,7 @@ class ChadwyckHealey(LocalTextCorpus):
                 poem_lengths.append(
                     {
                         "poem_id": poem["poem_id"],
-                        "num_lines": len(
-                            [line for line in poem["text"].splitlines() if line.strip()]
-                        ),
-                        "num_words": len(poem["text"].split()),
-                        "char_len": len(poem["text"]),
+                        **self.calculate_poem_length(poem["text"]),
                     }
                 )
             if poem_lengths:
