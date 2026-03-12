@@ -151,10 +151,10 @@ INTERNETPOEMS_TEXTS = [
 
 
 @pytest.fixture
-def internetpoems_data_dir(tmp_path):
+def internetpoems_data_dir(tmp_path, corppa_test_config):
     # test fixture to create internet poems data directory with sample text files
     config_opts = config.get_config()
-    # use the configured text data dir
+    # use the configured text data dir from test config
     data_dir = pathlib.Path(
         config_opts["reference_corpora"]["internet_poems"]["text_path"]
     )
@@ -167,7 +167,7 @@ def internetpoems_data_dir(tmp_path):
 
 
 @pytest.fixture
-def internetpoems_tarball(tmp_path):
+def internetpoems_tarball(tmp_path, corppa_test_config_defaults):
     # test fixture to create tar.gzip of internet poems data directory with sample text files
     # should be used with default config
     config_opts = config.get_config()
@@ -352,12 +352,12 @@ class TestInternetPoems:
 
 
 @pytest.fixture
-def chadwyck_healey_csv(tmp_path):
+def chadwyck_healey_csv(tmp_path, corppa_test_config):
     "fixture to create a test version of the chadwyck-healey metadata csv file"
-    # test fixture to create internet poems data directory with sample text files
+    # test fixture to create chadwyck-healey data directory with sample metadata csv
 
     config_opts = config.get_config()
-    # use the configured data paths or configured ref_corpus base_dir and defaults
+    # use the configured data paths from test config
     base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
     override_opts = config_opts["reference_corpora"][ChadwyckHealey.corpus_id]
     data_dir = pathlib.Path(override_opts["text_path"])
