@@ -271,11 +271,14 @@ def run_ppa_metadata_step(
     )
 
 
-def main(*sysargs) -> None:
+def main(cmd_args=None) -> None:
     """
     Main entry point for the dataset compilation script.  Parses
     arguments to determine which steps to run.
     """
+    # allow passing arguments in; if not specified, draw from sys.argv/command line
+    if cmd_args is None:
+        cmd_args = sys.argv[1:]
     parser = argparse.ArgumentParser(description="Compile PPA found-poems dataset")
     parser.add_argument(
         "--compress-excerpts",
@@ -301,7 +304,7 @@ def main(*sysargs) -> None:
             action="append_const",
             const=step,
         )
-    args = parser.parse_args(sysargs)
+    args = parser.parse_args(cmd_args)
     # if not specified, run all steps
     compilation_steps = args.steps if args.steps else list(compilation_steps.keys())
 
@@ -324,4 +327,4 @@ def main(*sysargs) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

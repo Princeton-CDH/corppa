@@ -154,7 +154,7 @@ def test_main(
         "output_data_dir": tmp_path,
     }
 
-    main(*args)
+    main(args)
 
     if "merge" in expected_calls:
         mock_merge.assert_called_once()
