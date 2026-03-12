@@ -1,5 +1,6 @@
 import logging
 import pathlib
+from collections.abc import Generator
 from typing import Optional
 
 import polars as pl
@@ -85,7 +86,7 @@ class BaseReferenceCorpus:
         in the text)."""
         raise NotImplementedError
 
-    def get_text_corpus(self) -> dict[str, str]:
+    def get_text_corpus(self) -> Generator[dict[str, str]]:
         """Minimal text record for reference corpora.
         Should yield a dictionary with id and text for each poem in this
         corpus."""
@@ -298,11 +299,7 @@ def fulltext_corpora() -> list[BaseReferenceCorpus]:
 def compile_metadata_df(poem_length=False) -> pl.DataFrame:
     """Compile poetry metadata from all reference corpora into a single
     polars DataFrame with reference corpus ids."""
-    # create an empty dataframe with the intended fields
-    # poem_metadata = pl.DataFrame([], schema=METADATA_SCHEMA)
-
-    # for each corpus, load poem metadata into a polars dataframe,
-    # rename id to poem_id, and add a column with the corpus id
+    # Combine poem metadata from all reference corpora
 
     # use a diagonal concat instead of vstack/extend
     ref_corpora_dfs = [

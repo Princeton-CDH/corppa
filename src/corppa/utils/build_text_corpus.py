@@ -25,15 +25,15 @@ Example usage: ::
 """
 
 import argparse
-import pathlib
 import sys
 import tarfile
+from pathlib import Path
 
 import orjsonl
 from tqdm import tqdm
 
 
-def get_text_record(text_file: pathlib.Path) -> dict[str, str]:
+def get_text_record(text_file: Path) -> dict[str, str]:
     """
     Create basic text record for input text file
     """
@@ -45,7 +45,7 @@ def get_text_record(text_file: pathlib.Path) -> dict[str, str]:
 
 
 def build_text_corpus(
-    input_path: pathlib.Path, disable_progress: bool = False
+    input_path: Path, disable_progress: bool = False
 ) -> dict[str, str]:
     """
     Generates text records for each text file within input directory
@@ -60,13 +60,13 @@ def build_text_corpus(
 
 
 def text_corpus_from_tarfile(
-    input_path: pathlib.Path, disable_progress: bool = False
+    input_path: Path, disable_progress: bool = False
 ) -> dict[str, str]:
     """
     Generate text records for each text file within a tar.gz archive
     """
-    # NOTE: could make gz compression optional, curerntly assumes
-    # todo: currently no progressbar
+    # NOTE: could make compression optional, currently assumes gz
+    # NOTE: currently does not support progressbar
     with tarfile.open(str(input_path), "r:gz") as tar_archive:
         for member in tqdm(
             tar_archive.getmembers(),
@@ -82,14 +82,14 @@ def text_corpus_from_tarfile(
                 txtfile = tar_archive.extractfile(member)
                 if txtfile is not None:
                     yield {
-                        "id": pathlib.Path(member.name).stem,
+                        "id": Path(member.name).stem,
                         "text": txtfile.read().decode("utf-8"),
                     }
 
 
 def save_text_corpus(
-    input_dir: pathlib.Path,
-    output_file=pathlib.Path,
+    input_dir: Path,
+    output_file=Path,
     disable_progress: bool = False,
 ) -> None:
     """
@@ -107,9 +107,9 @@ def main():
     parser.add_argument(
         "input_dir",
         help="Top-level input directory containing text files that will make up the text corpus",
-        type=pathlib.Path,
+        type=Path,
     )
-    parser.add_argument("output", help="Filename of output JSONL", type=pathlib.Path)
+    parser.add_argument("output", help="Filename of output JSONL", type=Path)
     # Optional arguments
     parser.add_argument(
         "--progress",
