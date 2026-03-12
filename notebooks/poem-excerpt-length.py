@@ -484,6 +484,187 @@ def _(mo):
     return
 
 
+@app.cell
+def _(pl):
+    ### Refine poem first quoted date by poet dates
+
+    poet_meta_df = pl.read_csv("data/ref-corpora/ch_poets_meta.csv").with_columns(
+        # construct combined author field for matching with poem metadata
+        author=pl.concat_str(
+            [pl.col("author_firstname"), pl.col("author_lastname")],
+            separator=" ",
+        ),
+    )
+    poet_meta_df
+    return (poet_meta_df,)
+
+
+@app.cell
+def _(excerpts_df, pl, poet_meta_df):
+    # join poet metadata with excerpts to get author birth year
+    # for now maybe we limit to numerics? (undate later ;-P )
+
+    # filter to subset with numeric birth year
+    poet_birthyear_df = poet_meta_df.with_columns(
+        # convert year to number; convert to null if can't be converted
+        poet_birthyear=pl.col.author_birth.str.to_integer(strict=False),
+    ).filter(pl.col.poet_birthyear.is_not_null())  # drop nulls
+
+    excerpts_poets_df = excerpts_df.join(
+        poet_birthyear_df.select("author", "poet_birthyear"),
+        left_on="poem_author",
+        right_on="author",
+    )
+    excerpts_poets_df
+    return (excerpts_poets_df,)
+
+
+@app.cell
+def _(excerpts_poets_df, mo, pl):
+    # how many excerpts are temporally suspect based on poet birth date and ppa publication date?
+    # (or maybe cases where quotation is going in the other direction, possibly through an intermediary....)
+
+    suspect_excerpts_df = excerpts_poets_df.filter(
+        pl.col("ppa_pub_year").lt(pl.col("poet_birthyear").add(10))
+    )
+
+    mo.md(
+        f"Identified {suspect_excerpts_df.height:,} suspect excerpts (PPA work publication year < poem author birth year + 10)"
+    )
+    return (suspect_excerpts_df,)
+
+
+@app.cell
+def _(mo, suspect_excerpts_df):
+    mo.ui.table(
+        suspect_excerpts_df.select(
+            "ppa_work_id",
+            "ppa_title",
+            "ppa_pub_year",
+            "poem_title",
+            "poem_author",
+            "poet_birthyear",
+            "ppa_span_text",
+            "ref_span_text",
+        ),
+        page_size=25,
+        selection=None,
+    )
+    return
+
+
+@app.cell
+def _(excerpts_poets_df, mo, pl, plot_quartiles):
+    # filter those out and rerun the first-citation logic
+
+    filtered_excerpts_df = excerpts_poets_df.filter(
+        pl.col("ppa_pub_year").gt(pl.col("poet_birthyear"))
+    )
+
+    # repeat above logic to identify earliest quote, but on the filtered set
+    filtered_poems_firstquoted_df = (
+        # filter out the few PPA works with no publication date, then sort by publication year
+        filtered_excerpts_df.filter(~pl.col.ppa_pub_year.is_null())
+        .sort("ppa_pub_year")
+        # group by poem but maintain order so we can get the earliest PPA work an poem is found in
+        .group_by("poem_id", maintain_order=True)
+        .agg(
+            pl.first("ppa_pub_decade"),
+            pl.first("poem_num_lines"),
+            pl.first("poem_num_words"),
+            pl.first("poem_char_len"),
+            pl.first("ppa_work_id"),
+            pl.first("ppa_pub_year"),
+            pl.first("poem_title"),
+            pl.first("poem_author"),
+        )
+    )
+
+    # aggregate by decade and calculate min/max/average for all poem length measurements
+    filtered_poems_firstquoted_stats_df = filtered_poems_firstquoted_df.group_by(
+        "ppa_pub_decade"
+    ).agg(
+        count=pl.len(),  # number of poems
+        # number of lines
+        min_lines=pl.col("poem_num_lines").min(),
+        max_lines=pl.col("poem_num_lines").max(),
+        mean_lines=pl.col("poem_num_lines").mean(),
+        lines_Q1=pl.col("poem_num_lines").quantile(0.25),
+        median_lines=pl.col("poem_num_lines").quantile(0.5),
+        lines_Q3=pl.col("poem_num_lines").quantile(0.75),
+        # number of words
+        min_words=pl.col("poem_num_words").min(),
+        max_words=pl.col("poem_num_words").max(),
+        mean_words=pl.col("poem_num_words").mean(),
+        words_Q1=pl.col("poem_num_words").quantile(0.25),
+        median_words=pl.col("poem_num_words").quantile(0.5),
+        words_Q3=pl.col("poem_num_words").quantile(0.75),
+        # number of characters poem_char_len
+        min_chars=pl.col("poem_char_len").min(),
+        max_chars=pl.col("poem_char_len").max(),
+        mean_chars=pl.col("poem_char_len").mean(),
+        chars_Q1=pl.col("poem_char_len").quantile(0.25),
+        median_chars=pl.col("poem_char_len").quantile(0.5),
+        chars_Q3=pl.col("poem_char_len").quantile(0.75),
+    )
+
+    mo.ui.altair_chart(
+        plot_quartiles(
+            filtered_poems_firstquoted_stats_df,
+            "ppa_pub_decade",
+            "PPA Publication decade",
+            "lines",
+            "Number of lines",
+        ).properties(
+            title="Mean and quartile poem length by number of lines for poems first appearance in PPA"
+        )
+    )
+    return filtered_poems_firstquoted_df, filtered_poems_firstquoted_stats_df
+
+
+@app.cell
+def _(custom_boxplot, filtered_poems_firstquoted_stats_df, mo):
+    mo.ui.altair_chart(
+        custom_boxplot(
+            filtered_poems_firstquoted_stats_df,
+            "ppa_pub_decade",
+            "PPA Publication decade",
+            "lines",
+            "Number of lines",
+        )
+        .properties(
+            title="Distribution of poem length based on poem first appearance in PPA by decade"
+        )
+        .interactive()
+    )
+    return
+
+
+@app.cell
+def _(filtered_poems_firstquoted_df, mo, pl):
+    mo.ui.table(
+        filtered_poems_firstquoted_df.sort(
+            "ppa_pub_decade",
+            "poem_num_lines",
+            descending=[False, True],
+            nulls_last=True,
+        )
+        .group_by("ppa_pub_decade", maintain_order=True)
+        .agg(
+            pl.first("poem_title"),
+            pl.first("poem_author"),
+            pl.first("poem_num_lines"),
+            pl.first("ppa_work_id"),
+            pl.first("poem_id"),
+        )
+        .cast({"ppa_pub_decade": pl.String}),  # cast decade to str for readability
+        label="Longest poem for each decade first quoted in PPA (filtered set, PPA publication > poet birth year + 10)",
+        page_size=40,
+        selection=None,
+    )
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
