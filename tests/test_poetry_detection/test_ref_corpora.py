@@ -221,6 +221,29 @@ class TestInternetPoems:
         assert meta_row["author"] == "King James Bible"
         assert meta_row["title"] == "Psalms"
         assert meta_row["ref_corpus"] == internet_poems.corpus_id
+        # check poem length calculations (non-blank lines, word count, char length)
+        assert meta_row["num_lines"] == 1
+        assert meta_row["num_words"] == 9
+        assert meta_row["char_len"] == len(INTERNETPOEMS_TEXTS[0]["text"])
+
+    @patch.object(InternetPoems, "get_config_opts")
+    def test_get_metadata_df_no_poem_length(
+        self, mock_get_config_opts, tmp_path, corppa_test_config, internetpoems_data_dir
+    ):
+        # Test that poem_length=False sets length fields to null
+        mock_get_config_opts.return_value = {"text_path": str(internetpoems_data_dir)}
+        internet_poems = InternetPoems()
+        meta_df = internet_poems.get_metadata_df(poem_length=False)
+        assert isinstance(meta_df, pl.DataFrame)
+        # Length fields should be present but null
+        assert "num_lines" in meta_df.columns
+        assert "num_words" in meta_df.columns
+        assert "char_len" in meta_df.columns
+        # All length values should be null
+        assert (
+            meta_df.select("num_lines", "num_words", "char_len").drop_nulls().height
+            == 0
+        )
 
     def test_get_metadata_df_tarball(
         self,
@@ -343,6 +366,32 @@ class TestChadwyckHealey:
         assert meta_row["author"] == "Mary Robinson"
         assert meta_row["title"] == "THE CAVERN OF WOE."
         assert meta_row["ref_corpus"] == chadwyck_healey.corpus_id
+
+    def test_get_metadata_df_with_poem_length(
+        self, tmp_path, corppa_test_config, chadwyck_healey_csv
+    ):
+        # Create a text file for the poem to test poem length calculation
+        chadwyck_healey = ChadwyckHealey()
+        text_dir = chadwyck_healey.text_path
+        # three lines, eight words
+        text_content = "Line one here\nLine two here\nLine three"
+        text_file = text_dir / "Z300475611.txt"
+        text_file.write_text(text_content)
+
+        meta_df = chadwyck_healey.get_metadata_df(poem_length=True)
+        assert isinstance(meta_df, pl.DataFrame)
+        # Should include length fields
+        assert "num_lines" in meta_df.columns
+        assert "num_words" in meta_df.columns
+        assert "char_len" in meta_df.columns
+
+        meta_row = meta_df.row(0, named=True)
+        # 3 non-blank lines
+        assert meta_row["num_lines"] == 3
+        # 8 words total
+        assert meta_row["num_words"] == 8
+        # character length (including newlines)
+        assert meta_row["char_len"] == len(text_content)
 
     # get_text_corpus method is not tested here because it is inherited;
     # logic is shared with InternetPoems and tested there
