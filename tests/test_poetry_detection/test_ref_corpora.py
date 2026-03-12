@@ -297,6 +297,20 @@ class TestInternetPoems:
             # checks configuration on init
             InternetPoems()
 
+    def get_text_corpus_unsupported(
+        self, mock_get_config_opts, tmp_path, corppa_test_config_defaults
+    ):
+        zipfile = tmp_path / "internet_poems.zip"
+        zipfile.touch()
+        # init normally to by pass the check path type check
+        internet_poems = InternetPoems()
+        # patch in our zip file
+        internet_poems.text_path = zipfile
+        with pytest.raises(
+            NotImplementedError, match="only supported for tar.gz and directories"
+        ):
+            internet_poems.get_text_corpus()
+
     @patch.object(InternetPoems, "get_config_opts")
     def test_get_text_corpus(
         self,
