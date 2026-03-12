@@ -11,6 +11,7 @@ compile-dataset
 
 To run one or more specific steps, specify which steps you want to run.
 Any string that is distinct will be enough to select the step.
+
 ```console
 compile-dataset --merge
 compile-dataset --poem-metadata
@@ -135,7 +136,11 @@ def load_compilation_config():
     }
 
 
-def load_compiled_excerpts(config) -> pl.DataFrame:
+def load_compiled_excerpts(config: CompileOpts) -> pl.DataFrame:
+    """Load compiled excerpts from CSV or compressed CSV file
+    based on configured path, whichever file exists (uncompressed first).
+    Raises a ValuError if neither file exists.
+    """
     for datafile in [
         config["compiled_excerpt_file"],
         config["compressed_excerpt_file"],
@@ -149,6 +154,9 @@ def load_compiled_excerpts(config) -> pl.DataFrame:
 
 
 def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
+    """
+    Find all CSV and compressed CSV files in a directory.
+    """
     return list(excerpt_data_dir.glob("**/*.csv")) + list(
         excerpt_data_dir.glob("**/*.csv.gz")
     )
@@ -157,6 +165,12 @@ def get_excerpt_sources(excerpt_data_dir: pathlib.Path) -> list[pathlib.Path]:
 def save_ppa_metadata(
     input_file: pathlib.Path, output_file: pathlib.Path, excerpts_df: pl.DataFrame
 ):
+    """
+    Save PPA work metadata with work-level excerpt totals.
+    Takes a PPA metadata file as input, a path for the output file,
+    and a dataframe of merged excerpt data.
+    Raises a ValueError if metadata file is not a CSV.
+    """
     # copy as-is, do not rename or subset any fields
     # NOTE: currently assumes and only supports PPA metadata in csv format
     if input_file.suffix != ".csv":
@@ -185,7 +199,11 @@ def save_ppa_metadata(
     ppa_meta_df.write_csv(output_file)
 
 
-def compress_file(uncompressed_file, compressed_file):
+def compress_file(uncompressed_file: pathlib.Path, compressed_file: pathlib.Path):
+    """
+    Compress the `uncompressed_file` passed in with gzip,
+    saving it at the `compressed_file` path and deleting the original.
+    """
     with open(str(uncompressed_file), "rb") as inputfile:
         with gzip.open(str(compressed_file), "wb") as output_file:
             shutil.copyfileobj(inputfile, output_file)
@@ -197,6 +215,9 @@ def compress_file(uncompressed_file, compressed_file):
 def run_merge_step(
     compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None, compress_excerpts: bool
 ) -> pl.DataFrame:
+    """Run the merge excerpts step. Finds source excerpt files from the configured
+    path, merges excerpts, saves to CSV, and optionally compresses the CSV file.
+    """
     print("## Merging excerpts")
     excerpt_sources = get_excerpt_sources(compile_opts["source_excerpt_data"])
     excerpts_df = merge_excerpt_files(
@@ -216,6 +237,10 @@ def run_merge_step(
 def run_poem_metadata_step(
     compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None = None
 ) -> None:
+    """Run the poem metadata compilation step. Uses excerpt data
+    (passed in or loaded from compile opts path) to calculate
+    poem excerpt totals.
+    """
     print("\n## Compiling reference corpora metadata")
     if excerpts_df is None:
         excerpts_df = load_compiled_excerpts(compile_opts)
@@ -227,6 +252,10 @@ def run_poem_metadata_step(
 def run_ppa_metadata_step(
     compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None = None
 ) -> None:
+    """Run the PPA metadata compilation step.  Uses excerpt data (passed
+    in or loaded from compile opts path) to calculate work-level
+    excerpt totals.
+    """
     print("\n## PPA work-level metadata")
     if excerpts_df is None:
         excerpts_df = load_compiled_excerpts(compile_opts)
@@ -242,7 +271,11 @@ def run_ppa_metadata_step(
     )
 
 
-def main(*args):
+def main(*sysargs) -> None:
+    """
+    Main entry point for the dataset compilation script.  Parses
+    arguments to determine which steps to run.
+    """
     parser = argparse.ArgumentParser(description="Compile PPA found-poems dataset")
     parser.add_argument(
         "--compress-excerpts",
@@ -268,7 +301,7 @@ def main(*args):
             action="append_const",
             const=step,
         )
-    args = parser.parse_args(args)
+    args = parser.parse_args(sysargs)
     # if not specified, run all steps
     compilation_steps = args.steps if args.steps else list(compilation_steps.keys())
 
