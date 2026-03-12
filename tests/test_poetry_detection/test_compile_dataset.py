@@ -1,15 +1,22 @@
 # Copyright (c) 2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+
+import gzip
+from pathlib import Path
 from unittest.mock import patch
 
 import polars as pl
 import pytest
 
 from corppa.poetry_detection.compile_dataset import (
+    compress_file,
     get_excerpt_sources,
     load_compiled_excerpts,
     main,
+    run_merge_step,
+    run_poem_metadata_step,
+    run_ppa_metadata_step,
     save_ppa_metadata,
 )
 
@@ -163,3 +170,137 @@ def test_main(
         mock_ppa.assert_called_once()
     else:
         mock_ppa.assert_not_called()
+
+
+@patch("corppa.poetry_detection.compile_dataset.compress_file")
+@patch("corppa.poetry_detection.compile_dataset.merge_excerpt_files")
+@patch("corppa.poetry_detection.compile_dataset.get_excerpt_sources")
+def test_run_merge_step(mock_get_sources, mock_merge, mock_compress, tmp_path):
+    compile_opts = {
+        "source_excerpt_data": tmp_path / "/data/excerpts",
+        "compiled_excerpt_file": tmp_path / "/out/excerpts.csv",
+        "compressed_excerpt_file": tmp_path / "/out/excerpts.csv.gz",
+    }
+
+    result = run_merge_step(compile_opts, None, compress_excerpts=True)
+    # returns result of merge
+    assert result == mock_merge.return_value
+
+    # get sources is called on the configured path
+    mock_get_sources.assert_called_once_with(compile_opts["source_excerpt_data"])
+    # merge is called with the result of get sources and compile option
+    mock_merge.assert_called_once_with(
+        mock_get_sources.return_value, compile_opts["compiled_excerpt_file"]
+    )
+    # compress is called
+    mock_compress.assert_called_once_with(
+        Path("/out/excerpts.csv"), Path("/out/excerpts.csv.gz")
+    )
+
+    # call again with no compression
+    mock_compress.reset_mock()
+    run_merge_step(compile_opts, None, compress_excerpts=False)
+    mock_compress.assert_not_called()
+
+
+@patch("corppa.poetry_detection.compile_dataset.save_poem_metadata")
+@patch("corppa.poetry_detection.compile_dataset.extract_page_meta")
+@patch("corppa.poetry_detection.compile_dataset.load_compiled_excerpts")
+def test_run_poem_metadata_step_with_df(mock_load, mock_extract, mock_save, tmp_path):
+    input_df = pl.DataFrame({"id": [1]})
+    mock_extract.return_value = pl.DataFrame({"id": [1], "page_id": ["p.1"]})
+
+    compile_opts = {"poem_metadata_file": tmp_path / "/out/poem_meta.csv"}
+
+    run_poem_metadata_step(compile_opts, input_df)
+
+    mock_load.assert_not_called()
+    mock_extract.assert_called_once_with(input_df)
+    mock_save.assert_called_once_with(
+        compile_opts["poem_metadata_file"], mock_extract.return_value
+    )
+
+
+@patch("corppa.poetry_detection.compile_dataset.save_poem_metadata")
+@patch("corppa.poetry_detection.compile_dataset.extract_page_meta")
+@patch("corppa.poetry_detection.compile_dataset.load_compiled_excerpts")
+def test_run_poem_metadata_step(mock_load, mock_extract, mock_save, tmp_path):
+    mock_load.return_value = pl.DataFrame({"id": [1]})
+
+    compile_opts = {"poem_metadata_file": tmp_path / "/out/poem_meta.csv"}
+
+    run_poem_metadata_step(compile_opts, None)
+
+    mock_load.assert_called_once_with(compile_opts)
+    mock_extract.assert_not_called()
+    mock_save.assert_called_once_with(
+        compile_opts["poem_metadata_file"], mock_load.return_value
+    )
+
+
+@patch("corppa.poetry_detection.compile_dataset.save_ppa_metadata")
+@patch("corppa.poetry_detection.compile_dataset.add_ref_poems_meta")
+@patch("corppa.poetry_detection.compile_dataset.extract_page_meta")
+@patch("corppa.poetry_detection.compile_dataset.load_compiled_excerpts")
+def test_run_ppa_metadata_step(
+    mock_load, mock_extract, mock_add_ref_poems, mock_save, tmp_path
+):
+    input_df = pl.DataFrame({"id": [1]})
+
+    compile_opts = {
+        "poem_metadata_file": tmp_path / "/out/poem_meta.csv",
+        "source_ppa_metadata": tmp_path / "/data/ppa_works.csv",
+        "ppa_metadata_file": tmp_path / "/out/ppa_meta.csv",
+    }
+
+    # call with excerpt dataframe provided
+    run_ppa_metadata_step(compile_opts, input_df)
+    # doesn't load excerpts because provided
+    mock_load.assert_not_called()
+    # extracts page/work metadata
+    mock_extract.assert_called_once_with(input_df)
+    # loads reference poem metadata
+    mock_add_ref_poems.assert_called_once_with(
+        mock_extract.return_value, compile_opts["poem_metadata_file"]
+    )
+    mock_save.assert_called_once_with(
+        compile_opts["source_ppa_metadata"],
+        compile_opts["ppa_metadata_file"],
+        mock_add_ref_poems.return_value,
+    )
+
+    # call without excerpt df
+    mock_extract.reset_mock()
+    mock_add_ref_poems.reset_mock()
+    mock_save.reset_mock()
+    run_ppa_metadata_step(compile_opts, None)
+    mock_load.assert_called_once_with(compile_opts)
+    mock_extract.assert_not_called()
+    mock_add_ref_poems.assert_called_once_with(
+        mock_load.return_value, compile_opts["poem_metadata_file"]
+    )
+    mock_save.assert_called_once_with(
+        compile_opts["source_ppa_metadata"],
+        compile_opts["ppa_metadata_file"],
+        mock_add_ref_poems.return_value,
+    )
+
+
+def test_compress_file(tmp_path):
+    # integration test to confirm logic works as expected
+    uncompressed_file = tmp_path / "excerpts.csv"
+    compressed_file = tmp_path / "excerpts.csv.gz"
+    # write out content to test round-trip
+    file_contents = "excerpt_id,text\n1,hello\n"
+    uncompressed_file.write_text(file_contents)
+
+    compress_file(uncompressed_file, compressed_file)
+    # uncompressed file should be removed
+    assert not uncompressed_file.exists()
+    # compressed file should now be present
+    assert compressed_file.exists()
+
+    # uncompressed content should match what we wrote out
+    with gzip.open(compressed_file, "rt") as f:
+        content = f.read()
+    assert content == file_contents

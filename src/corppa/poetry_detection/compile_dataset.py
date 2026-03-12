@@ -214,20 +214,19 @@ def run_merge_step(
 
 
 def run_poem_metadata_step(
-    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None
-) -> pl.DataFrame:
+    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None = None
+) -> None:
     print("\n## Compiling reference corpora metadata")
     if excerpts_df is None:
         excerpts_df = load_compiled_excerpts(compile_opts)
     else:
         excerpts_df = extract_page_meta(excerpts_df)
     save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
-    return excerpts_df
 
 
 def run_ppa_metadata_step(
-    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None
-) -> pl.DataFrame:
+    compile_opts: CompileOpts, excerpts_df: pl.DataFrame | None = None
+) -> None:
     print("\n## PPA work-level metadata")
     if excerpts_df is None:
         excerpts_df = load_compiled_excerpts(compile_opts)
@@ -241,7 +240,6 @@ def run_ppa_metadata_step(
         compile_opts["ppa_metadata_file"],
         excerpts_df,
     )
-    return excerpts_df
 
 
 def main(*args):
@@ -277,15 +275,14 @@ def main(*args):
     compile_opts = load_compilation_config()
 
     excerpts_df = None
-
     if "merge" in compilation_steps:
         excerpts_df = run_merge_step(compile_opts, excerpts_df, args.compress_excerpts)
 
     if "poem_metadata" in compilation_steps:
-        excerpts_df = run_poem_metadata_step(compile_opts, excerpts_df)
+        run_poem_metadata_step(compile_opts, excerpts_df)
 
     if "ppa_metadata" in compilation_steps:
-        excerpts_df = run_ppa_metadata_step(compile_opts, excerpts_df)
+        run_ppa_metadata_step(compile_opts, excerpts_df)
 
     # probably not relevant anymore, not using git-lfs for this data...
     print(f"Output files in {compile_opts['output_data_dir']}")
