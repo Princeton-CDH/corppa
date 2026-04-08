@@ -308,11 +308,15 @@ def _(pl, similarity_stats_df):
 
 
 @app.cell
-def _(alt, binstats_df):
-    alt.Chart(binstats_df).mark_bar(width=10).encode(
-        x=alt.X("breakpoint").scale(domain=[0.0, 1.0]), y="count"
-    ).facet(column="case", row="measure").properties(
-        title="Distribution of similarity between PPA and reference text with lower and mixed case"
+def _(alt, binstats_df, mo):
+    mo.ui.altair_chart(
+        alt.Chart(binstats_df)
+        .mark_bar(width=10)
+        .encode(x=alt.X("breakpoint").scale(domain=[0.0, 1.0]), y="count")
+        .facet(column="case", row="measure")
+        .properties(
+            title="Distribution of similarity between PPA and reference text with lower and mixed case"
+        )
     )
     return
 
