@@ -1,7 +1,17 @@
 import marimo
 
-__generated_with = "0.19.11"
+__generated_with = "0.22.5"
 app = marimo.App(width="medium")
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Found poem excerpts: investigate nested excerpts
+
+    This notebook investigates nested excerpts; that is, excerpts that occur entirely within another poem excerpt.
+    """)
+    return
 
 
 @app.cell
@@ -37,11 +47,18 @@ def _():
     return data_paths, excerpts_df
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Do a conditional self-join to identify nested excerpts, based on spans.
+
+    How many excerpts are completely included within another excerpt?
+    """)
+    return
+
+
 @app.cell
 def _(c, excerpts_df, pl):
-    # Do a self-join to identify nested excerpts.
-    # How many excerpts are completely included within another excerpt?
-
     # This will result in pairs of excerpts where excerpt_id is completely contained within excerpt_id_right
     # (todo: better suffix?)
 
@@ -114,6 +131,14 @@ def _(nested_excerpts_df):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Display PPA and reference span text with poem metadata to see what some examples of the nesting excerpts look like.
+    """)
+    return
+
+
 @app.cell
 def _(nested_excerpts_df):
     nested_excerpts_df.select(
@@ -129,11 +154,13 @@ def _(nested_excerpts_df):
     return
 
 
-@app.cell
-def _(nested_excerpts_df):
-    nested_excerpts_df.select("uniq_excerpt_id", "uniq_excerpt_id_right").rename(
-        {"uniq_excerpt_id": "source", "uniq_excerpt_id_right": "target"}
-    )
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    There are instances of double-nested excerpts; that is, an excerpt that contains a smaller excerpt and is included in a larger excerpt.
+
+    Let's find some examples and generate a spreadsheet for review, so we can more easily see what is going on.
+    """)
     return
 
 
@@ -149,6 +176,20 @@ def _(c, nested_excerpts_df):
 
 
 @app.cell
+def _(double_nested_df):
+    double_nested_df.select(
+        "ppa_span_text_right",  # longest version
+        "ref_span_text",
+        "poem_author",
+        "poem_title",
+        "ref_span_text_right",
+        "poem_author_right",
+        "poem_title_right",
+    )
+    return
+
+
+@app.cell
 def _(double_nested_df, nested_excerpts_df):
     # join with nested excerpts where double-nested excerpt is the right-side excerpt (larger excerpt)
     # to get both sides of the double-nested passage
@@ -161,20 +202,6 @@ def _(double_nested_df, nested_excerpts_df):
     )
     double_nested_both_df
     return (double_nested_both_df,)
-
-
-@app.cell
-def _(double_nested_df):
-    double_nested_df.select(
-        "ppa_span_text_right",  # longest version
-        "ref_span_text",
-        "poem_author",
-        "poem_title",
-        "ref_span_text_right",
-        "poem_author_right",
-        "poem_title_right",
-    )
-    return
 
 
 @app.cell
@@ -203,6 +230,18 @@ def _(double_nested_both_df):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Nested excerpts as a network
+
+    Because we have chains of nested excerpts, we can think of this as a network.
+
+    We can make a network of excerpts, but that is quite large and very flat; so it's not very useful.  It's more helpful and interesting to make a network of poems with shared text based on these nested excerpts.
+    """)
+    return
+
+
 @app.cell
 def _(nested_excerpts_df):
     import networkx as nx
@@ -220,15 +259,15 @@ def _(nested_excerpts_df):
     G = nx.DiGraph()
     G.add_edges_from(network_edges_df.rows())
     print(f"{len(G.nodes):,} nodes, {len(G.edges):,} edges")
-
-    # nt1 = Network("500px", "500px")
-    # # populates the nodes and edges data structures
-    # nt1.from_nx(G)
-    # # nt.write_html("test.html", local=True)
-    # # mo.Html(nt.html)
-    # # print(nt.html)
-    # mo.iframe(nt1.generate_html(), height=550)
     return (nx,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Use nested excerpt data to create a network of poems based on shared/reused text.
+    """)
+    return
 
 
 @app.cell
@@ -272,10 +311,16 @@ def _(nested_excerpts_df, pl):
     return (nested_poem_edges_df,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Which poems are nested most frequently? Which have nested excerpts most frequently?
+    """)
+    return
+
+
 @app.cell
 def _(nested_poem_edges_df, pl):
-    # Which poems are nested most frequently? Which have nested excerpts most frequently?
-
     nested_poem_edges_df.group_by("source").agg(
         pl.len().alias(
             "count"
@@ -342,21 +387,18 @@ def _(nested_poem_edges_df, nx, poem_meta_df):
     return (poem_graph,)
 
 
-@app.cell
-def _(poem_graph):
-    # subgraphs ?
-
-    poem_graph_und = poem_graph.to_undirected()
-    # nx.number_connected_components(poem_graph_und)
-    return
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Because of the size of our network, it's currently slow to apply network algorithsm with nx in python; it's more productive to work with it in Gephi or Gephi Lite.  To that end, we save the data as a GEXF file to be loaded in network analysis software of choice.
 
 
-@app.cell
-def _():
-    # networkx is slow; better to do this in gephi / gephi lite
+    Questions of interest, which can be pursued with the network or (to some extent) the dataframe version of the data:
+    - Which poems have the most frequent reuse/overlap? (nodes with highest in/out degree)
+    - Can we programmatically identify cliques and subgraphs? When viewed in Gephi, there is a large connected component with several distinct communities, and then a larger ring of small separate clusters.  At least some of these clusters may correspond to duplicate or highly overlapping poem ids.
 
-    # pos = nx.spring_layout(poem_graph, method="energy", seed=0)
-    # pos
+    (Perhaps can be revisited after further filtering the excerpt data.)
+    """)
     return
 
 
