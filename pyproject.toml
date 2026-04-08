@@ -46,7 +46,7 @@ poem_id = [
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
 notebooks = ["jupyterlab", "itables", "treon", "polars"]
-marimo = ["marimo", "marimo[lsp]"]
+marimo = ["marimo>=0.22", "marimo[lsp]"]
 dev = [
   "pre-commit",
   "ruff",
