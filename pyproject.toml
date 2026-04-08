@@ -22,12 +22,13 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
   "ftfy",
-	"intspan",
-	"orjsonl",
-	"tqdm",
+  "intspan",
+  "orjsonl",
+  "tqdm",
   "biopython>=1.86",
   "pyyaml",
   "polars",
+  "polars-ds>=0.10.5",
 ]
 
 [project.optional-dependencies]
