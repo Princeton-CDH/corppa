@@ -55,10 +55,25 @@ from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_d
 
 
 def merge_excerpt_groups(
-    grouped_df, merge_reason: str = "ppa exact span"
+    grouped_df: pl.dataframe.group_by.GroupBy, merge_reason: str = "ppa exact span"
 ) -> pl.DataFrame:
+    """Takes a GroupBy dataframe of excerpts (created by calling `group_by`), and combines
+    groups of excerpts into merged excerpts. Merges as follows:
+      - first ppa_span_text
+      - combined unique set of detection methods
+      - combined unique set of notes
+      - updated excerpt id
+      - first poem id (dataframe should be sorted so preferred id is first)
+      - any other poem ids are listed in alt_poem_ids
+      - first reference corpus id
+      - first reference span and text
+      - combined unique list of identification methods
+    After merging, it adds a note documenting the group, with the specified reason,
+    and the number of raw excerpts in the merged set.
+    """
     return (
         grouped_df.agg(
+            # TODO: how to handle for overlapping spans
             pl.first("ppa_span_text"),  # should match exactly
             pl.col("detection_methods")
             .explode()
@@ -247,8 +262,24 @@ def merge_overlapping_excerpts(excerpts_df) -> pl.DataFrame:
 
 
 def identify_overlapping_excerpts(
-    excerpts_df, min_overlap_factor: float = 0.98, min_overlap_chars: int = 10
+    excerpts_df: pl.DataFrame,
+    min_overlap_factor: float = 0.98,
+    min_overlap_chars: int = 10,
 ) -> pl.DataFrame:
+    """
+    Takes a DataFrame of excerpts and identifies pairs of overlapping excerpts.
+    Overlapping excerpts are on the same page, with some shared span of text.
+    We exclude short overlaps based on the minimum character parameter,
+    and an overlap factor, which is calculated by the length of the shared
+    span and the length of the longer of the two spans.
+
+    Returns a DataFrame of excerpt pairs, which includes the page id,
+    two excerpt ids, overlap length, and overlap factor.
+    """
+
+    # TODO: what about small spans completely inside another?
+    # overlap factor would be small
+
     # identify excerpts with partial overlap
     overlaps_df = (
         excerpts_df
@@ -305,12 +336,18 @@ def identify_overlapping_excerpts(
         "page_id",
         "excerpt_id",
         "excerpt_id_right",
-        "group_ids",
+        "group_ids",  # drop?
         "overlap_len",
         "overlap_factor",
         # these are not strictly needed but may be helpful for investigating
         "notes",
         "notes_right",
+        "ppa_span_text",
+        "ppa_span_start",
+        "ppa_span_end",
+        "ppa_span_text_right",
+        "ppa_span_start_right",
+        "ppa_span_end_right",
         "ref_span_text",
         "ref_span_text_right",
     )
