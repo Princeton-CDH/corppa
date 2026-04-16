@@ -228,14 +228,13 @@ def identify_overlapping_excerpts(
     Overlapping excerpts are on the same page, with some shared span of text.
     We exclude short overlaps based on the minimum character parameter,
     and an overlap factor, which is calculated by the length of the shared
-    span divided by the length of the longer of the two spans.
+    span divided by the length of the longer of the two spans.  Note that
+    this will typically not return small excerpts completely inside another
+    larger span.
 
-    Returns a DataFrame of excerpt pairs, which includes the page id,
-    two excerpt ids, overlap length, and overlap factor.
+    Returns a DataFrame of excerpt pairs with columns for page id,
+    pairs of excerpt ids, overlap length, and overlap factor.
     """
-
-    # TODO: what about small spans completely inside another?
-    # overlap factor would be small
 
     # identify excerpts with partial overlap
     overlaps_df = (
@@ -244,12 +243,12 @@ def identify_overlapping_excerpts(
         .filter(pl.col("page_id").is_duplicated())
         .join_where(
             excerpts_df,
-            # 1. Excerpts are on the same page
+            # 1. Limit to excerpts are on the same page
             pl.col("page_id") == pl.col("page_id_right"),
             # 2. Excerpts overlap:
             #    left span starts before right span ends
             pl.col("ppa_span_start") < pl.col("ppa_span_end_right"),
-            #  and right span starts before left span ends
+            #    and right span starts before left span ends
             pl.col("ppa_span_start_right") < pl.col("ppa_span_end"),
             # 3. Exclude self-matches
             pl.col("excerpt_id") != pl.col("excerpt_id_right"),
@@ -276,15 +275,17 @@ def identify_overlapping_excerpts(
         .with_columns(
             overlap_factor=pl.col("overlap_len").truediv(
                 pl.max_horizontal(
-                    pl.col("ppa_span_text").str.len_chars(),
-                    pl.col("ppa_span_text_right").str.len_chars(),
+                    pl.col("ppa_span_end").sub(pl.col("ppa_span_start")),
+                    pl.col("ppa_span_end_right").sub(pl.col("ppa_span_start_right")),
+                    # pl.col("ppa_span_text").str.len_chars(),
+                    # pl.col("ppa_span_text_right").str.len_chars(),
                 )
             )
         )
         # filter to requested overlap / length to limit to high confidence overlaps
         .filter(
-            pl.col("overlap_factor").gt(min_overlap_factor),
-            pl.col("overlap_len").gt(min_overlap_chars),
+            pl.col("overlap_factor").ge(min_overlap_factor),
+            pl.col("overlap_len").ge(min_overlap_chars),
         )
     )
 
