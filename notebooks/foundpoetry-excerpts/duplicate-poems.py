@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.11"
+__generated_with = "0.22.5"
 app = marimo.App(width="medium")
 
 
@@ -299,7 +299,7 @@ def _(all_excerpts_df, c, pl, poem_ids):
         .with_columns(has_both=c.has_ch & c.has_ip)
     )
     pl_page_excerpts_df
-    return (pl_page_excerpts_df,)
+    return all_pl_excerpts_df, pl_page_excerpts_df
 
 
 @app.cell
@@ -307,14 +307,34 @@ def _(c, mo, pl_page_excerpts_df):
     # summarize findings
     total_pl_pages = pl_page_excerpts_df.height
     total_pages_both = pl_page_excerpts_df.filter(c.has_both).height
+
+    total_pages_only_one = pl_page_excerpts_df.filter(
+        (c.has_ch & ~c.has_ip) | (c.has_ip & ~c.has_ch)
+    ).height
+
     total_ch = pl_page_excerpts_df.filter(c.has_ch).height
     total_ip = pl_page_excerpts_df.filter(c.has_ip).height
+
     mo.md(f"""
     - {total_pl_pages:,} total pages with excerpts from _Paradise Lost_ (either of the main complete versions)
     - {total_ch:,} pages have excerpts from Chadwyck-Healey version ({(total_ch / total_pl_pages) * 100:.0f}%)
     - {total_ip:,} pages have excerpts from Internet Poems version ({(total_ip / total_pl_pages) * 100:.0f}%)
     - {total_pages_both:,} pages with both ids ({(total_pages_both / total_pl_pages) * 100:.0f}%)
+    - {total_pages_only_one:,} pages with only one and not the other ({(total_pages_only_one / total_pl_pages) * 100:.0f}%)
     """)
+    return
+
+
+@app.cell
+def _(all_pl_excerpts_df, c, pl_page_excerpts_df):
+    # are the non-overlapping excerpts bad matches?
+    only_one_pl_pages_df = pl_page_excerpts_df.filter(
+        (c.has_ch & ~c.has_ip) | (c.has_ip & ~c.has_ch)
+    )
+
+    all_pl_excerpts_df.filter(
+        c.page_id.is_in(only_one_pl_pages_df["page_id"].implode())
+    ).select("page_id", "ppa_span_text", "ref_span_text", "poem_id")
     return
 
 
