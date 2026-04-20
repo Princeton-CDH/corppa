@@ -74,8 +74,9 @@ def merge_excerpt_groups(
     """
     return (
         grouped_df.agg(
-            # TODO: how to handle for overlapping spans
-            pl.first("ppa_span_text"),  # should match exactly
+            # NOTE: does not handle overlapping spans;
+            # currently assumes text spans match or first in group is complete
+            pl.first("ppa_span_text"),
             c.detection_methods.explode().unique(),  # combine in a single list, no repeats
             # combine notes but don't repeat duplicate info (like passim char match count)
             c.notes.explode().unique().sort().str.join("; "),
@@ -91,15 +92,13 @@ def merge_excerpt_groups(
             c.poem_id.first(),
             # and store all others in alt poem ids field
             c.poem_id.unique().drop_nulls().slice(1).alias("alt_poem_ids"),
-            c.ref_corpus.explode().first(),
+            c.ref_corpus.first(),
             # use first reference span and text so numbers are useful; ignore nulls
             c.ref_span_start.first(),
             c.ref_span_end.first(),
             c.ref_span_text.first(),
-            # combine unique list of id methods
-            c.identification_methods.explode()
-            .unique()
-            .drop_nulls(),  # combine in a single list, no repeats, ignore nulls (not identified before merging)
+            # combine unique list of unique id methods; ignore nulls (not identified before merging)
+            c.identification_methods.explode().unique().drop_nulls(),
             pl.len().alias("group_size"),  # count number in the group
         )
         .with_columns(
@@ -241,16 +240,9 @@ def identify_overlapping_excerpts(
             c.ppa_span_start < c.ppa_span_end_right,
             #    and right span starts before left span ends
             c.ppa_span_start_right < c.ppa_span_end,
-            # 3. Exclude self-matches
+            # 3. Exclude self-matches and reverse matches
             c.excerpt_id < c.excerpt_id_right,
         )
-        .with_columns(
-            # make a sorted combined id so we can drop duplicate copies of the same pair
-            group_ids=pl.concat_list([c.excerpt_id, c.excerpt_id_right]).list.sort()
-        )
-        # excerpt ids are ONLY unique within a page
-        # drop duplicate copies of the same overlapping pair on the same page
-        .unique(["group_ids", "page_id"])
         .with_columns(
             # calculate length of the overlap: smaller end minus larger start
             overlap_len=pl.min_horizontal(c.ppa_span_end, c.ppa_span_end_right).sub(
@@ -279,7 +271,6 @@ def identify_overlapping_excerpts(
         "page_id",
         "excerpt_id",
         "excerpt_id_right",
-        "group_ids",  # drop?
         "overlap_len",
         "overlap_factor",
         # these are not strictly needed but may be helpful for investigating
