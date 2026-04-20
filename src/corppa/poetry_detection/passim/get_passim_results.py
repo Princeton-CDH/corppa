@@ -98,7 +98,7 @@ def extract_passim_spans(
     disable_progress: bool = False,
 ) -> Generator[dict[str, Any]]:
     """
-    Exctracts all span-level matches identified by passim returned as a generator
+    Extracts all span-level matches identified by passim returned as a generator
     """
     align_dir = passim_dir.joinpath("align.json")
     if not align_dir.is_dir():
