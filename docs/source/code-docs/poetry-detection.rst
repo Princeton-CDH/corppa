@@ -1,6 +1,12 @@
 Poetry Detection
 ################
 
+Core objects
+============
+
+.. automodule:: corppa.poetry_detection.core
+  :members:
+
 Reference Corpora
 =================
 .. automodule:: corppa.poetry_detection.ref_corpora
