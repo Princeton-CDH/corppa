@@ -117,6 +117,18 @@ def test_merge_excerpts_1ex_2labels(capsys):
         if field not in ["notes", "poem_id", "identification_methods", "alt_poem_ids"]:
             assert getattr(merged_excerpt, field) == getattr(excerpt1_label1, field)
 
+    # check that works the same way with different initial order,
+    # since the method orders before grouping
+    df = pl.from_dicts(
+        [excerpt1_label2.to_dict(), excerpt1_label1.to_dict(), excerpt1.to_dict()]
+    )
+    merged = merge_excerpts(df)
+    # expect one row with combined labels
+    assert len(merged) == 1
+    merged_excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    # first poem id is selected as primary
+    assert merged_excerpt.poem_id == excerpt1_label1.poem_id
+
 
 def test_merge_excerpts_1ex_note_1label():
     # excerpt with note + labeled excerpt (same id)
@@ -196,7 +208,7 @@ def test_merge_passim_match_len():
 
 
 def test_merge_excerpts_multiple_diff_labels(capsys):
-    # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
+    # excerpt + two labeled excerpt (same excerpt id, two different poem ids)
     df = pl.from_dicts(
         [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label2.to_dict()]
     )
@@ -230,7 +242,7 @@ def test_merge_excerpts_multiple_diff_labels(capsys):
 
 def test_merge_excerpts_1ex_2labels_diffmethod():
     # unlabeled excerpt + two matching labeled excerpts
-    # - same excerpt id, two labels with same ref ids but different method
+    # - same excerpt id, two labels with same poem ids but different method
     # combine method does not merge these
 
     # everything the same except for the method (unlikely!)
@@ -320,7 +332,7 @@ def test_merge_unlabeled_labeled_excerpts():
 
 def test_merge_excerpts():
     # excerpt + two matching labeled excerpts
-    # - same excerpt id, two labels with same ref ids but different method
+    # - same excerpt id, two labels with same poem ids but different method
 
     # everything the same except for the method (unlikely!)
     excerpt1_label1_method2 = replace(
@@ -455,7 +467,7 @@ def test_main_invalid_input(capsys, tmp_path):
 
 
 def test_main_successful(capsys, tmp_path):
-    # test a succesful run
+    # test a successful run
     excerpt_datafile = tmp_path / "excerpts.csv"
     _excerpts_to_csv(excerpt_datafile, [excerpt1, excerpt2])
     # valid excerpt data
@@ -542,6 +554,14 @@ no_overlap_inputs = [
         ],
         "very small overlap",
     ),
+    ([excerpt1, excerpt1], "full overlap, short text"),
+    (
+        [
+            replace(excerpt1, ppa_span_end=100),
+            replace(excerpt1, ppa_span_start=80, ppa_span_end=200),
+        ],
+        "long overlap, low overlap factor",
+    ),
 ]
 
 
@@ -606,3 +626,18 @@ def test_identify_overlapping_excerpts():
     )
     # defaults options exclude this pair
     assert identify_overlapping_excerpts(excerpts_df).height == 0
+
+    # check results when input is given in the alternate order
+    excerpts = [excerpt1_overlap, excerpt1]
+    excerpts_df = standardize_dataframe(
+        pl.from_dicts([ex.to_dict() for ex in excerpts])
+    )
+    pairs_df = identify_overlapping_excerpts(
+        excerpts_df, min_overlap_chars=9, min_overlap_factor=0.9
+    )
+    # we expect one pair
+    assert pairs_df.height == 1
+    # check that pair is ordered as expected
+    pair_result = pairs_df.row(0, named=True)
+    assert pair_result["excerpt_id"] == excerpt1.excerpt_id
+    assert pair_result["excerpt_id_right"] == excerpt1_overlap.excerpt_id
