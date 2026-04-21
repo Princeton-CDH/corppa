@@ -19,5 +19,5 @@ This repository is research software developed as part of the `Ends of Prosody <
 
    Overview <readme.md>
    Developer Notes <dev-notes.md>
-   code-docs
+   code-docs/index
    eop-docs
