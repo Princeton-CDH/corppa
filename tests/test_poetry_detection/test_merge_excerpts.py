@@ -9,11 +9,13 @@ import polars as pl
 import pytest
 from test_polars_utils import _excerpts_to_csv
 
-from corppa.poetry_detection.core import Excerpt, LabeledExcerpt
+from corppa.poetry_detection.core import Excerpt, LabeledExcerpt, Span
 from corppa.poetry_detection.merge_excerpts import (
+    identify_overlapping_excerpts,
     main,
     merge_excerpts,
 )
+from corppa.poetry_detection.polars_utils import standardize_dataframe
 
 excerpt1 = Excerpt(
     page_id="p.1",
@@ -115,6 +117,18 @@ def test_merge_excerpts_1ex_2labels(capsys):
         if field not in ["notes", "poem_id", "identification_methods", "alt_poem_ids"]:
             assert getattr(merged_excerpt, field) == getattr(excerpt1_label1, field)
 
+    # check that works the same way with different initial order,
+    # since the method orders before grouping
+    df = pl.from_dicts(
+        [excerpt1_label2.to_dict(), excerpt1_label1.to_dict(), excerpt1.to_dict()]
+    )
+    merged = merge_excerpts(df)
+    # expect one row with combined labels
+    assert len(merged) == 1
+    merged_excerpt = LabeledExcerpt.from_dict(merged.row(0, named=True))
+    # first poem id is selected as primary
+    assert merged_excerpt.poem_id == excerpt1_label1.poem_id
+
 
 def test_merge_excerpts_1ex_note_1label():
     # excerpt with note + labeled excerpt (same id)
@@ -131,7 +145,7 @@ def test_merge_excerpts_1ex_note_1label():
     # notes should be combined, and merge info should be added
     expected_merge_note = "merge: ppa exact span, 2 excerpts"
     expected_notes = "; ".join(
-        [ex1_notes.notes, excerpt1_label1.notes, expected_merge_note]
+        [excerpt1_label1.notes, ex1_notes.notes, expected_merge_note]
     )
     assert merged_excerpt.notes == expected_notes
     excerpt_with_notes = replace(excerpt1_label1, notes=expected_notes)
@@ -194,7 +208,7 @@ def test_merge_passim_match_len():
 
 
 def test_merge_excerpts_multiple_diff_labels(capsys):
-    # excerpt + two labeled excerpt (same excerpt id, two different ref ids)
+    # excerpt + two labeled excerpt (same excerpt id, two different poem ids)
     df = pl.from_dicts(
         [excerpt1.to_dict(), excerpt1_label1.to_dict(), excerpt1_label2.to_dict()]
     )
@@ -228,7 +242,7 @@ def test_merge_excerpts_multiple_diff_labels(capsys):
 
 def test_merge_excerpts_1ex_2labels_diffmethod():
     # unlabeled excerpt + two matching labeled excerpts
-    # - same excerpt id, two labels with same ref ids but different method
+    # - same excerpt id, two labels with same poem ids but different method
     # combine method does not merge these
 
     # everything the same except for the method (unlikely!)
@@ -318,7 +332,7 @@ def test_merge_unlabeled_labeled_excerpts():
 
 def test_merge_excerpts():
     # excerpt + two matching labeled excerpts
-    # - same excerpt id, two labels with same ref ids but different method
+    # - same excerpt id, two labels with same poem ids but different method
 
     # everything the same except for the method (unlikely!)
     excerpt1_label1_method2 = replace(
@@ -453,7 +467,7 @@ def test_main_invalid_input(capsys, tmp_path):
 
 
 def test_main_successful(capsys, tmp_path):
-    # test a succesful run
+    # test a successful run
     excerpt_datafile = tmp_path / "excerpts.csv"
     _excerpts_to_csv(excerpt_datafile, [excerpt1, excerpt2])
     # valid excerpt data
@@ -507,3 +521,123 @@ def test_main_successful(capsys, tmp_path):
     assert merged_ex1.ref_span_text == excerpt1_label1.ref_span_text
     # id methods combined
     assert merged_ex1.identification_methods == {"manual", "refmatcha"}
+
+
+### test for identify_overlapping_excerpts
+
+# test scenarios that should result in no overlapping pairs
+no_overlap_inputs = [
+    # list of excerpts, reason this example has no overlapping pairs
+    ([excerpt2], "single excerpt"),
+    ([excerpt2, excerpt1_label1], "excerpts on different page"),
+    # construct a second excerpt on the same page by using replace and relative offset span start/end
+    (
+        [
+            excerpt1,
+            replace(
+                excerpt1,
+                ppa_span_start=excerpt1.ppa_span_end + 100,
+                ppa_span_end=excerpt1.ppa_span_end + 120,
+            ),
+        ],
+        "same page, no overlap",
+    ),
+    # construct a short second excerpt on the same page with minimal overlap
+    (
+        [
+            excerpt1,
+            replace(
+                excerpt1,
+                ppa_span_start=excerpt1.ppa_span_end - 1,
+                ppa_span_end=excerpt1.ppa_span_end + 3,
+            ),
+        ],
+        "very small overlap",
+    ),
+    ([excerpt1, excerpt1], "full overlap, short text"),
+    (
+        [
+            replace(excerpt1, ppa_span_end=100),
+            replace(excerpt1, ppa_span_start=80, ppa_span_end=200),
+        ],
+        "long overlap, low overlap factor",
+    ),
+]
+
+
+@pytest.mark.parametrize("excerpts, reason", no_overlap_inputs)
+def test_identify_overlapping_excerpts_no_pairs(excerpts, reason):
+    # construct a standardized dataframe from the list of excerpts given
+    excerpts_df = standardize_dataframe(
+        pl.from_dicts([ex.to_dict() for ex in excerpts])
+    )
+    pairs_df = identify_overlapping_excerpts(excerpts_df)
+    assert pairs_df.height == 0, f"expected 0 overlapping pairs: {reason}"
+
+
+def test_identify_overlapping_excerpts():
+    # create a pair with high overlap starting with fixture 1
+    # for convenience, we use the existing Span object to construct
+    # an overlapping span and check the overlap length / factor logic
+    ppa_span1 = Span(start=excerpt1.ppa_span_start, end=excerpt1.ppa_span_end, label="")
+    # create a second span; offset start by 1/9 the length of the first span
+    ppa_span2 = Span(
+        start=int(ppa_span1.start + len(ppa_span1) / 9), end=ppa_span1.end + 1, label=""
+    )
+    excerpt1_overlap = replace(
+        excerpt1, ppa_span_start=ppa_span2.start, ppa_span_end=ppa_span2.end
+    )
+    # use existing span logic as coherence check for new method
+    overlap_len = ppa_span1.overlap_length(ppa_span2)
+    assert overlap_len >= 9
+    overlap_factor = ppa_span1.overlap_factor(ppa_span2, ignore_label=True)
+    assert overlap_factor >= 0.9
+    # construct a standardized dataframe from the two test excerpts
+    excerpts = [excerpt1, excerpt1_overlap]
+    excerpts_df = standardize_dataframe(
+        pl.from_dicts([ex.to_dict() for ex in excerpts])
+    )
+    pairs_df = identify_overlapping_excerpts(
+        excerpts_df, min_overlap_chars=9, min_overlap_factor=0.9
+    )
+    # we expect one pair
+    assert pairs_df.height == 1
+    # inspect the fields in the one returned pair
+    pair_result = pairs_df.row(0, named=True)
+    assert pair_result["page_id"] == excerpt1.page_id
+    # both excerpt ids present (order agnostic)
+    pair_exc_ids = set([pair_result["excerpt_id"], pair_result["excerpt_id_right"]])
+    assert pair_exc_ids == set([excerpt1.excerpt_id, excerpt1_overlap.excerpt_id])
+    assert pair_result["overlap_len"] == overlap_len
+    assert pair_result["overlap_factor"] == overlap_factor
+
+    # confirm that if we adjust the parameters, this pair is not returned
+    assert (
+        identify_overlapping_excerpts(
+            excerpts_df, min_overlap_chars=10, min_overlap_factor=0.9
+        ).height
+        == 0
+    )
+    assert (
+        identify_overlapping_excerpts(
+            excerpts_df, min_overlap_chars=9, min_overlap_factor=0.95
+        ).height
+        == 0
+    )
+    # defaults options exclude this pair
+    assert identify_overlapping_excerpts(excerpts_df).height == 0
+
+    # check results when input is given in the alternate order
+    excerpts = [excerpt1_overlap, excerpt1]
+    excerpts_df = standardize_dataframe(
+        pl.from_dicts([ex.to_dict() for ex in excerpts])
+    )
+    pairs_df = identify_overlapping_excerpts(
+        excerpts_df, min_overlap_chars=9, min_overlap_factor=0.9
+    )
+    # we expect one pair
+    assert pairs_df.height == 1
+    # check that pair is ordered as expected
+    pair_result = pairs_df.row(0, named=True)
+    assert pair_result["excerpt_id"] == excerpt1.excerpt_id
+    assert pair_result["excerpt_id_right"] == excerpt1_overlap.excerpt_id

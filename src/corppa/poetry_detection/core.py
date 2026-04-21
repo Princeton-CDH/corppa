@@ -12,7 +12,7 @@ from typing import Any, Optional, Self, get_args, get_origin
 
 from Bio.Align import PairwiseAligner
 
-# Table of supported detection methods and their corresponding prefixes
+#: Supported detection methods with corresponding prefixes
 DETECTION_METHODS = {
     "adjudication": "a",
     "manual": "m",
@@ -27,8 +27,11 @@ class Span:
     Span object representing a Pythonic "closed open" interval
     """
 
+    #: start index
     start: int
+    #: end index
     end: int
+    #: label for the span
     label: str
 
     def __post_init__(self):
@@ -87,12 +90,13 @@ class Span:
 
 def field_real_type(field_type) -> type:
     """Return the real type for a dataclass field type annotation.
-    For unions or optional values (e.g. `Optional[int]`), returns the first
-    non-None type; for type aliases (e.g. `set[str]`, returns the original type
+    For unions or optional values (e.g. ``Optional[int]``), returns the first
+    non-None type; for type aliases (e.g. ``set[str]``), returns the original type
     that was used to create the alias. For example:
-        - int -> int
-        - Optional[int] -> int
-        - set[str] -> set
+
+    - ``int`` -> ``int``
+    - ``Optional[int]`` -> ``int``
+    - ``set[str]`` -> ``set``
     """
     # if it's a regular type, return unchanged
     if isinstance(field_type, type):
@@ -143,16 +147,21 @@ class Excerpt:
     """
 
     # PPA page related
+    #: page id
     page_id: str
+    #: ppa span start index
     ppa_span_start: int
+    #: ppa span end index
     ppa_span_end: int
+    #: ppa span text
     ppa_span_text: str
-    # Detection methods
+    #: Detection methods
     detection_methods: set[str]
-    # Optional notes field
+    #: Optional notes
     notes: Optional[str] = None
     # Excerpt id, set in post initialization
     # Note: Cannot be passed in at initialization
+    #: excerpt identifier
     excerpt_id: str = field(init=False)
 
     def __post_init__(self):
@@ -336,14 +345,20 @@ class LabeledExcerpt(Excerpt):
     """
 
     # Reference poem related
+    #: poem id
     poem_id: str
+    #: reference corpus id
     ref_corpus: str
+    #: reference span start index
     ref_span_start: Optional[int] = None
+    #: reference span end index
     ref_span_end: Optional[int] = None
+    #: reference span text
     ref_span_text: Optional[str] = None
+    #: set of alternate poem ids, for merged excerpts with multiple ids
     alt_poem_ids: Optional[set[str]] = None
 
-    # Identification methods
+    #: Identification methods
     identification_methods: set[str]
 
     def __post_init__(self):

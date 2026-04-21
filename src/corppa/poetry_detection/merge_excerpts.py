@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-This script and associated method merges labeled and unlabeled poem excerpts 
+This script and associated method merges labeled and unlabeled poem excerpts
 with matching spans in the PPA page text.
 
 It takes two or more input files of excerpt data (labeled or unlabeled) in CSV format,
@@ -15,31 +15,30 @@ the output will likely be a mix of labeled and unlabeled excerpts.
 Merging logic is as follows:
 
 - Excerpts are grouped based on exact span match in PPA text (i.e., the
-  combination of `page_id`, `ppa_span_start`, and `ppa_span_end`)
+  combination of ``page_id``, ``ppa_span_start``, and ``ppa_span_end``)
   even when poem identifications differ, and combined as follows:
 
-     - Excerpts are sorted by `poem_id`, `ref_span_start`, and passim
+     - Excerpts are sorted by ``poem_id``, ``ref_span_start``, and passim
        match length with nulls last and longest passim match first.
-       Reference information (`poem_id`, `ref_span_start`, `ref_span_end`, 
-       `ref_span_text`, `ref_corpus`) is taken from the first excerpt in 
+       Reference information (``poem_id``, ``ref_span_start``, ``ref_span_end``,
+       ``ref_span_text``, ``ref_corpus``) is taken from the first excerpt in
        the group.
      - When merged excerpts have different poem identifications, all unique
-       poem ids after the first are collected into `alt_poem_ids`
-     - The `detection_methods` and `identification_methods` fields are combined
+       poem ids after the first are collected into ``alt_poem_ids``
+     - The ``detection_methods`` and ``identification_methods`` fields are combined
        to the unique set of methods used in the merged excerpts.
-     - The `notes` field is combined with the set of all unique content from 
+     - The ``notes`` field is combined with the set of all unique content from
        notes in merged excerpts with an additional note about the merge.
 
 Example usage: ::
 
-./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
-labeled_excerpts.csv -o merged_excerpts.csv
+  merge-excerpts adjudication_excerpts.csv labeled_excerpts.csv -o merged_excerpts.csv
 
 Limitations:
 
 - Merge logic collapses different poem ids that may not correspond;
   they may be subsets of the same poem, different editions, or entirely
-  different poems.
+  different poems. Alternate poem ids are preserved in ``alt_poem_ids``.
 - Currently supports CSV input and output only.
 
 """
@@ -49,36 +48,94 @@ import pathlib
 import sys
 
 import polars as pl
+from polars import col as c  # for shorthand column notation
 
 from corppa.poetry_detection.core import MULTIVAL_DELIMITER
 from corppa.poetry_detection.polars_utils import load_excerpts_df, standardize_dataframe
 
 
+def merge_excerpt_groups(
+    grouped_df: pl.dataframe.group_by.GroupBy, merge_reason: str = "ppa exact span"
+) -> pl.DataFrame:
+    """Takes a GroupBy dataframe of excerpts (created by calling `group_by`), and combines
+    groups of excerpts into merged excerpts.  Fields are expected to correspond to
+    labeled excerpts (:class:`~corppa.poetry_detection.core.LabeledExcerpt`), and the
+    dataframe should be pre-sorted so the preferred excerpt comes first,
+    since in several cases the first value is the one preserved in the merge.
+    Merge logic is as follows:
+
+    - first ``ppa_span_text``, ``poem_id``, reference corpus values (``ref_corpus``,
+      ``ref_span_start``, ``ref_span_end``, ``ref_span_text``)
+    - combined unique set of detection methods and identification methods
+    - combined unique set of notes
+    - updated excerpt id
+    - any additional poem ids are listed in ``alt_poem_ids``
+
+    After merging, the notes field is updated with text documenting the merge
+    with the specified reason (by default, exact span in PPA), and the
+    number of excerpts that were merged.
+    """
+    return (
+        grouped_df.agg(
+            # NOTE: does not handle overlapping spans;
+            # currently assumes text spans match or first in group is complete
+            pl.first("ppa_span_text"),
+            c.detection_methods.explode().unique(),  # combine in a single list, no repeats
+            # combine notes but don't repeat duplicate info (like passim char match count)
+            c.notes.explode().unique().str.join("; "),
+            # construct merged excerpt id manually; c= prefix for combined
+            # (although strictly speaking should only be if > 1 detection method)
+            pl.concat_str(
+                pl.lit("c@"),
+                c.ppa_span_start.first(),
+                pl.lit(":"),
+                c.ppa_span_end.first(),
+            ).alias("excerpt_id"),
+            # pick the first poem id (relies on previous sorting)
+            c.poem_id.first(),
+            # and store all others in alt poem ids field
+            c.poem_id.unique().drop_nulls().slice(1).alias("alt_poem_ids"),
+            c.ref_corpus.first(),
+            # use first reference span and text so numbers are useful
+            c.ref_span_start.first(),
+            c.ref_span_end.first(),
+            c.ref_span_text.first(),
+            # combine unique list of unique id methods; ignore nulls (not identified before merging)
+            c.identification_methods.explode().unique().drop_nulls(),
+            pl.len().alias("group_size"),  # count number in the group
+        )
+        .with_columns(
+            notes=pl.concat_str(
+                c.notes,
+                pl.lit(f"; merge: {merge_reason}, "),
+                c.group_size,
+                pl.lit(" excerpts"),
+            ),
+            # if alt poem ids is empty, replace with None
+            alt_poem_ids=pl.when(c.alt_poem_ids.list.len() > 0)
+            .then(c.alt_poem_ids)
+            .otherwise(pl.lit(None)),
+        )
+        .drop("group_size")
+    )  # drop group size column
+
+
 def merge_excerpts(
     df: pl.DataFrame, disable_progress=True, verbose=False
 ) -> pl.DataFrame:
-    """Takes a polars DataFrame that includes labeled or unlabeled excerpts,
-    and merges excerpts based primarily on `page_id` and `excerpt_id`.
-    For now, merging is only done on the simple cases where reference
-    fields match exactly, or where reference fields are present in one labeled
-    excerpt and unset in the other:
-    - unlabeled excerpts with matching labeled excerpts
-    - multiple labeled excerpts with matching `poem_id` and non-conflicting
-    reference information
+    """Takes a polars DataFrame that includes labeled or unlabeled excerpts
+    (fields correspond to :class:`~corppa.poetry_detection.core.LabeledExcerpt`),
+    and merges excerpts based on ``page_id`` and ppa span (``ppa_span_start`` and
+    ``ppa_span_end``). For now, merging is only done on the simple cases where
+    PPA excerpt text bounds match exactly. The best match is prioritized, based
+    on passim match length; alternate poem ids are preserved in ``alt_poem_ids``.
 
-    When excerpts are merged, the detection_methods, identification_methods,
-    and notes fields are all combined to preserve all information.
+    When excerpts are merged, the ``detection_methods``, ``identification_methods``,
+    and ``notes`` fields are all combined to preserve information.
 
     Returns a dataframe that contains all unique excerpts and merged
-    versions of duplicated excerpts.
+    versions of duplicate excerpts.
     """
-
-    # TEMPORARY - make sure internet poem ref corpus ids match before merging
-    df = df.with_columns(
-        ref_corpus=pl.when(pl.col("ref_corpus").eq("internet-poems"))
-        .then(pl.lit("internet_poems"))
-        .otherwise(pl.col.ref_corpus)
-    )
 
     # group by page id and excerpt id to get potential matches
     # use aggregation to get the count of excerpts in each group,
@@ -91,16 +148,17 @@ def merge_excerpts(
     # add to output df and don't process further
     output_df = (
         df.join(grouped, on=["page_id", "ppa_span_start", "ppa_span_end"])
-        .filter(pl.col("group_size").eq(1))
+        .filter(c.group_size.eq(1))
         .drop("group_size")
     )
     if output_df.is_empty():
+        # if none were found, create an empty
         output_df = df.clear()
 
     # any excerpts with group size > 1 are candidates for merging
     merge_candidates = (
         df.join(grouped, on=["page_id", "ppa_span_start", "ppa_span_end"])
-        .filter(pl.col("group_size").gt(1))
+        .filter(c.group_size.gt(1))
         .drop("group_size")
     )
 
@@ -110,7 +168,7 @@ def merge_excerpts(
     merge_groups = (
         merge_candidates.with_columns(
             # extract passim match length so we can prioritize longer matches
-            passim_match_len=pl.col("notes").str.extract(r"passim: (\d+) char matches")
+            passim_match_len=c.notes.str.extract(r"passim: (\d+) char matches")
         )
         .sort(
             "page_id",
@@ -128,62 +186,10 @@ def merge_excerpts(
             f"Identified {merge_candidates.height:,} merge candidates in {num_merge_groups:,} groups."
         )
 
-    merged_output_df = (
-        merge_groups.agg(
-            pl.first("ppa_span_text"),  # should match exactly
-            pl.col("detection_methods")
-            .explode()
-            .unique(),  # combine in a single list, no repeats
-            # combine notes but don't repeat duplicate info (like passim char match count)
-            pl.col("notes").explode().unique().sort().str.join("; "),
-            # construct merged excerpt id manually; c= prefix for combined
-            # (although strictly speaking should only be if > 1 detection method)
-            pl.concat_str(
-                pl.lit("c@"),
-                pl.col("ppa_span_start").first(),
-                pl.lit(":"),
-                pl.col("ppa_span_end").first(),
-            ).alias("excerpt_id"),
-            # pick the first poem id (relies on previous sorting)
-            pl.col("poem_id").explode().unique().first(),
-            # and store all others in alt poem ids field
-            pl.col("poem_id")
-            .explode()
-            .unique()
-            .drop_nulls()
-            .slice(1)
-            .alias("alt_poem_ids"),
-            pl.col("ref_corpus").explode().first(),
-            # use first reference span and text so numbers are useful; ignore nulls
-            pl.col("ref_span_start").first(),
-            pl.col("ref_span_end").first(),
-            pl.col("ref_span_text").first(),
-            # combine unique list of id methods
-            pl.col("identification_methods")
-            .explode()
-            .unique()
-            .drop_nulls(),  # combine in a single list, no repeats, ignore nulls (not identified before merging)
-            pl.len().alias("group_size"),  # count number in the group
-        )
-        .with_columns(
-            notes=pl.concat_str(
-                pl.col("notes"),
-                pl.lit("; merge: ppa exact span, "),
-                pl.col("group_size"),
-                pl.lit(" excerpts"),
-            ),
-            # if alt poem ids is empty, replace with None
-            alt_poem_ids=pl.when(pl.col("alt_poem_ids").list.len() > 0)
-            .then(pl.col("alt_poem_ids"))
-            .otherwise(pl.lit(None)),
-        )
-        .drop("group_size")  # drop group size column
-    )
+    merged_output_df = merge_excerpt_groups(merge_groups)
 
     if verbose:
-        multi_id = merged_output_df.filter(
-            pl.col("alt_poem_ids").list.len().gt(0)
-        ).height
+        multi_id = merged_output_df.filter(c.alt_poem_ids.list.len().gt(0)).height
         print(
             f"{merged_output_df.height:,} merged excerpts; {multi_id:,} with multiple poem ids."
         )
@@ -191,7 +197,86 @@ def merge_excerpts(
     # combined merged records with the output
     # use a diagonal concat instead of vstack/extend
     # to avoid having to reconcile columns first
-    return pl.concat([output_df, merged_output_df], how="diagonal")
+    output_df = pl.concat([output_df, merged_output_df], how="diagonal")
+
+    return output_df
+
+
+def identify_overlapping_excerpts(
+    excerpts_df: pl.DataFrame,
+    min_overlap_factor: float = 0.98,
+    min_overlap_chars: int = 10,
+) -> pl.DataFrame:
+    """
+    Takes a DataFrame of excerpts and identifies pairs of overlapping excerpts.
+    Overlapping excerpts are on the same page, with some shared span of text.
+    We exclude short overlaps based on the minimum character parameter,
+    and an overlap factor, which is calculated by the length of the shared
+    span divided by the length of the longer of the two spans.  Note that
+    this will typically not return small excerpts completely inside another
+    larger span.
+
+    Returns a DataFrame of excerpt pairs with columns for page id,
+    pairs of excerpt ids, overlap length, and overlap factor.
+    """
+
+    # identify excerpts with partial overlap
+    overlaps_df = (
+        excerpts_df
+        # Filter to excerpts on pages with multiple excerpts
+        .filter(c.page_id.is_duplicated())
+        .join_where(
+            excerpts_df,
+            # 1. Limit to excerpts on the same page
+            c.page_id == c.page_id_right,
+            # 2. Excerpts overlap:
+            #    left span starts before right span ends
+            c.ppa_span_start < c.ppa_span_end_right,
+            #    and right span starts before left span ends
+            c.ppa_span_start_right < c.ppa_span_end,
+            # 3. Exclude self-matches and reverse matches
+            c.excerpt_id < c.excerpt_id_right,
+        )
+        .with_columns(
+            # calculate length of the overlap: smaller end minus larger start
+            overlap_len=pl.min_horizontal(c.ppa_span_end, c.ppa_span_end_right).sub(
+                pl.max_horizontal(c.ppa_span_start, c.ppa_span_start_right)
+            ),
+        )
+        .with_columns(
+            overlap_factor=c.overlap_len.truediv(
+                pl.max_horizontal(
+                    c.ppa_span_end.sub(c.ppa_span_start),
+                    c.ppa_span_end_right.sub(c.ppa_span_start_right),
+                )
+            )
+        )
+        # filter to requested overlap / length to limit to high confidence overlaps
+        .filter(
+            c.overlap_factor.ge(min_overlap_factor),
+            c.overlap_len.ge(min_overlap_chars),
+        )
+    )
+
+    # what fields are needed here?
+    return overlaps_df.select(
+        "page_id",
+        "excerpt_id",
+        "excerpt_id_right",
+        "overlap_len",
+        "overlap_factor",
+        # these are not strictly needed but may be helpful for investigating
+        "notes",
+        "notes_right",
+        "ppa_span_text",
+        "ppa_span_start",
+        "ppa_span_end",
+        "ppa_span_text_right",
+        "ppa_span_start_right",
+        "ppa_span_end_right",
+        "ref_span_text",
+        "ref_span_text_right",
+    )
 
 
 def merge_excerpt_files(
@@ -218,7 +303,7 @@ def merge_excerpt_files(
     total_excerpts = excerpts.height
     # use unique to drop exact duplicates
     excerpts = excerpts.unique()
-    initial_labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null()).height
+    initial_labeled_excerpts = excerpts.filter(c.poem_id.is_not_null()).height
     # output summary information about input data
     print(
         f"Loaded {total_excerpts:,} excerpts from {len(input_files)} files ({excerpts.height:,} unique; {initial_labeled_excerpts:,} labeled)."
@@ -235,16 +320,14 @@ def merge_excerpt_files(
 
     # convert list fields for output to csv and reporting
     excerpts = excerpts.with_columns(
-        detection_methods=pl.col("detection_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-        identification_methods=pl.col("identification_methods")
-        .list.sort()
-        .list.join(MULTIVAL_DELIMITER),
-        alt_poem_ids=pl.col("alt_poem_ids").list.join(MULTIVAL_DELIMITER),
+        detection_methods=c.detection_methods.list.sort().list.join(MULTIVAL_DELIMITER),
+        identification_methods=c.identification_methods.list.sort().list.join(
+            MULTIVAL_DELIMITER
+        ),
+        alt_poem_ids=c.alt_poem_ids.list.join(MULTIVAL_DELIMITER),
     )
 
-    labeled_excerpts = excerpts.filter(pl.col("poem_id").is_not_null())
+    labeled_excerpts = excerpts.filter(c.poem_id.is_not_null())
 
     # summary information about the content and what as done
     print(
