@@ -9,7 +9,7 @@
 from corppa import __version__
 
 project = "corppa"
-copyright = "2024,2025 Center for Digital Humanities, Princeton University"
+copyright = "2024—2026 Center for Digital Humanities, Princeton University"
 author = "Center for Digital Humanities RSE Team, Princeton University"
 release = __version__
 
