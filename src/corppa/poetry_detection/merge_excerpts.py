@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-This script and associated method merges labeled and unlabeled poem excerpts 
+This script and associated method merges labeled and unlabeled poem excerpts
 with matching spans in the PPA page text.
 
 It takes two or more input files of excerpt data (labeled or unlabeled) in CSV format,
@@ -15,31 +15,30 @@ the output will likely be a mix of labeled and unlabeled excerpts.
 Merging logic is as follows:
 
 - Excerpts are grouped based on exact span match in PPA text (i.e., the
-  combination of `page_id`, `ppa_span_start`, and `ppa_span_end`)
+  combination of ``page_id``, ``ppa_span_start``, and ``ppa_span_end``)
   even when poem identifications differ, and combined as follows:
 
-     - Excerpts are sorted by `poem_id`, `ref_span_start`, and passim
+     - Excerpts are sorted by ``poem_id``, ``ref_span_start``, and passim
        match length with nulls last and longest passim match first.
-       Reference information (`poem_id`, `ref_span_start`, `ref_span_end`, 
-       `ref_span_text`, `ref_corpus`) is taken from the first excerpt in 
+       Reference information (``poem_id``, ``ref_span_start``, ``ref_span_end``,
+       ``ref_span_text``, ``ref_corpus``) is taken from the first excerpt in
        the group.
      - When merged excerpts have different poem identifications, all unique
-       poem ids after the first are collected into `alt_poem_ids`
-     - The `detection_methods` and `identification_methods` fields are combined
+       poem ids after the first are collected into ``alt_poem_ids``
+     - The ``detection_methods`` and ``identification_methods`` fields are combined
        to the unique set of methods used in the merged excerpts.
-     - The `notes` field is combined with the set of all unique content from 
+     - The ``notes`` field is combined with the set of all unique content from
        notes in merged excerpts with an additional note about the merge.
 
 Example usage: ::
 
-./src/corppa/poetry_detection/merge_excerpts.py adjudication_excerpts.csv \
-labeled_excerpts.csv -o merged_excerpts.csv
+  merge-excerpts adjudication_excerpts.csv labeled_excerpts.csv -o merged_excerpts.csv
 
 Limitations:
 
 - Merge logic collapses different poem ids that may not correspond;
   they may be subsets of the same poem, different editions, or entirely
-  different poems.
+  different poems. Alternate poem ids are preserved in ``alt_poem_ids``.
 - Currently supports CSV input and output only.
 
 """
@@ -59,17 +58,19 @@ def merge_excerpt_groups(
     grouped_df: pl.dataframe.group_by.GroupBy, merge_reason: str = "ppa exact span"
 ) -> pl.DataFrame:
     """Takes a GroupBy dataframe of excerpts (created by calling `group_by`), and combines
-    groups of excerpts into merged excerpts.  Fields are expected to match
-    labeled excerpts (:class:~`corppa.poetry_detection.core.LabeledExcerpt`), and the
+    groups of excerpts into merged excerpts.  Fields are expected to correspond to
+    labeled excerpts (:class:`~corppa.poetry_detection.core.LabeledExcerpt`), and the
     dataframe should be pre-sorted so the preferred excerpt comes first,
     since in several cases the first value is the one preserved in the merge.
     Merge logic is as follows:
-      - first `ppa_span_text`, `poem_id`, reference corpus values (`ref_corpus`,
-        `ref_span_start`, `ref_span_end`, `ref_span_text`)
-      - combined unique set of detection methods and identification methods
-      - combined unique set of notes
-      - updated excerpt id
-      - any additional poem ids are listed in alt_poem_ids
+
+    - first ``ppa_span_text``, ``poem_id``, reference corpus values (``ref_corpus``,
+      ``ref_span_start``, ``ref_span_end``, ``ref_span_text``)
+    - combined unique set of detection methods and identification methods
+    - combined unique set of notes
+    - updated excerpt id
+    - any additional poem ids are listed in ``alt_poem_ids``
+
     After merging, the notes field is updated with text documenting the merge
     with the specified reason (by default, exact span in PPA), and the
     number of excerpts that were merged.
@@ -122,20 +123,18 @@ def merge_excerpt_groups(
 def merge_excerpts(
     df: pl.DataFrame, disable_progress=True, verbose=False
 ) -> pl.DataFrame:
-    """Takes a polars DataFrame that includes labeled or unlabeled excerpts,
-    and merges excerpts based primarily on `page_id` and `excerpt_id`.
-    For now, merging is only done on the simple cases where reference
-    fields match exactly, or where reference fields are present in one labeled
-    excerpt and unset in the other:
-    - unlabeled excerpts with matching labeled excerpts
-    - multiple labeled excerpts with matching `poem_id` and non-conflicting
-    reference information
+    """Takes a polars DataFrame that includes labeled or unlabeled excerpts
+    (fields correspond to :class:`~corppa.poetry_detection.core.LabeledExcerpt`),
+    and merges excerpts based on ``page_id`` and ppa span (``ppa_span_start`` and
+    ``ppa_span_end``). For now, merging is only done on the simple cases where
+    PPA excerpt text bounds match exactly. The best match is prioritized, based
+    on passim match length; alternate poem ids are preserved in ``alt_poem_ids``.
 
-    When excerpts are merged, the detection_methods, identification_methods,
-    and notes fields are all combined to preserve all information.
+    When excerpts are merged, the ``detection_methods``, ``identification_methods``,
+    and ``notes`` fields are all combined to preserve information.
 
     Returns a dataframe that contains all unique excerpts and merged
-    versions of duplicated excerpts.
+    versions of duplicate excerpts.
     """
 
     # group by page id and excerpt id to get potential matches
@@ -249,8 +248,6 @@ def identify_overlapping_excerpts(
                 pl.max_horizontal(
                     c.ppa_span_end.sub(c.ppa_span_start),
                     c.ppa_span_end_right.sub(c.ppa_span_start_right),
-                    # c.ppa_span_text").str.len_chars(),
-                    # c.ppa_span_text_right").str.len_chars(),
                 )
             )
         )

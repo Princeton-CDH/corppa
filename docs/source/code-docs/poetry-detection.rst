@@ -13,6 +13,7 @@ Reference Corpora
   :members:
 
 
+
 Scripts
 =======
 
@@ -25,4 +26,4 @@ Merge excerpts
 --------------
 
 .. automodule:: corppa.poetry_detection.merge_excerpts
-.. Note: not including members for method docs, only top-level script usage
+  :members:
