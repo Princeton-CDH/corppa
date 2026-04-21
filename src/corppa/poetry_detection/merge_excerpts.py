@@ -96,7 +96,7 @@ def merge_excerpt_groups(
             # and store all others in alt poem ids field
             c.poem_id.unique().drop_nulls().slice(1).alias("alt_poem_ids"),
             c.ref_corpus.first(),
-            # use first reference span and text so numbers are useful; ignore nulls
+            # use first reference span and text so numbers are useful
             c.ref_span_start.first(),
             c.ref_span_end.first(),
             c.ref_span_text.first(),
@@ -227,7 +227,7 @@ def identify_overlapping_excerpts(
         .filter(c.page_id.is_duplicated())
         .join_where(
             excerpts_df,
-            # 1. Limit to excerpts are on the same page
+            # 1. Limit to excerpts on the same page
             c.page_id == c.page_id_right,
             # 2. Excerpts overlap:
             #    left span starts before right span ends
