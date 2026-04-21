@@ -133,7 +133,7 @@ def test_merge_excerpts_1ex_note_1label():
     # notes should be combined, and merge info should be added
     expected_merge_note = "merge: ppa exact span, 2 excerpts"
     expected_notes = "; ".join(
-        [ex1_notes.notes, excerpt1_label1.notes, expected_merge_note]
+        [excerpt1_label1.notes, ex1_notes.notes, expected_merge_note]
     )
     assert merged_excerpt.notes == expected_notes
     excerpt_with_notes = replace(excerpt1_label1, notes=expected_notes)

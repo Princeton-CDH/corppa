@@ -59,18 +59,20 @@ def merge_excerpt_groups(
     grouped_df: pl.dataframe.group_by.GroupBy, merge_reason: str = "ppa exact span"
 ) -> pl.DataFrame:
     """Takes a GroupBy dataframe of excerpts (created by calling `group_by`), and combines
-    groups of excerpts into merged excerpts. Merges as follows:
-      - first ppa_span_text
-      - combined unique set of detection methods
+    groups of excerpts into merged excerpts.  Fields are expected to match
+    labeled excerpts (:class:~`corppa.poetry_detection.core.LabeledExcerpt`), and the
+    dataframe should be pre-sorted so the preferred excerpt comes first,
+    since in several cases the first value is the one preserved in the merge.
+    Merge logic is as follows:
+      - first `ppa_span_text`, `poem_id`, reference corpus values (`ref_corpus`,
+        `ref_span_start`, `ref_span_end`, `ref_span_text`)
+      - combined unique set of detection methods and identification methods
       - combined unique set of notes
       - updated excerpt id
-      - first poem id (dataframe should be sorted so preferred id is first)
-      - any other poem ids are listed in alt_poem_ids
-      - first reference corpus id
-      - first reference span and text
-      - combined unique list of identification methods
-    After merging, it adds a note documenting the group, with the specified reason,
-    and the number of raw excerpts in the merged set.
+      - any additional poem ids are listed in alt_poem_ids
+    After merging, the notes field is updated with text documenting the merge
+    with the specified reason (by default, exact span in PPA), and the
+    number of excerpts that were merged.
     """
     return (
         grouped_df.agg(
@@ -79,7 +81,7 @@ def merge_excerpt_groups(
             pl.first("ppa_span_text"),
             c.detection_methods.explode().unique(),  # combine in a single list, no repeats
             # combine notes but don't repeat duplicate info (like passim char match count)
-            c.notes.explode().unique().sort().str.join("; "),
+            c.notes.explode().unique().str.join("; "),
             # construct merged excerpt id manually; c= prefix for combined
             # (although strictly speaking should only be if > 1 detection method)
             pl.concat_str(
@@ -135,13 +137,6 @@ def merge_excerpts(
     Returns a dataframe that contains all unique excerpts and merged
     versions of duplicated excerpts.
     """
-
-    # TEMPORARY - make sure internet poem ref corpus ids match before merging
-    df = df.with_columns(
-        ref_corpus=pl.when(c.ref_corpus.eq("internet-poems"))
-        .then(pl.lit("internet_poems"))
-        .otherwise(c.ref_corpus)
-    )
 
     # group by page id and excerpt id to get potential matches
     # use aggregation to get the count of excerpts in each group,
