@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.22.5"
+__generated_with = "0.20.4"
 app = marimo.App(width="medium")
 
 
@@ -454,6 +454,71 @@ def _(poem_pairs_exact_partial_df):
     poem_pairs_exact_partial_df.sort(
         "n_exact_matches", "n_90pct_overlap", descending=True
     ).write_csv("alt_poem_ids.csv")
+    return
+
+
+@app.cell
+def _(c, pl, poem_pairs_exact_partial_df):
+    # make a version for the starting point of poem cluster ids
+    # get poet last name and simplified title, construct slugs for pairs,
+    # and then make a list that can be split and rejoined with poem metadata
+
+    poem_cluster_id_df = (
+        poem_pairs_exact_partial_df.filter(c.n_exact_matches.gt(100))
+        .fill_null("")
+        .with_columns(
+            poem_id=pl.concat_list([c.poem_id, c.alt_poem_id]),
+            author_lname=c.poem_author.str.split(" ").list.last(),
+            alt_author_lname=c.alt_poem_author.str.split(" ").list.last(),
+            title_slug=c.poem_title.str.to_lowercase()
+            .str.replace(r"\b(the|and|or|a|of|on)\b", "")
+            .str.replace("'", ""),
+        )
+        .filter(
+            c.author_lname.eq(c.alt_author_lname)
+            | c.author_lname.eq("")
+            | c.alt_author_lname.eq("")
+        )
+        .with_columns(
+            cluster_id=pl.concat_str(
+                [c.author_lname.str.to_lowercase(), c.title_slug], separator=" "
+            )
+            .str.replace_all(r"\s+", "-")
+            .str.strip_chars("-.:")
+        )
+    )
+    poem_cluster_id_df
+    return (poem_cluster_id_df,)
+
+
+@app.cell
+def _(c, poem_cluster_id_df, poem_meta_df):
+    # explode pair of poem ids into rows, poem id + cluster id, combine with poem metadata & overlap info
+    poem_cluster_ids = (
+        (
+            poem_cluster_id_df.select("poem_id", "cluster_id")
+            .explode("poem_id")
+            .join(poem_meta_df, on="poem_id")
+            .join_where(
+                poem_cluster_id_df.select(
+                    "poem_id", "n_exact_matches", "n_90pct_overlap"
+                ),
+                c.poem_id.is_in(c.poem_id_right),
+            )
+            .with_columns(id_pair=c.poem_id_right.list.join("; "))
+            .drop("poem_id_right")
+        )
+        .unique(["poem_id", "cluster_id"])
+        .sort("n_exact_matches", descending=True)
+    )
+    poem_cluster_ids
+    return (poem_cluster_ids,)
+
+
+@app.cell
+def _(poem_cluster_ids):
+    # save to CSV file for use in alt poem id spreadsheet
+    poem_cluster_ids.write_csv("poem_cluster_ids.csv")
     return
 
 
