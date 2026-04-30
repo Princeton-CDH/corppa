@@ -133,6 +133,8 @@ def load_compilation_config():
         # sources
         "source_excerpt_data": excerpt_data_dir,
         "source_ppa_metadata": source_ppa_metadata,
+        # required? warn?
+        "source_poem_clusters": config_opts["reference_corpora"]["poem_clusters_path"],
     }
 
 
@@ -246,7 +248,16 @@ def run_poem_metadata_step(
         excerpts_df = load_compiled_excerpts(compile_opts)
     else:
         excerpts_df = extract_page_meta(excerpts_df)
-    save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
+
+    poem_clusters_df = (
+        pl.read_csv(compile_opts["source_poem_clusters"])
+        if compile_opts["source_poem_clusters"]
+        else None
+    )
+
+    save_poem_metadata(
+        compile_opts["poem_metadata_file"], excerpts_df, poem_clusters_df
+    )
 
 
 def run_ppa_metadata_step(

@@ -127,6 +127,17 @@ class LocalTextCorpus(BaseReferenceCorpus):
                 f"Configuration error: {self.corpus_name} path {self.text_path} is not a directory or a tar.gz"
             )
 
+        # set metadata path if present in configuration
+        if "metadata_path" in config_opts:
+            self.metadata_path = pathlib.Path(config_opts["metadata_path"])
+            # if metadata path is not absolute, assume relative to ref_corpus base dir
+            if not self.metadata_path.is_absolute():
+                self.metadata_path = config_opts["base_dir"] / self.metadata_path
+            if not (self.metadata_path.exists() and self.metadata_path.is_file()):
+                raise ValueError(
+                    f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
+                )
+
     def get_text_corpus(self, disable_progress: bool = True) -> dict[str, str]:
         # if text_path is tarball, raise not implemented error
         if self.text_path.is_dir():
@@ -147,8 +158,9 @@ class LocalTextCorpus(BaseReferenceCorpus):
 class InternetPoems(LocalTextCorpus):
     """Curated corpus of poems with plain text content sourced from
     the internet, for high priority sources known to occur in excerpts,
-    including full text of Shakespeare's plays. Metadata is inferred based on
-    filename, with a naming convention of `Firstname-Lastname_Poem-Title.txt`.
+    including full text of Shakespeare's plays. Metadata was originally based on
+    filename (naming convention of `Firstname-Lastname_Poem-Title.txt`),
+    but has since been augmented with wikidata information for poem authors.
     The filename without extension is used as the `poem_id`.
     """
 
@@ -160,6 +172,10 @@ class InternetPoems(LocalTextCorpus):
     # no init/validation needed beyond that provided by LocalTextCorpus
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
+        # TODO: what to do about WH's metadata? connect / replace / separate
+        # if self.metadata_path:
+        #     df = pl.read_csv(self.metadata_path, infer_schema=False)
+
         metadata = []
         # returns a generator of dicts with id and text string
         # TODO: when called from compile script, might be nice to show progress bar
@@ -191,25 +207,11 @@ class ChadwyckHealey(LocalTextCorpus):
     #: id for this reference corpus: chadwyck-healey
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"
-    # inherits text_path
-
-    def __init__(self):
-        # use LocalTextCorpus init to configure and validate text_path
-        super().__init__()
-        # get configuration to set metadata path
-        config_opts = self.get_config_opts()
-
-        self.metadata_path = pathlib.Path(config_opts["metadata_path"])
-        # if metadata path is not absolute, assume relative to ref_corpus base dir
-        if not self.metadata_path.is_absolute():
-            self.metadata_path = config_opts["base_dir"] / self.metadata_path
-        if not (self.metadata_path.exists() and self.metadata_path.is_file()):
-            raise ValueError(
-                f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
-            )
+    # inherits text_path &  metadata path
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # disable schema inference; the fields we care about are all strings
+        # TODO: check / update for revised metadata
         df = (
             pl.read_csv(self.metadata_path, infer_schema=False)
             # rename fields
@@ -310,7 +312,9 @@ def compile_metadata_df(poem_length=False) -> pl.DataFrame:
 
 
 def save_poem_metadata(
-    output_file: pathlib.Path, excerpts_df: Optional[pl.DataFrame] = None
+    output_file: pathlib.Path,
+    excerpts_df: Optional[pl.DataFrame] = None,
+    poem_clusters_df: Optional[pl.DataFrame] = None,
 ):
     """Generate and save compiled poetry metadata as a data file in the
     poem dataset.
@@ -348,6 +352,14 @@ def save_poem_metadata(
             pl.col("num_excerpts").fill_null(pl.lit(0)),
             pl.col("num_ppa_works").fill_null(pl.lit(0)),
             pl.col("num_ppa_pages").fill_null(pl.lit(0)),
+        )
+    if poem_clusters_df is not None:
+        df = df.join(
+            poem_clusters_df.select("poem_id", "cluster_id"), on="poem_id", how="left"
+        )
+        n_with_cluster_ids = df.filter(pl.col.cluster_id.is_not_null()).height
+        print(
+            f"{n_with_cluster_ids:,} poems with cluster ids ({df['cluster_id'].n_unique():,} unique clusters)"
         )
 
     print(f"{df.height:,} poem metadata entries ({'; '.join(totals)})")

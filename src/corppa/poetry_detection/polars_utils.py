@@ -41,6 +41,7 @@ POEM_FIELDS = {
     "num_lines": "poem_num_lines",
     "num_words": "poem_num_words",
     "char_len": "poem_char_len",
+    "cluster_id": "poem_cluster_id",
 }
 
 
