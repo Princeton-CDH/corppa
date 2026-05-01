@@ -357,9 +357,12 @@ def save_poem_metadata(
         df = df.join(
             poem_clusters_df.select("poem_id", "cluster_id"), on="poem_id", how="left"
         )
-        n_with_cluster_ids = df.filter(pl.col.cluster_id.is_not_null()).height
+        # report on cluster ids and number of unique clusters (don't include nulls)
+        df_with_cluster_ids = df.filter(pl.col.cluster_id.is_not_null())
+        n_with_cluster_ids = df_with_cluster_ids.height
+        n_uniq_clusters = df_with_cluster_ids["cluster_id"].n_unique()
         print(
-            f"{n_with_cluster_ids:,} poems with cluster ids ({df['cluster_id'].n_unique():,} unique clusters)"
+            f"{n_with_cluster_ids:,} poems with cluster ids ({n_uniq_clusters:,} unique cluster{'s' if n_uniq_clusters != 1 else ''})"
         )
 
     print(f"{df.height:,} poem metadata entries ({'; '.join(totals)})")

@@ -580,6 +580,52 @@ def test_save_poem_metadata(
         assert "Replacing" in captured.out
 
 
+def test_save_poem_metadata_with_cluster_ids(
+    tmp_path,
+    capsys,
+    corppa_test_config,
+    internetpoems_data_dir,
+    otherpoems_metadata_df,
+    chadwyck_healey_csv,
+):
+    # test compiling in poem cluster ids;
+    # confirm left join works as desired, adding clusters or nulls
+    # for poems that do not have a cluster id
+
+    # made up cluster for testing purposes, with ids from fixtures
+    cluster_id_df = pl.DataFrame(
+        data={
+            "poem_id": ["Robert-Burns_Mary", "Z300475611"],
+            "cluster_id": ["mary", "mary"],
+        }
+    )
+    # add corpus id to other poems data frame and patch it to be returned
+    otherpoems_metadata_df = otherpoems_metadata_df.with_columns(
+        ref_corpus=pl.lit(OtherPoems.corpus_id)
+    )
+    with patch.object(
+        OtherPoems, "get_metadata_df", return_value=otherpoems_metadata_df
+    ):
+        # create a path reference for the file we want to create
+        output_file = tmp_path / "poem_meta.csv"
+        save_poem_metadata(output_file, poem_clusters_df=cluster_id_df)
+        assert output_file.exists()
+        # check output
+        df = pl.read_csv(output_file)
+        # should still have all rowq
+        assert df.height == 6
+        # 2 poems should have cluster id
+        assert "cluster_id" in df.columns
+        assert df.filter(pl.col.cluster_id.is_not_null()).height == 2
+        # others should be null
+        assert df.filter(pl.col.cluster_id.is_null()).height == 4
+
+        captured = capsys.readouterr()
+        # check output reporting on cluster ids
+        assert "2 poems with cluster ids" in captured.out
+        assert "(1 unique cluster)" in captured.out
+
+
 def test_save_poem_metadata_with_excerpts(
     tmp_path,
     capsys,

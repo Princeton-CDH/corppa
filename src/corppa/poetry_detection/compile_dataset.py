@@ -249,11 +249,11 @@ def run_poem_metadata_step(
     else:
         excerpts_df = extract_page_meta(excerpts_df)
 
-    poem_clusters_df = (
-        pl.read_csv(compile_opts["source_poem_clusters"])
-        if compile_opts["source_poem_clusters"]
-        else None
-    )
+    # load poem cluster id information if configured
+    poem_cluster_path = compile_opts.get("source_poem_clusters")
+    poem_clusters_df = None
+    if poem_cluster_path:
+        poem_clusters_df = pl.read_csv(poem_cluster_path)
 
     save_poem_metadata(
         compile_opts["poem_metadata_file"], excerpts_df, poem_clusters_df
