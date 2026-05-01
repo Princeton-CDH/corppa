@@ -19,6 +19,10 @@ reference_corpora:
   # uncomment to override; assumed relative to data_ingredients_dir if not absolute
   # base_dir: ref-corpora/
 
+  # poem cluster ids; path or URL to CSV with clusters of duplicate poems
+  # poem_clusters_path:
+
+
   # Uses default paths relative to reference_corpora.base_dir
   # Uncomment to override if needed; if path is not absolute,
   # will be assumed relative to reference_corpora base_dir
