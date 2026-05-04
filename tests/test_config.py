@@ -1,24 +1,12 @@
-# Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from corppa import config
-
-
-def test_merge_dicts():
-    # no nesting, no conflict
-    assert config.merge_dicts({"a": 1}, {"b": 2}) == {"a": 1, "b": 2}
-    # no nesting; second overrides first
-    assert config.merge_dicts({"a": 1}, {"a": 2}) == {"a": 2}
-    # nesting, no conflict
-    assert config.merge_dicts({"a": {"b": 1}}, {"a": {"c": 2}}) == {
-        "a": {"b": 1, "c": 2}
-    }
-    # nesting, with override
-    assert config.merge_dicts({"a": {"b": 1}}, {"a": {"b": 2}}) == {"a": {"b": 2}}
 
 
 def test_get_config_not_found(tmp_path):
@@ -44,19 +32,40 @@ data_dir=/tmp/p-p-poems/data
             config.get_config()
 
 
+def test_get_config_missing_required(tmp_path):
+    test_config = tmp_path / "test.cfg"
+    test_config.write_text("foo: bar")
+    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
+        with pytest.raises(
+            SystemExit, match="missing required configuration: base_dir"
+        ):
+            config.get_config()
+
+        # if first required field is present, should error on the next one
+        test_config.write_text("base_dir: /tmp/data/")
+        with pytest.raises(
+            SystemExit, match="missing required configuration: compiled_dataset_dir"
+        ):
+            config.get_config()
+
+
 def test_get_config(tmp_path):
     # create a test config file with one section and one value
     test_config = tmp_path / "test.cfg"
     test_config.write_text("""
+base_dir: data/
 # local path to compiled poem dataset files
-compiled_dataset:
-  text_dir: "/tmp/p-p-poems/data"
+compiled_dataset_dir: "/tmp/p-p-poems/data"
 """)
     # use patch to override the config path and load our test file
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         config_opts = config.get_config()
-        assert "compiled_dataset" in config_opts
-        assert config_opts["compiled_dataset"]["text_dir"] == "/tmp/p-p-poems/data"
+        assert isinstance(config_opts, config.ConfigOpts)
+        assert config_opts.base_dir == Path("data")
+        assert config_opts.compiled_dataset_dir == Path("/tmp/p-p-poems/data")
+        # other items are unset
+        assert config_opts.ppa_corpus is None
+        assert config_opts.reference_corpora == []
 
 
 def test_get_config_defaults(tmp_path):
@@ -65,19 +74,89 @@ def test_get_config_defaults(tmp_path):
     # override one portion of a nested config
     override_text_dir = "/ch/text.tar.gz"
     test_config.write_text(f"""
+base_dir: data/
+compiled_dataset_dir: found-poems/
 # local path to compiled poem dataset files
 reference_corpora:
     chadwyck-healey:
-        text_dir: "{override_text_dir}"
+        text_path: "{override_text_dir}"
 """)
     # use patch to override the config path and load our test file
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         config_opts = config.get_config()
-        # override value should be used
-        chadwyck_healey_config = config_opts["reference_corpora"]["chadwyck-healey"]
-        assert chadwyck_healey_config["text_dir"] == override_text_dir
-        # default value in the same section that is not specified should be present
+        assert len(config_opts.reference_corpora) == 1
+        ch_config = config_opts.reference_corpora[0]
+        assert ch_config.text_path == Path(override_text_dir)
+
+
+def test_get_config_maximal(tmp_path):
+    # create a test config file with one section and one value
+    test_config = tmp_path / "test.cfg"
+    test_config.write_text("""
+base_dir: data/
+compiled_dataset_dir: found-poems/
+excerpt_data_dir: excerpt-data/
+poem_clusters_path: http://example.com/poem_groups.csv
+reference_corpora:
+    chadwyck-healey:
+    internet_poems:
+    other_poems:
+""")
+    # use patch to override the config path and load our test file
+    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
+        config_opts = config.get_config()
+        assert config_opts.compiled_dataset_dir == Path("data/found-poems")
+        assert config_opts.poem_clusters_path == "http://example.com/poem_groups.csv"
+        assert len(config_opts.reference_corpora) == 3
+        assert [rc.name for rc in config_opts.reference_corpora] == [
+            "chadwyck-healey",
+            "internet_poems",
+            "other_poems",
+        ]
+
+
+## test dataclass config objects
+
+
+class TestCorpusConfig:
+    def test_init_defaults(self):
+        corpus_name = "internet_poems"
+        # specifying corpus name is enough to set defaults for the rest
+        ref_corpus = config.CorpusConfig(name=corpus_name)
+        assert ref_corpus.name == corpus_name
+        assert ref_corpus.base_dir == Path(corpus_name)
+        # default text file suffix
         assert (
-            chadwyck_healey_config["metadata_path"]
-            == config.DEFAULTS["reference_corpora"]["chadwyck-healey"]["metadata_path"]
+            ref_corpus.text_path == ref_corpus.base_dir / f"{corpus_name}_texts.tar.gz"
         )
+        # default metadata suffix
+        assert ref_corpus.metadata_path == ref_corpus.base_dir / f"{corpus_name}.csv"
+
+    def test_init_override(self):
+        corpus_name = "other"
+        # specifying corpus name is enough to set defaults for the rest
+        ref_corpus = config.CorpusConfig(
+            name=corpus_name,
+            base_dir=Path("data/foo"),
+            text_path=Path("my_texts.tar.gz"),
+            metadata_path=Path("data.csv"),
+        )
+        assert ref_corpus.name == corpus_name
+        assert ref_corpus.base_dir == Path("data/foo")
+        # provided paths are now relative to base dir
+        assert ref_corpus.text_path == ref_corpus.base_dir / "my_texts.tar.gz"
+        assert ref_corpus.metadata_path == ref_corpus.base_dir / "data.csv"
+
+        # test absolute path is not changed
+        abs_path = Path("/path/to/my_texts.tar.gz")
+        ref_corpus = config.CorpusConfig(name=corpus_name, text_path=abs_path)
+        assert ref_corpus.text_path == abs_path
+
+    def test_subclass(self):
+        base_dir = Path("ppa_corpus-2026-01-03")
+        ppa_corpus = config.PPACorpusConfig(base_dir=base_dir)
+        assert ppa_corpus.name == "ppa"
+        assert ppa_corpus.base_dir == base_dir
+        # default file names
+        assert ppa_corpus.text_path == base_dir / "ppa_pages.jsonl.gz"
+        assert ppa_corpus.metadata_path == base_dir / "ppa_metadata.csv"
