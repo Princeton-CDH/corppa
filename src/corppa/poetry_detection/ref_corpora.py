@@ -72,38 +72,8 @@ class LocalTextCorpus(BaseReferenceCorpus):
     def __init__(self, config_opts: CorpusConfig):
         # get text directory for this reference corpus from corpus configuration
         self.config = config_opts
-
-        # TODO: move validation logic to config class
-
-        # self.text_path = pathlib.Path(config_opts["text_path"])
-        # # if text path is not absolute, assume relative to ref_corpus base dir
-        # # TODO: shift relative path logic to config loader
-        # if not self.text_path.is_absolute():
-        #     self.text_path = config_opts["base_dir"] / self.text_path
-
-        # if not self.text_path.exists():
-        #     raise ValueError(
-        #         f"Configuration error: {self.corpus_name} path {self.text_path} does not exist"
-        #     )
-        # # Currently supports directory and tar.gz file;
-        # # might be nice to support zipfile as well
-        # if not self.text_path.is_dir() and not (
-        #     self.text_path.is_file() and self.text_path.name.endswith(".tar.gz")
-        # ):
-        #     raise ValueError(
-        #         f"Configuration error: {self.corpus_name} path {self.text_path} is not a directory or a tar.gz"
-        #     )
-
-        # # set metadata path if present in configuration
-        # if "metadata_path" in config_opts:
-        #     self.metadata_path = pathlib.Path(config_opts["metadata_path"])
-        #     # if metadata path is not absolute, assume relative to ref_corpus base dir
-        #     if not self.metadata_path.is_absolute():
-        #         self.metadata_path = config_opts["base_dir"] / self.metadata_path
-        #     if not (self.metadata_path.exists() and self.metadata_path.is_file()):
-        #         raise ValueError(
-        #             f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
-        #         )
+        # validate config file; for text-only corpus, metadata is optional
+        self.config.validate(metadata=False)
 
     def get_text_corpus(
         self, disable_progress: bool = True
@@ -261,13 +231,8 @@ class OtherPoems(BaseReferenceCorpus):
     def __init__(self, config_opts: CorpusConfig):
         # get configuration for this corpus
         self.config = config_opts
-        # set data path from config file and check that path exists
-        # try:
-        #     self.metadata_path = config_opts["metadata_path"]
-        # except KeyError:
-        #     raise ValueError(
-        #         f"Configuration error: {self.corpus_name} 'metadata_path' is not set"
-        #     )
+        # validate configuration - metadata only
+        self.config.validate(text=False)
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # polars can load csv directly from a url

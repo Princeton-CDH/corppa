@@ -23,6 +23,9 @@ def resolve_path(path: str | Path | None, base_dir: Path) -> Path | None:
         return None
     if isinstance(path, str):
         path = Path(path)
+        # check for URL; don't make relative to base dir
+        if str(path).startswith("http"):
+            return path
     if not path.is_absolute() and not path.is_relative_to(base_dir):
         path = base_dir / path
     return path
@@ -67,6 +70,29 @@ class CorpusConfig:
         if self.metadata_path is None:
             self.metadata_path = f"{self.name}{self._path_suffix['metadata']}"
         self.metadata_path = resolve_path(self.metadata_path, self.base_dir)
+
+    def validate(self, text=True, metadata=True) -> bool:
+        if text:
+            if not self.text_path.exists():
+                raise ValueError(
+                    f"Configuration error: {self.name} path {self.text_path} does not exist"
+                )
+            # Currently supports directory and tar.gz file
+            if not self.text_path.is_dir() and not (
+                self.text_path.is_file() and self.text_path.name.endswith(".tar.gz")
+            ):
+                raise ValueError(
+                    f"Configuration error: {self.name} path {self.text_path} is not a directory or a tar.gz"
+                )
+        if metadata:
+            if not self.metadata_path.is_file() and not str(
+                self.metadata_path
+            ).startswith("http"):
+                raise ValueError(
+                    f"Configuration error: {self.name} metadata {self.metadata_path} does not exist"
+                )
+
+        return True
 
 
 @dataclass

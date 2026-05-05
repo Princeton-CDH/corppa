@@ -24,21 +24,43 @@ def corppa_test_config(tmp_path):
     # test fixture to create and use a temporary config file
     # uses explicit, non-default paths
     compiled_dataset_dir = tmp_path / "found-poems-data"
-    test_config = tmp_path / "test_config.yml"
     ref_base_dir = tmp_path / "ref-corpora"
-    # use absolute paths for chadwyck-healey to avoid resolution against corpus base_dir
-    test_config.write_text(f"""
-base_dir: {tmp_path}
-compiled_dataset_dir: {compiled_dataset_dir}
-reference_corpora:
-    base_dir: {ref_base_dir}
-    internet_poems:
-    chadwyck-healey:
-    other_poems:
-        metadata_path: http://example.com/other-poems.csv
-    """)
-    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
-        yield test_config
+    ref_base_dir.mkdir()
+
+    ref_corpus_names = ["internet_poems", "chadwyck-healey", "other_poems"]
+
+    ref_corpus_configs = {
+        name: config.CorpusConfig(name=name, relative_dir=ref_base_dir)
+        for name in ref_corpus_names
+    }
+
+    config_opts = config.ConfigOpts(
+        base_dir=tmp_path,
+        compiled_dataset_dir=compiled_dataset_dir,
+        # ppa_corpus=None,
+        reference_corpora=ref_corpus_configs,
+        # excerpt_data_dir=config_values.get("excerpt_data_dir"),
+        # poem_clusters_path=config_values.get("poem_clusters_path"),
+    )
+
+    # validation requires the files to exist, so create them
+    config_opts.reference_corpora["internet_poems"].base_dir.mkdir()
+    config_opts.reference_corpora["internet_poems"].text_path.touch()
+    config_opts.reference_corpora["chadwyck-healey"].base_dir.mkdir()
+    config_opts.reference_corpora["chadwyck-healey"].text_path.touch()
+    config_opts.reference_corpora["chadwyck-healey"].metadata_path.touch()
+    config_opts.reference_corpora["other_poems"].base_dir.mkdir()
+    config_opts.reference_corpora["other_poems"].metadata_path.touch()
+
+    with patch.object(config, "get_config") as mock_get_config:
+        # this patches calls in the current test file
+        mock_get_config.return_value = config_opts
+        # this patches calls in ref_corpora
+        with patch(
+            "corppa.poetry_detection.ref_corpora.get_config"
+        ) as ref_corppa_config:
+            ref_corppa_config.return_value = config_opts
+            yield config_opts
 
 
 class TestBaseReferenceCorpus:
@@ -85,10 +107,10 @@ INTERNETPOEMS_TEXTS = [
 def internetpoems_data_dir(tmp_path, corppa_test_config):
     # test fixture to create internet poems data directory with sample text files
     config_opts = config.get_config()
-    # use the configured text data dir from test config
-    data_dir = config_opts.reference_corpora["internet_poems"].text_path
-
-    data_dir.mkdir(parents=True, exist_ok=True)
+    # update the configured text path in fixture config to be a directory
+    data_dir = config_opts.reference_corpora["internet_poems"].base_dir / "text_files"
+    data_dir.mkdir(exist_ok=True)
+    config_opts.reference_corpora["internet_poems"].text_path = data_dir
     for sample in INTERNETPOEMS_TEXTS:
         text_file = data_dir / f"{sample['id']}.txt"
         text_file.write_text(sample["text"])
@@ -98,16 +120,14 @@ def internetpoems_data_dir(tmp_path, corppa_test_config):
 @pytest.fixture
 def internetpoems_tarball(tmp_path, corppa_test_config):
     # test fixture to create tar.gzip of internet poems data directory with sample text files
-    # should be used with default config
     config_opts = config.get_config()
     internetpoems_data_dir = tmp_path / "internet_poems_texts"
-    internetpoems_data_dir.mkdir(parents=True, exist_ok=True)
+    internetpoems_data_dir.mkdir(exist_ok=True)
     for sample in INTERNETPOEMS_TEXTS:
         text_file = internetpoems_data_dir / f"{sample['id']}.txt"
         text_file.write_text(sample["text"])
 
     tarfile_path = config_opts.reference_corpora["internet_poems"].text_path
-    tarfile_path.parent.mkdir(parents=True, exist_ok=True)
 
     with tarfile.open(tarfile_path, "w:gz") as tar:
         for text_file in internetpoems_data_dir.glob("*.txt"):
@@ -198,21 +218,6 @@ class TestInternetPoems:
         assert text_data[0]["poem_id"] == INTERNETPOEMS_TEXTS[0]["id"]
         assert text_data[0]["text"] == INTERNETPOEMS_TEXTS[0]["text"]
 
-    def test_get_text_unsupported(self, tmp_path):
-        # unsupported file type raises NotImplementedError from get_text_corpus
-        zipfile = tmp_path / "internet_poems.zip"
-        zipfile.touch()
-        corpus_config = config.CorpusConfig(
-            name="internet_poems",
-            base_dir=tmp_path,
-            text_path=zipfile,
-        )
-        internet_poems = InternetPoems(corpus_config)
-        with pytest.raises(
-            NotImplementedError, match="only supported for tar.gz and directories"
-        ):
-            list(internet_poems.get_text_corpus())
-
     def test_get_text_corpus(
         self,
         tmp_path,
@@ -235,10 +240,13 @@ def chadwyck_healey_csv(tmp_path, corppa_test_config):
     "fixture to create a test version of the chadwyck-healey metadata csv file"
     config_opts = config.get_config()
     ch_config = config_opts.reference_corpora[ChadwyckHealey.corpus_id]
-    data_dir = ch_config.text_path
+    # unlink fixture file and make text path a directory
+    ch_config.text_path.unlink()
+    data_dir = ch_config.base_dir / "text_files"
+    data_dir.mkdir(exist_ok=True)
+    ch_config.text_path = data_dir
     ch_meta_csv = ch_config.metadata_path
 
-    data_dir.mkdir(parents=True, exist_ok=True)
     ch_meta_csv.write_text("""id,author_lastname,author_firstname,author_birth,author_death,author_period,transl_lastname,transl_firstname,transl_birth,transl_death,title_id,title_main,title_sub,edition_id,edition_text,period,genre,rhymes
 Z300475611,Robinson,Mary,1758,1800,,,,,,Z300475611,THE CAVERN OF WOE.,,Z000475579,The Poetical Works (1806),Later Eighteenth-Century 1750-1799,,y""")
     return ch_meta_csv

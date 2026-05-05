@@ -195,3 +195,40 @@ class TestCorpusConfig:
         # default file names
         assert ppa_corpus.text_path == base_dir / "ppa_pages.jsonl.gz"
         assert ppa_corpus.metadata_path == base_dir / "ppa_metadata.csv"
+
+    def test_vaidate(self, tmp_path):
+        # specifying corpus name is enough to set defaults for the rest
+        ref_corpus = config.CorpusConfig(
+            name="test",
+            base_dir=tmp_path / "foo",
+        )
+        # neither text nor metadata exists
+        with pytest.raises(ValueError):
+            ref_corpus.validate()
+
+        # text file only
+        ref_corpus.base_dir.mkdir()
+        ref_corpus.text_path.touch()
+        # text-only validation should pass
+        assert ref_corpus.validate(metadata=False)
+        # text and metadata should fail
+        with pytest.raises(ValueError):
+            ref_corpus.validate()
+
+        # both text and metadata files present
+        ref_corpus.metadata_path.touch()
+        assert ref_corpus.validate()
+
+        # metadata only
+        ref_corpus.text_path.unlink()
+        # metadata only should pass
+        assert ref_corpus.validate(text=False)
+        # text and metadata should fail
+        with pytest.raises(ValueError):
+            ref_corpus.validate()
+
+        # wrong kind of text file
+        ref_corpus.text_path = ref_corpus.base_dir / "text_files.zip"
+        ref_corpus.text_path.touch()
+        with pytest.raises(ValueError):
+            ref_corpus.validate()
