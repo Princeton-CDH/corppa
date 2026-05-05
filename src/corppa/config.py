@@ -55,22 +55,18 @@ class CorpusConfig:
             self.base_dir = Path(self.name)
         # optionally make base dir relative to another dir
         # (most important for case where default base dir is inferred from name)
-        if self.relative_dir is not None and not self.base_dir.is_relative_to(
-            self.relative_dir
-        ):
-            self.base_dir = self.relative_dir / self.base_dir
+        if self.relative_dir is not None:
+            self.base_dir = resolve_path(self.base_dir, self.relative_dir)
 
+        # if paths are not set, use name and default suffix;
+        # make paths relative to base dir
         if self.text_path is None:
-            self.text_path = self.base_dir / f"{self.name}{self._path_suffix['text']}"
-        else:
-            self.text_path = resolve_path(self.text_path, self.base_dir)
+            self.text_path = f"{self.name}{self._path_suffix['text']}"
+        self.text_path = resolve_path(self.text_path, self.base_dir)
 
         if self.metadata_path is None:
-            self.metadata_path = (
-                self.base_dir / f"{self.name}{self._path_suffix['metadata']}"
-            )
-        else:
-            self.metadata_path = resolve_path(self.metadata_path, self.base_dir)
+            self.metadata_path = f"{self.name}{self._path_suffix['metadata']}"
+        self.metadata_path = resolve_path(self.metadata_path, self.base_dir)
 
 
 @dataclass
@@ -118,6 +114,7 @@ def get_config():
             raise SystemExit(f"Error parsing config file: {err}")
 
     try:
+        # use direct access for required values to trigger a KeyError
         base_dir = Path(config_values["base_dir"])
         ref_corpus_configs = {}
         # allow ref corpora config to be optional
@@ -153,9 +150,6 @@ def get_config():
             ppa_corpus = PPACorpusConfig(
                 base_dir=Path(config_values["ppa_corpus"]["base_dir"])
             )
-
-        # use direct access for required values to trigger a KeyError
-
         return ConfigOpts(
             base_dir=base_dir,
             compiled_dataset_dir=Path(config_values["compiled_dataset_dir"]),

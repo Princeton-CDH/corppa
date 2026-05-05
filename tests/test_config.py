@@ -1,4 +1,4 @@
-tests / test_config.py  # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
+# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
@@ -114,9 +114,13 @@ reference_corpora:
             "other_poems",
         ]
         assert list(config_opts.reference_corpora.keys()) == ref_corpora_names
-        assert [
-            rc.name for rc in config_opts.reference_corpora.values()
-        ] == ref_corpora_names
+        ref_corpus_configs = config_opts.reference_corpora.values()
+        assert [rc.name for rc in ref_corpus_configs] == ref_corpora_names
+        # all ref-corpus base directories should be relative to base dir
+        assert all(
+            rc.base_dir.is_relative_to(config_opts.base_dir)
+            for rc in ref_corpus_configs
+        )
 
 
 ## test module-level helpers
