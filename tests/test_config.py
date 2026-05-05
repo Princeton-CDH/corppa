@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
+tests / test_config.py  # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
 from pathlib import Path
@@ -117,6 +117,33 @@ reference_corpora:
         assert [
             rc.name for rc in config_opts.reference_corpora.values()
         ] == ref_corpora_names
+
+
+## test module-level helpers
+
+
+class TestResolvePath:
+    base = Path("/data/corpora")
+
+    def test_none_returns_none(self):
+        assert config.resolve_path(None, self.base) is None
+
+    def test_string_converted_to_path(self):
+        result = config.resolve_path("subdir/file.txt", self.base)
+        assert isinstance(result, Path)
+        assert result == self.base / "subdir/file.txt"
+
+    def test_absolute_path_unchanged(self):
+        abs_path = Path("/other/location/file.csv")
+        assert config.resolve_path(abs_path, self.base) == abs_path
+
+    def test_relative_path_prefixed_with_base(self):
+        result = config.resolve_path(Path("corpus/texts.tar.gz"), self.base)
+        assert result == self.base / "corpus/texts.tar.gz"
+
+    def test_already_relative_to_base_unchanged(self):
+        already_relative = self.base / "corpus/texts.tar.gz"
+        assert config.resolve_path(already_relative, self.base) == already_relative
 
 
 ## test dataclass config objects

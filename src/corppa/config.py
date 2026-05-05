@@ -16,6 +16,18 @@ try:
 except ImportError:  # pragma: no cover
     from yaml import Loader  # pragma: no cover
 
+
+def resolve_path(path: str | Path | None, base_dir: Path) -> Path | None:
+    """Convert to Path and make relative to base_dir if not absolute."""
+    if path is None:
+        return None
+    if isinstance(path, str):
+        path = Path(path)
+    if not path.is_absolute() and not path.is_relative_to(base_dir):
+        path = base_dir / path
+    return path
+
+
 #: src dir relative to this file (assuming dev environment for now)
 CORPPA_SRC_DIR = Path(__file__).parent.parent.absolute()
 
@@ -39,7 +51,6 @@ class CorpusConfig:
     }
 
     def __post_init__(self):
-        # set paths based on defaults for any paths not passed in
         if self.base_dir is None:
             self.base_dir = Path(self.name)
         # optionally make base dir relative to another dir
@@ -48,31 +59,18 @@ class CorpusConfig:
             self.relative_dir
         ):
             self.base_dir = self.relative_dir / self.base_dir
-        # if not set, use the default path
+
         if self.text_path is None:
             self.text_path = self.base_dir / f"{self.name}{self._path_suffix['text']}"
         else:
-            # allow passing as config to simplify optional config logic
-            if isinstance(self.text_path, str):
-                self.text_path = Path(self.text_path)
-            if not self.text_path.is_absolute() and not self.text_path.is_relative_to(
-                self.base_dir
-            ):
-                # if set, make path is relative to base dir
-                self.text_path = self.base_dir / self.text_path
+            self.text_path = resolve_path(self.text_path, self.base_dir)
 
         if self.metadata_path is None:
             self.metadata_path = (
                 self.base_dir / f"{self.name}{self._path_suffix['metadata']}"
             )
         else:
-            if isinstance(self.metadata_path, str):
-                self.metadata_path = Path(self.metadata_path)
-            if (
-                not self.metadata_path.is_absolute()
-                and not self.metadata_path.is_relative_to(self.base_dir)
-            ):
-                self.metadata_path = self.base_dir / self.metadata_path
+            self.metadata_path = resolve_path(self.metadata_path, self.base_dir)
 
 
 @dataclass
@@ -97,34 +95,10 @@ class ConfigOpts:
     )
 
     def __post_init__(self):
-        # convert string to path to simplify optional config handling
-        if self.excerpt_data_dir is not None:
-            if isinstance(self.excerpt_data_dir, str):
-                self.excerpt_data_dir = Path(self.excerpt_data_dir)
-            if (
-                not self.excerpt_data_dir.is_absolute()
-                and not self.excerpt_data_dir.is_relative_to(self.base_dir)
-            ):
-                self.excerpt_data_dir = self.base_dir / self.excerpt_data_dir
-
-        if self.compiled_dataset_dir is not None:
-            if isinstance(self.compiled_dataset_dir, str):
-                self.compiled_dataset_dir = Path(self.compiled_dataset_dir)
-            if (
-                not self.compiled_dataset_dir.is_absolute()
-                and not self.compiled_dataset_dir.is_relative_to(self.base_dir)
-            ):
-                self.compiled_dataset_dir = self.base_dir / self.compiled_dataset_dir
-
-
-# assume defaults
-# - ppa data standard file names are known
-# - config logic should be in one place
-# - use path objects
-# .  - make relative
-# .  - validate
-# - simple: list / dict defaults (ref corpora)
-#   - easy to add in future (follows pattern)
+        self.excerpt_data_dir = resolve_path(self.excerpt_data_dir, self.base_dir)
+        self.compiled_dataset_dir = resolve_path(
+            self.compiled_dataset_dir, self.base_dir
+        )
 
 
 def get_config():
@@ -148,38 +122,24 @@ def get_config():
         ref_corpus_configs = {}
         # allow ref corpora config to be optional
         if "reference_corpora" in config_values:
-            ref_corpus_base_dir = config_values["reference_corpora"].get("base_dir")
-            if ref_corpus_base_dir is not None:
-                ref_corpus_base_dir = Path(ref_corpus_base_dir)
-                if (
-                    not ref_corpus_base_dir.is_absolute()
-                    and not ref_corpus_base_dir.is_relative_to(base_dir)
-                ):
-                    ref_corpus_base_dir = base_dir / ref_corpus_base_dir
-
+            ref_corpus_base_dir = (
+                resolve_path(
+                    config_values["reference_corpora"].get("base_dir"), base_dir
+                )
+                or base_dir
+            )
+            if "base_dir" in config_values["reference_corpora"]:
                 # remove base_dir from dict before iterating over sections
                 del config_values["reference_corpora"]["base_dir"]
-            else:
-                # if now ref-corpus base dir is specified, use top-level as base dir
-                ref_corpus_base_dir = base_dir
 
             for section, values in config_values["reference_corpora"].items():
                 # when section is empty, values is None; convert to empty dict
                 if values is None:
                     values = {}
 
-                # if base dir is set for this corpus, use it;
-                # make relative to ref corpus base dir when set, unless absolute
-                section_base_dir = values.get("base_dir")
-                if section_base_dir is not None:
-                    section_base_dir = Path(section_base_dir)
-                    if (
-                        ref_corpus_base_dir is not None
-                        and not section_base_dir.is_absolute()
-                    ):
-                        section_base_dir = ref_corpus_base_dir / section_base_dir
-
-                # FIXME: default needs an optional relative to base path here
+                section_base_dir = resolve_path(
+                    values.get("base_dir"), ref_corpus_base_dir
+                )
                 ref_corpus_configs[section] = CorpusConfig(
                     name=section,
                     base_dir=section_base_dir,
