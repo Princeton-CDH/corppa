@@ -65,7 +65,7 @@ compiled_dataset_dir: "/tmp/p-p-poems/data"
         assert config_opts.compiled_dataset_dir == Path("/tmp/p-p-poems/data")
         # other items are unset
         assert config_opts.ppa_corpus is None
-        assert config_opts.reference_corpora == []
+        assert config_opts.reference_corpora == {}
 
 
 def test_get_config_defaults(tmp_path):
@@ -85,7 +85,7 @@ reference_corpora:
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         config_opts = config.get_config()
         assert len(config_opts.reference_corpora) == 1
-        ch_config = config_opts.reference_corpora[0]
+        ch_config = config_opts.reference_corpora["chadwyck-healey"]
         assert ch_config.text_path == Path(override_text_dir)
 
 
@@ -108,11 +108,15 @@ reference_corpora:
         assert config_opts.compiled_dataset_dir == Path("data/found-poems")
         assert config_opts.poem_clusters_path == "http://example.com/poem_groups.csv"
         assert len(config_opts.reference_corpora) == 3
-        assert [rc.name for rc in config_opts.reference_corpora] == [
+        ref_corpora_names = [
             "chadwyck-healey",
             "internet_poems",
             "other_poems",
         ]
+        assert list(config_opts.reference_corpora.keys()) == ref_corpora_names
+        assert [
+            rc.name for rc in config_opts.reference_corpora.values()
+        ] == ref_corpora_names
 
 
 ## test dataclass config objects

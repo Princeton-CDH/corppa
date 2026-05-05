@@ -31,6 +31,7 @@ class CorpusConfig:
     base_dir: Optional[Path] = None
     text_path: Optional[Path] = None
     metadata_path: Optional[Path] = None
+    relative_dir: Optional[Path] = None
 
     _path_suffix: ClassVar[dict[str, str]] = {
         "text": "_texts.tar.gz",
@@ -41,6 +42,12 @@ class CorpusConfig:
         # set paths based on defaults for any paths not passed in
         if self.base_dir is None:
             self.base_dir = Path(self.name)
+        # optionally make base dir relative to another dir
+        # (most important for case where default base dir is inferred from name)
+        if self.relative_dir is not None and not self.base_dir.is_relative_to(
+            self.relative_dir
+        ):
+            self.base_dir = self.relative_dir / self.base_dir
         # if not set, use the default path
         if self.text_path is None:
             self.text_path = self.base_dir / f"{self.name}{self._path_suffix['text']}"
@@ -83,7 +90,7 @@ class ConfigOpts:
     base_dir: Path
     compiled_dataset_dir: Path
     ppa_corpus: Optional[PPACorpusConfig] = None
-    reference_corpora: dict[str, CorpusConfig] = field(default_factory=list)  # type: ignore[arg-type]
+    reference_corpora: dict[str, CorpusConfig] = field(default_factory=dict)  # type: ignore[arg-type]
     excerpt_data_dir: Optional[Path] = None
     poem_clusters_path: Optional[str] = (
         None  # currently expect a url rather than local path
@@ -137,14 +144,24 @@ def get_config():
             raise SystemExit(f"Error parsing config file: {err}")
 
     try:
-        ref_corpus_configs = []
+        base_dir = Path(config_values["base_dir"])
+        ref_corpus_configs = {}
         # allow ref corpora config to be optional
         if "reference_corpora" in config_values:
             ref_corpus_base_dir = config_values["reference_corpora"].get("base_dir")
             if ref_corpus_base_dir is not None:
                 ref_corpus_base_dir = Path(ref_corpus_base_dir)
-                # remove from dict before iterating over sections
+                if (
+                    not ref_corpus_base_dir.is_absolute()
+                    and not ref_corpus_base_dir.is_relative_to(base_dir)
+                ):
+                    ref_corpus_base_dir = base_dir / ref_corpus_base_dir
+
+                # remove base_dir from dict before iterating over sections
                 del config_values["reference_corpora"]["base_dir"]
+            else:
+                # if now ref-corpus base dir is specified, use top-level as base dir
+                ref_corpus_base_dir = base_dir
 
             for section, values in config_values["reference_corpora"].items():
                 # when section is empty, values is None; convert to empty dict
@@ -162,23 +179,25 @@ def get_config():
                     ):
                         section_base_dir = ref_corpus_base_dir / section_base_dir
 
-                ref_corpus_configs.append(
-                    CorpusConfig(
-                        name=section,
-                        base_dir=section_base_dir,
-                        text_path=values.get("text_path"),
-                        metadata_path=values.get("metadata_path"),
-                    )
+                # FIXME: default needs an optional relative to base path here
+                ref_corpus_configs[section] = CorpusConfig(
+                    name=section,
+                    base_dir=section_base_dir,
+                    text_path=values.get("text_path"),
+                    metadata_path=values.get("metadata_path"),
+                    relative_dir=ref_corpus_base_dir,
                 )
         # allow ppa corpus to be optional
         ppa_corpus = None
         if "ppa_corpus" in config_values:
-            ppa_corpus = PPACorpusConfig(config_values["ppa_corpus"]["base_dir"])
+            ppa_corpus = PPACorpusConfig(
+                base_dir=Path(config_values["ppa_corpus"]["base_dir"])
+            )
 
         # use direct access for required values to trigger a KeyError
 
         return ConfigOpts(
-            base_dir=Path(config_values["base_dir"]),
+            base_dir=base_dir,
             compiled_dataset_dir=Path(config_values["compiled_dataset_dir"]),
             ppa_corpus=ppa_corpus,
             reference_corpora=ref_corpus_configs,

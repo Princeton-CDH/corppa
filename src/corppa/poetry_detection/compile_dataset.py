@@ -49,18 +49,18 @@ def load_compilation_config():
     validating that required configurations are present, paths exist, etc.
     """
     config_opts = get_config()
-    required_sections = ["compiled_dataset", "reference_corpora"]
-    for section in required_sections:
-        if section not in config_opts:
-            print(
-                f"Configuration error: '{section}' not found in config file",
-                file=sys.stderr,
-            )
-            sys.exit(-1)
+    # required_sections = ["compiled_dataset", "reference_corpora"]
+    # for section in required_sections:
+    #     if section not in config_opts:
+    #         print(
+    #             f"Configuration error: '{section}' not found in config file",
+    #             file=sys.stderr,
+    #         )
+    #         sys.exit(-1)
 
     # output directory
     try:
-        output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
+        output_data_dir = config_opts.compiled_dataset_dir
     except KeyError as err:
         raise ValueError(
             "Configuration error: config file requires `compiled_dataset.data_dir` path"
@@ -80,44 +80,46 @@ def load_compilation_config():
     poem_metadata_file = output_data_dir / "poem_meta.csv"
     ppa_metadata_file = output_data_dir / "ppa_work_metadata.csv"
 
-    # source directories
-    try:
-        source_base_dir = pathlib.Path(config_opts["data_ingredients_dir"])
-    except KeyError:
-        print(
-            "Configuration error: `data_ingredients_dir` not found in config file",
-            file=sys.stderr,
-        )
-        sys.exit(-1)
+    # # source directories
+    # try:
+    #     source_base_dir = pathlib.Path(config_opts["data_ingredients_dir"])
+    # except KeyError:
+    #     print(
+    #         "Configuration error: `data_ingredients_dir` not found in config file",
+    #         file=sys.stderr,
+    #     )
+    #     sys.exit(-1)
 
-    if not source_base_dir.exists():
-        raise ValueError(
-            f"Configuration error: compiled dataset source dir {source_base_dir} does not exist"
-        )
-    if not source_base_dir.is_dir():
-        raise ValueError(
-            f"Configuration error: compiled dataset source dir {source_base_dir} is not a directory"
-        )
+    # if not source_base_dir.exists():
+    #     raise ValueError(
+    #         f"Configuration error: compiled dataset source dir {source_base_dir} does not exist"
+    #     )
+    # if not source_base_dir.is_dir():
+    #     raise ValueError(
+    #         f"Configuration error: compiled dataset source dir {source_base_dir} is not a directory"
+    #     )
 
     # excerpt data dir - get from config if set
-    excerpt_data_dir = pathlib.Path(
-        config_opts["compiled_dataset"].get(
-            "source_excerpt_data", DEFAULT_CONFIGS["source_excerpt_data"]
-        )
-    )
+    excerpt_data_dir = config_opts.excerpt_data_dir
+    # pathlib.Path(
+    #     config_opts["compiled_dataset"].get(
+    #         "source_excerpt_data", DEFAULT_CONFIGS["source_excerpt_data"]
+    #     )
+    # )
     # if path is not absolute, make relative to source base directory
-    if not excerpt_data_dir.is_absolute():
-        excerpt_data_dir = source_base_dir / excerpt_data_dir
+    # if not excerpt_data_dir.is_absolute():
+    #     excerpt_data_dir = source_base_dir / excerpt_data_dir
 
     # ppa metadata
-    source_ppa_metadata = pathlib.Path(
-        config_opts["compiled_dataset"].get(
-            "source_ppa_metadata", DEFAULT_CONFIGS["source_ppa_metadata"]
-        )
-    )
+    source_ppa_metadata = config_opts.ppa_corpus.metadata_path
+    # source_ppa_metadata = pathlib.Path(
+    #     config_opts["compiled_dataset"].get(
+    #         "source_ppa_metadata", DEFAULT_CONFIGS["source_ppa_metadata"]
+    #     )
+    # )
     # if path is not absolute, make relative to source base directory
-    if not source_ppa_metadata.is_absolute():
-        source_ppa_metadata = source_base_dir / source_ppa_metadata
+    # if not source_ppa_metadata.is_absolute():
+    #     source_ppa_metadata = source_base_dir / source_ppa_metadata
     if not source_ppa_metadata.exists() or not source_ppa_metadata.is_file():
         raise ValueError(
             f"Configuration error: PPA metadata file {source_ppa_metadata} does not exist"
@@ -134,7 +136,7 @@ def load_compilation_config():
         "source_excerpt_data": excerpt_data_dir,
         "source_ppa_metadata": source_ppa_metadata,
         # required? warn?
-        "source_poem_clusters": config_opts["reference_corpora"]["poem_clusters_path"],
+        "source_poem_clusters": config_opts.poem_clusters_path,
     }
 
 
