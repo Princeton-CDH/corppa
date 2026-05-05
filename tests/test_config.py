@@ -196,7 +196,7 @@ class TestCorpusConfig:
         assert ppa_corpus.text_path == base_dir / "ppa_pages.jsonl.gz"
         assert ppa_corpus.metadata_path == base_dir / "ppa_metadata.csv"
 
-    def test_vaidate(self, tmp_path):
+    def test_validate(self, tmp_path):
         # specifying corpus name is enough to set defaults for the rest
         ref_corpus = config.CorpusConfig(
             name="test",
@@ -232,3 +232,11 @@ class TestCorpusConfig:
         ref_corpus.text_path.touch()
         with pytest.raises(ValueError):
             ref_corpus.validate()
+
+    def test_metadata_url(self):
+        metadata_url = "http://example.com/poetry/metadata.csv"
+        online_corpus = config.CorpusConfig(name="online", metadata_path=metadata_url)
+        # url should not be modified
+        assert online_corpus.metadata_path == metadata_url
+        # should not be considered invalid
+        assert online_corpus.validate(text=False)

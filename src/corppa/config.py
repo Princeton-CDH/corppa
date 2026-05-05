@@ -17,15 +17,16 @@ except ImportError:  # pragma: no cover
     from yaml import Loader  # pragma: no cover
 
 
-def resolve_path(path: str | Path | None, base_dir: Path) -> Path | None:
+def resolve_path(path: str | Path | None, base_dir: Path) -> Path | str | None:
     """Convert to Path and make relative to base_dir if not absolute."""
     if path is None:
         return None
     if isinstance(path, str):
-        path = Path(path)
-        # check for URL; don't make relative to base dir
-        if str(path).startswith("http"):
+        # check for URL; don't convert to path but keep as-is
+        if path.startswith("http"):
             return path
+        # otherwise, convert string to path and make relative
+        path = Path(path)
     if not path.is_absolute() and not path.is_relative_to(base_dir):
         path = base_dir / path
     return path
@@ -85,9 +86,10 @@ class CorpusConfig:
                     f"Configuration error: {self.name} path {self.text_path} is not a directory or a tar.gz"
                 )
         if metadata:
-            if not self.metadata_path.is_file() and not str(
-                self.metadata_path
-            ).startswith("http"):
+            if (
+                isinstance(self.metadata_path, Path)
+                and not self.metadata_path.is_file()
+            ):
                 raise ValueError(
                     f"Configuration error: {self.name} metadata {self.metadata_path} does not exist"
                 )
