@@ -1,4 +1,3 @@
-import pathlib
 import tarfile
 from collections.abc import Generator
 from unittest.mock import patch
@@ -26,39 +25,15 @@ def corppa_test_config(tmp_path):
     # uses explicit, non-default paths
     compiled_dataset_dir = tmp_path / "found-poems-data"
     test_config = tmp_path / "test_config.yml"
-    base_dir = tmp_path / "ref-corpora"
+    ref_base_dir = tmp_path / "ref-corpora"
     # use absolute paths for chadwyck-healey to avoid resolution against corpus base_dir
-    ch_text_path = base_dir / "ch"
-    ch_metadata_path = base_dir / "ch" / "chadwyck-healey.csv"
     test_config.write_text(f"""
 base_dir: {tmp_path}
 compiled_dataset_dir: {compiled_dataset_dir}
 reference_corpora:
-    base_dir: {base_dir}
+    base_dir: {ref_base_dir}
     internet_poems:
-        text_path: {base_dir / "internet_poems2"}
     chadwyck-healey:
-        text_path: {ch_text_path}
-        metadata_path: {ch_metadata_path}
-    other_poems:
-        metadata_path: http://example.com/other-poems.csv
-    """)
-    with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
-        yield test_config
-
-
-@pytest.fixture
-def corppa_test_config_defaults(tmp_path):
-    # test fixture with a minimal reference corpus config file
-    test_config = tmp_path / "test_config.yml"
-    compiled_dataset_dir = tmp_path / "found-poems-data"
-    base_dir = tmp_path / "ref-corpora"
-    test_config.write_text(f"""
-base_dir: {tmp_path}
-compiled_dataset_dir: {compiled_dataset_dir}
-reference_corpora:
-    base_dir: {base_dir}
-    internet_poems:
     other_poems:
         metadata_path: http://example.com/other-poems.csv
     """)
@@ -121,7 +96,7 @@ def internetpoems_data_dir(tmp_path, corppa_test_config):
 
 
 @pytest.fixture
-def internetpoems_tarball(tmp_path, corppa_test_config_defaults):
+def internetpoems_tarball(tmp_path, corppa_test_config):
     # test fixture to create tar.gzip of internet poems data directory with sample text files
     # should be used with default config
     config_opts = config.get_config()
@@ -190,7 +165,7 @@ class TestInternetPoems:
     def test_get_metadata_df_tarball(
         self,
         tmp_path,
-        corppa_test_config_defaults,
+        corppa_test_config,
         internetpoems_tarball,
     ):
         config_opts = config.get_config()
@@ -209,7 +184,7 @@ class TestInternetPoems:
     def test_get_text_corpus_tarball(
         self,
         tmp_path,
-        corppa_test_config_defaults,
+        corppa_test_config,
         internetpoems_tarball,
     ):
         config_opts = config.get_config()
