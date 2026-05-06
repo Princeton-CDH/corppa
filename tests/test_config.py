@@ -198,8 +198,9 @@ class TestCorpusConfig:
 
     def test_validate(self, tmp_path):
         # specifying corpus name is enough to set defaults for the rest
+        corpus_id = "text_corpus"
         ref_corpus = config.CorpusConfig(
-            name="test",
+            name=corpus_id,
             base_dir=tmp_path / "foo",
         )
         # neither text nor metadata exists
@@ -231,6 +232,13 @@ class TestCorpusConfig:
         ref_corpus.text_path = ref_corpus.base_dir / "text_files.zip"
         ref_corpus.text_path.touch()
         with pytest.raises(ValueError):
+            ref_corpus.validate()
+
+        # text path set to None (shouldn't happen normally)
+        ref_corpus.text_path = None
+        with pytest.raises(
+            ValueError, match=f"Configuration error: {corpus_id} text_path is not set"
+        ):
             ref_corpus.validate()
 
     def test_metadata_url(self):

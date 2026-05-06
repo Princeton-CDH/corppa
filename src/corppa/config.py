@@ -88,16 +88,20 @@ class CorpusConfig:
 
     def validate(self, text=True, metadata=True) -> bool:
         if text:
-            if not self.text_path.exists():
+            if self.text_path is None:
                 raise ValueError(
-                    f"Configuration error: {self.name} path {self.text_path} does not exist"
+                    f"Configuration error: {self.name} text_path is not set"
+                )
+            elif not self.text_path.exists():
+                raise ValueError(
+                    f"Configuration error: {self.name} text_path {self.text_path} does not exist"
                 )
             # Currently supports directory and tar.gz file
             if not self.text_path.is_dir() and not (
                 self.text_path.is_file() and self.text_path.name.endswith(".tar.gz")
             ):
                 raise ValueError(
-                    f"Configuration error: {self.name} path {self.text_path} is not a directory or a tar.gz"
+                    f"Configuration error: {self.name} text_path {self.text_path} is not a directory or a tar.gz"
                 )
         if metadata:
             if (
@@ -105,7 +109,7 @@ class CorpusConfig:
                 and not self.metadata_path.is_file()
             ):
                 raise ValueError(
-                    f"Configuration error: {self.name} metadata {self.metadata_path} does not exist"
+                    f"Configuration error: {self.name} metadata_path {self.metadata_path} does not exist"
                 )
 
         return True
