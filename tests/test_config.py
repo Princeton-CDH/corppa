@@ -97,7 +97,10 @@ base_dir: data/
 compiled_dataset_dir: found-poems/
 excerpt_data_dir: excerpt-data/
 poem_clusters_path: http://example.com/poem_groups.csv
+ppa_corpus:
+  base_dir: ppa-corpus
 reference_corpora:
+    base_dir: refs
     chadwyck-healey:
     internet_poems:
     other_poems:
@@ -120,6 +123,11 @@ reference_corpora:
         assert all(
             rc.base_dir.is_relative_to(config_opts.base_dir)
             for rc in ref_corpus_configs
+        )
+        # should be relative to top-level ref corus dir
+        ref_corpus_dir = config_opts.base_dir / "refs"
+        assert all(
+            rc.base_dir.is_relative_to(ref_corpus_dir) for rc in ref_corpus_configs
         )
 
 
