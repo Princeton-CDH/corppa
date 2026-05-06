@@ -182,6 +182,43 @@ class TestInternetPoems:
             == 0
         )
 
+    def test_get_metadata_df_csv_and_poem_length(
+        self, tmp_path, corppa_test_config, internetpoems_data_dir, capsys
+    ):
+        # test case where we load metadata from CSV and add poem length info
+
+        config_opts = config.get_config()
+        ipoem_cfg = config_opts.reference_corpora["internet_poems"]
+        # create a very simple metadata file based on fixture dictionary ids
+        ip_meta_csv = ipoem_cfg.metadata_path
+        # split id into poem id, author, title
+        csv_rows = [
+            (poem["id"], poem["id"].split("_")[0], poem["id"].split("_")[1])
+            for poem in INTERNETPOEMS_TEXTS
+        ]
+        # combine header row and one row for each poem, then write out to the meta path
+        csv_text = "poem_id,author,title\n" + "\n".join(
+            ",".join(row) for row in csv_rows
+        )
+        ip_meta_csv.write_text(csv_text)
+
+        internet_poems = InternetPoems(ipoem_cfg)
+        meta_df = internet_poems.get_metadata_df(poem_length=True)
+        assert isinstance(meta_df, pl.DataFrame)
+        # Length fields should be present but null
+        assert "num_lines" in meta_df.columns
+        assert "num_words" in meta_df.columns
+        assert "char_len" in meta_df.columns
+
+        # get the first row as a dict; sort by id so order matches input
+        meta_row = meta_df.sort("poem_id").row(0, named=True)
+        assert meta_row["poem_id"] == INTERNETPOEMS_TEXTS[0]["id"]
+        assert meta_row["ref_corpus"] == internet_poems.corpus_id
+        # check poem length calculations (non-blank lines, word count, char length)
+        assert meta_row["num_lines"] == 1
+        assert meta_row["num_words"] == 9
+        assert meta_row["char_len"] == len(INTERNETPOEMS_TEXTS[0]["text"])
+
     def test_get_metadata_df_tarball(
         self,
         tmp_path,
