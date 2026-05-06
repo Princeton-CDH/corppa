@@ -43,10 +43,24 @@ SAMPLE_CONFIG_PATH = CORPPA_SRC_DIR.parent / "sample_config.yml"
 
 @dataclass
 class CorpusConfig:
+    """
+    Configuration for a single corpus. Includes a name, base directory,
+    text path, metadata path, and optional relative directory.  Only
+    name is required. If not specified, `base_dir` will be set based on
+    the corpus name; relative to `relative_dir` when present.  Similarly,
+    when not specified text and metadata paths will be set relative to
+    the corpus `base_dir` based on the defined suffixes.
+    """
+
+    #: corpus name or id
     name: str
+    #: base directory for corpus data
     base_dir: Optional[Path] = None
+    #: path to texts for this corpus (e.g., tar.gz or directory)
     text_path: Optional[Path] = None
+    #: path to metadata for this corpus
     metadata_path: Optional[Path] = None
+    #: optional relative directory that :attr:`base_dir`should be relative to
     relative_dir: Optional[Path] = None
 
     _path_suffix: ClassVar[dict[str, str]] = {
@@ -99,7 +113,11 @@ class CorpusConfig:
 
 @dataclass
 class PPACorpusConfig(CorpusConfig):
-    # subclass for ppa corpus config; which has known filenames
+    """
+    PPA corpus config. Defines suffixes to for text
+    and metadata to match the known filenames used in PPA full-text dataset.
+    """
+
     name: str = "ppa"
     _path_suffix: ClassVar[dict[str, str]] = {
         "text": "_pages.jsonl.gz",
@@ -109,14 +127,23 @@ class PPACorpusConfig(CorpusConfig):
 
 @dataclass
 class ConfigOpts:
+    """
+    Configuration options for compiling found poems dataset, loading
+    reference corpora, loading excerpts, and optional poem clusters metadata.
+    """
+
+    #: base directory
     base_dir: Path
+    #: directory for compiled found poems dataset
     compiled_dataset_dir: Path
+    #: PPA corpus configuration
     ppa_corpus: Optional[PPACorpusConfig] = None
+    #: reference corpus configurations
     reference_corpora: dict[str, CorpusConfig] = field(default_factory=dict)  # type: ignore[arg-type]
+    #: path to excerpt data to be included in compiled found poems dataset
     excerpt_data_dir: Optional[Path] = None
-    poem_clusters_path: Optional[str] = (
-        None  # currently expect a url rather than local path
-    )
+    #: path to poem clusters CSV; currently expects a URL rather than local path
+    poem_clusters_path: Optional[str] = None
 
     def __post_init__(self):
         self.excerpt_data_dir = resolve_path(self.excerpt_data_dir, self.base_dir)
@@ -126,7 +153,7 @@ class ConfigOpts:
 
 
 def get_config():
-    # if the config file is not in place
+    # complain if the config file is not in place
     if not CORPPA_CONFIG_PATH.exists():
         not_found_msg = (
             "Config file not found.\n"
@@ -183,7 +210,9 @@ def get_config():
             compiled_dataset_dir=Path(config_values["compiled_dataset_dir"]),
             ppa_corpus=ppa_corpus,
             reference_corpora=ref_corpus_configs,
-            excerpt_data_dir=config_values.get("excerpt_data_dir"),
+            excerpt_data_dir=resolve_path(
+                config_values.get("excerpt_data_dir"), base_dir
+            ),
             poem_clusters_path=config_values.get("poem_clusters_path"),
         )
     except KeyError as err:

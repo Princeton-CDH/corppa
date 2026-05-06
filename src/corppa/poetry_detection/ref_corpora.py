@@ -103,8 +103,8 @@ class InternetPoems(LocalTextCorpus):
     the internet, for high priority sources known to occur in excerpts,
     including full text of Shakespeare's plays. Metadata was originally based on
     filename (naming convention of `Firstname-Lastname_Poem-Title.txt`),
-    but has since been augmented with wikidata information for poem authors.
-    The filename without extension is used as the `poem_id`.
+    but has since been converted to a CSV file for correction and augmentation.
+    The text filename without extension is used as the `poem_id`.
     """
 
     #: id for this reference corpus: internet_poems
@@ -139,7 +139,7 @@ class InternetPoems(LocalTextCorpus):
     def get_metadata_from_files(self, poem_length=False) -> pl.DataFrame:
         metadata = []
         # returns a generator of dicts with id and text string
-        # TODO: when called from compile script, might be nice to show progress bar
+        # NOTE: when called from compile script, might be nice to show progress bar
         for poem in self.get_text_corpus():
             # filename format:
             #   Firstname-Lastname_Poem-Title.txt
@@ -191,7 +191,6 @@ class ChadwyckHealey(LocalTextCorpus):
 
         if poem_length:
             poem_lengths = []
-
             # text corpus returns a generator of dicts with id and text string
             # NOTE: when called from compile script, might be nice to show progress bar
             for poem in self.get_text_corpus():
@@ -283,7 +282,14 @@ def save_poem_metadata(
     poem_clusters_df: Optional[pl.DataFrame] = None,
 ):
     """Generate and save compiled poetry metadata as a data file in the
-    poem dataset.
+    poem dataset. Loads and compiles metadata for all reference corpora,
+    including poem length calculations (:meth:`compile_metadata_df`)
+    and saves the result to the specified `output_file`.  When the optional
+    `excerpts_df` is present, calculates work-level excerpt total for poems
+    based on primary poem id (number of excerpts, number of PPA works,
+    number of PPA pages).  When the optional `poem_clusters_df` is provided,
+    adds a `cluster_id` field to poems known to be duplicates, near-duplicates
+    or subsets.
     """
     # check & report if the file already exists
     output_verb = "Creating"
