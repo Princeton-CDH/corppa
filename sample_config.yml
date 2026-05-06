@@ -4,39 +4,50 @@
 # corppa configuration
 # copy this file to corppa_config.yml and edit as needed
 
+# to compile found poems v0.5 dataset, copy the following
+# from tigerdata prosody project under poetry-detection/2026-05-foundpoems-v0.5/
+#.     ref-corpora/
+#      ppa-corpus_2026-01-07/
+#.     excerpt-data/
+# Copy to a local directory, preserving relative paths. Set that local directory
+# as your top-level base_dir below.
+
 # top-level path for excerpt dataset ingredients
- data_ingredients_dir: /tigerdata/cdh/prosody/excerpt-data-ingredients/
+base_dir: data/tigerdata-foundpoems-v0.5/
 
 # local path to compiled poem dataset files
-compiled_dataset:
-  # NOTE: currently requires an absolute path, since jupyter
-  # notebooks will try to load relative to the notebook
-  data_dir: "/path/to/ppa-found-poems/data/"
+compiled_dataset: /path/to/ppa-found-poems/data/
+
+# source excerpt data; relative to base_dir unless absolute
+excerpt_data_dir: excerpt-data
+
+# PPA full-text corpus and metadata; relative to base_dir unless absolute
+ppa_corpus:
+  base_dir: ppa_corpus_20XX-XX-XX/
+
+# poem cluster ids
+# poem_clusters_path: https://
 
 # paths to reference corpora metadata and text
 reference_corpora:
   # default base_dir is data_ingredients_dir / ref-corpora
-  # uncomment to override; assumed relative to data_ingredients_dir if not absolute
+  # uncomment to override; assumed relative to base_dir if not absolute
   # base_dir: ref-corpora/
 
-  # poem cluster ids; path or URL to CSV with clusters of duplicate poems
-  # poem_clusters_path:
+  # Paths for individual corpora are assumed relative to reference_corpora.base_dir
+  # unless absolute; uncomment to override.
+  # text_path can be a tar.gz directory of text files or expanded directory.
 
+  internet_poems:
+    # base_dir: internet_poems
+    # text_path: internet_poems_texts.tar.gz
+    # metadata_path: internet-poems-metadata.csv
 
-  # Uses default paths relative to reference_corpora.base_dir
-  # Uncomment to override if needed; if path is not absolute,
-  # will be assumed relative to reference_corpora base_dir
-
-  # internet_poems:
-    # tarball of directory of text files OR expanded directory;
-    # some functionality will only work with the expanded directory
-    # text_path: "internet_poems/internet_poems_texts.tar.gz"
-  # chadwyck-healey:
-    # tarball of directory of text files OR expanded directory;
-    # some functionality will only work with the expanded directory
+  chadwyck-healey:
+    # base_dir: chadwyck-healey
     # text_path: "chadwyck-healey/chadwyck-healey_texts.tar.gz"
     # metadata_path: "chadwyck-healey/chadwyck-healey.csv"
   other:
-    # Provide a URL or local path to "Other Poems" metadata
+    # URL or local path to "Other Poems" metadata
     # Use a URL if you want to pull directly from google sheets as CSV or
     metadata_path: "https://docs.google.com/spreadsheets/d/..."  # or "/path/to/other.csv"
