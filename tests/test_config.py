@@ -124,11 +124,13 @@ reference_corpora:
             rc.base_dir.is_relative_to(config_opts.base_dir)
             for rc in ref_corpus_configs
         )
-        # should be relative to top-level ref corus dir
+        # should be relative to top-level ref corpus dir
         ref_corpus_dir = config_opts.base_dir / "refs"
         assert all(
             rc.base_dir.is_relative_to(ref_corpus_dir) for rc in ref_corpus_configs
         )
+        # ppa dir relative to top-level base_dir
+        assert config_opts.ppa_corpus.base_dir == config_opts.base_dir / "ppa-corpus"
 
 
 ## test module-level helpers

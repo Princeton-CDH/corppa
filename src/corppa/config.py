@@ -207,7 +207,8 @@ def get_config():
         ppa_corpus = None
         if "ppa_corpus" in config_values:
             ppa_corpus = PPACorpusConfig(
-                base_dir=Path(config_values["ppa_corpus"]["base_dir"])
+                base_dir=Path(config_values["ppa_corpus"]["base_dir"]),
+                relative_dir=base_dir,
             )
         return ConfigOpts(
             base_dir=base_dir,
