@@ -16,7 +16,7 @@
 base_dir: data/tigerdata-foundpoems-v0.5/
 
 # local path to compiled poem dataset files
-compiled_dataset: /path/to/ppa-found-poems/data/
+compiled_dataset_dir: /path/to/ppa-found-poems/data/
 
 # source excerpt data; relative to base_dir unless absolute
 excerpt_data_dir: excerpt-data
