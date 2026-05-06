@@ -472,7 +472,7 @@ def test_save_poem_metadata_with_cluster_ids(
         # create a path reference for the file we want to create
         output_file = tmp_path / "poem_meta.csv"
         save_poem_metadata(output_file, poem_clusters_df=cluster_id_df)
-        assert output_file.exists()
+        assert output_file.is_file()
         # check output
         df = pl.read_csv(output_file)
         # should still have all rows
