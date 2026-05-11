@@ -2,11 +2,21 @@
 
 ## 0.5
 
+Updates to support publication of PPA found poems v0.5
+
 - Logic for managing poetry detection configuration for reference corpora 
   and found poems dataset compilation
+- ReferenceCorpus classes for a consistent way to access reference corpora
+  metadata and text
+- Now supports building text corpus from tar.gz file in addition to directory of text files
+- Compile dataset script that uses config file to combine excerpts and 
+  metadata (poem and PPA) for publishable dataset
+- Update run_passim script to use same defaults for command line and run_passim method
+- Includes new marimo notebooks for exploring found poems excerpt data
 - Now supports and tested against Python 3.12; dropped support for 3.11
 - Now using uv for GitHub Actions and local development
-- Sphinx code documentation split out into modules
+- Sphinx code documentation split out into files matching python modules 
+- Experimental scripts to subset excerpt data and upload to Grist 
 
 ### Misc
 - Use uv for python dependency management in for unit test and Jupyter notebook
