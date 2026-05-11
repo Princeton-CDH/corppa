@@ -49,22 +49,10 @@ def load_compilation_config():
     validating that required configurations are present, paths exist, etc.
     """
     config_opts = get_config()
-    required_sections = ["compiled_dataset", "reference_corpora"]
-    for section in required_sections:
-        if section not in config_opts:
-            print(
-                f"Configuration error: '{section}' not found in config file",
-                file=sys.stderr,
-            )
-            sys.exit(-1)
 
-    # output directory
-    try:
-        output_data_dir = pathlib.Path(config_opts["compiled_dataset"]["data_dir"])
-    except KeyError as err:
-        raise ValueError(
-            "Configuration error: config file requires `compiled_dataset.data_dir` path"
-        ) from err
+    # output directory - required in config object initialization
+    output_data_dir = config_opts.compiled_dataset_dir
+    # NOTE: could shift validation to config object in future
     if not output_data_dir.exists():
         raise ValueError(
             f"Configuration error: compiled dataset path {output_data_dir} does not exist"
@@ -75,49 +63,21 @@ def load_compilation_config():
         )
 
     # filenames where compiled data will be saved
+    # NOTE: perhaps in future this can be moved to a config object
     compiled_excerpt_file = output_data_dir / "excerpts.csv"
     compressed_excerpt_file = output_data_dir / "excerpts.csv.gz"
     poem_metadata_file = output_data_dir / "poem_meta.csv"
     ppa_metadata_file = output_data_dir / "ppa_work_metadata.csv"
 
-    # source directories
-    try:
-        source_base_dir = pathlib.Path(config_opts["data_ingredients_dir"])
-    except KeyError:
-        print(
-            "Configuration error: `data_ingredients_dir` not found in config file",
-            file=sys.stderr,
-        )
-        sys.exit(-1)
+    # optional in config, but already resolved to base dir; validate existence?
+    excerpt_data_dir = config_opts.excerpt_data_dir
 
-    if not source_base_dir.exists():
+    # ppa metadata - optional in config, ensure it is present
+    if config_opts.ppa_corpus is None:
         raise ValueError(
-            f"Configuration error: compiled dataset source dir {source_base_dir} does not exist"
+            "Configuration error: PPA corpus must be configured for dataset compilation"
         )
-    if not source_base_dir.is_dir():
-        raise ValueError(
-            f"Configuration error: compiled dataset source dir {source_base_dir} is not a directory"
-        )
-
-    # excerpt data dir - get from config if set
-    excerpt_data_dir = pathlib.Path(
-        config_opts["compiled_dataset"].get(
-            "source_excerpt_data", DEFAULT_CONFIGS["source_excerpt_data"]
-        )
-    )
-    # if path is not absolute, make relative to source base directory
-    if not excerpt_data_dir.is_absolute():
-        excerpt_data_dir = source_base_dir / excerpt_data_dir
-
-    # ppa metadata
-    source_ppa_metadata = pathlib.Path(
-        config_opts["compiled_dataset"].get(
-            "source_ppa_metadata", DEFAULT_CONFIGS["source_ppa_metadata"]
-        )
-    )
-    # if path is not absolute, make relative to source base directory
-    if not source_ppa_metadata.is_absolute():
-        source_ppa_metadata = source_base_dir / source_ppa_metadata
+    source_ppa_metadata = config_opts.ppa_corpus.metadata_path
     if not source_ppa_metadata.exists() or not source_ppa_metadata.is_file():
         raise ValueError(
             f"Configuration error: PPA metadata file {source_ppa_metadata} does not exist"
@@ -133,6 +93,8 @@ def load_compilation_config():
         # sources
         "source_excerpt_data": excerpt_data_dir,
         "source_ppa_metadata": source_ppa_metadata,
+        # required? warn if not present?
+        "source_poem_clusters": config_opts.poem_clusters_path,
     }
 
 
@@ -246,7 +208,16 @@ def run_poem_metadata_step(
         excerpts_df = load_compiled_excerpts(compile_opts)
     else:
         excerpts_df = extract_page_meta(excerpts_df)
-    save_poem_metadata(compile_opts["poem_metadata_file"], excerpts_df)
+
+    # load poem cluster id information if configured
+    poem_cluster_path = compile_opts.get("source_poem_clusters")
+    poem_clusters_df = None
+    if poem_cluster_path:
+        poem_clusters_df = pl.read_csv(poem_cluster_path)
+
+    save_poem_metadata(
+        compile_opts["poem_metadata_file"], excerpts_df, poem_clusters_df
+    )
 
 
 def run_ppa_metadata_step(

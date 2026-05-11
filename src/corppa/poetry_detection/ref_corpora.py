@@ -5,7 +5,7 @@ from typing import Optional
 
 import polars as pl
 
-from corppa.config import get_config
+from corppa.config import CorpusConfig, get_config
 from corppa.utils.build_text_corpus import build_text_corpus, text_corpus_from_tarfile
 
 logger = logging.getLogger(__name__)
@@ -31,40 +31,7 @@ class BaseReferenceCorpus:
 
     corpus_id: str
     corpus_name: str
-    text_path: pathlib.Path
-    metadata_path: pathlib.Path | str
-
-    def get_config_opts(self) -> dict:
-        """Load reference corpus-specific configuration options from
-        corppa config file. Must include the reference corpora base directory;
-        may include overrides for non-default paths.
-        """
-        config_opts = get_config()
-        if "reference_corpora" not in config_opts:
-            raise ValueError(
-                "Configuration error: required section 'reference_corpora' not found"
-            )
-        try:
-            base_dir = pathlib.Path(config_opts["reference_corpora"]["base_dir"])
-        except KeyError:
-            raise ValueError(
-                "Configuration error: required 'reference_corpora.base_dir' not found"
-            )
-        # always include the reference_corpora base directory as a path
-        # if not absolute, path is relative to data ingredients dir
-        if not base_dir.is_absolute():
-            try:
-                ingredients_dir = pathlib.Path(config_opts["data_ingredients_dir"])
-            except KeyError:
-                raise ValueError(
-                    "Configuration error: 'reference_corpora.base_dir' is relative but 'data_ingredients_dir' is not configured"
-                )
-            base_dir = ingredients_dir / base_dir
-
-        corpus_opts = {"base_dir": base_dir}
-        # include any options for this specific corpus
-        corpus_opts.update(config_opts["reference_corpora"].get(self.corpus_id, {}))
-        return corpus_opts
+    config: CorpusConfig
 
     @staticmethod
     def calculate_poem_length(text: str) -> dict[str, int]:
@@ -97,72 +64,77 @@ class LocalTextCorpus(BaseReferenceCorpus):
     """Base class for reference corpus where text content is
     provided as a set of text files in a directory or tar.gz.
     On initialization, configures data path based on
-    configured based dir and corpus default or any overrides, and validates
+    configured base dir and corpus default or any overrides, and validates
     that the path exists and is a directory.
     Provides :meth:`get_text_corpus` for generating text corpus from
     the file system."""
 
-    def __init__(self):
-        # get configuration for this corpus
-        config_opts = self.get_config_opts()
+    def __init__(self, config_opts: CorpusConfig):
+        # get text directory for this reference corpus from corpus configuration
+        self.config = config_opts
+        # validate config file; for text-only corpus, metadata is optional
+        self.config.validate(metadata=False)
 
-        # get text directory for this reference corpus from app configuration
-        if "text_path" in config_opts:
-            self.text_path = pathlib.Path(config_opts["text_path"])
-        # if text path is not absolute, assume relative to ref_corpus base dir
-        # TODO: shift relative path logic to config loader
-        if not self.text_path.is_absolute():
-            self.text_path = config_opts["base_dir"] / self.text_path
-
-        if not self.text_path.exists():
-            raise ValueError(
-                f"Configuration error: {self.corpus_name} path {self.text_path} does not exist"
-            )
-        # Currently supports directory and tar.gz file;
-        # might be nice to support zipfile as well
-        if not self.text_path.is_dir() and not (
-            self.text_path.is_file() and self.text_path.name.endswith(".tar.gz")
-        ):
-            raise ValueError(
-                f"Configuration error: {self.corpus_name} path {self.text_path} is not a directory or a tar.gz"
-            )
-
-    def get_text_corpus(self, disable_progress: bool = True) -> dict[str, str]:
-        # if text_path is tarball, raise not implemented error
-        if self.text_path.is_dir():
+    def get_text_corpus(
+        self, disable_progress: bool = True
+    ) -> Generator[dict[str, str]]:
+        # validation is now handled by CorpusConfig.validate
+        if self.config.text_path.is_dir():
             corpus_method = build_text_corpus
-        elif self.text_path.name.endswith(".tar.gz"):
+        elif self.config.text_path.name.endswith(".tar.gz"):
             corpus_method = text_corpus_from_tarfile
-        else:
-            raise NotImplementedError(
-                "text corpus generation is only supported for tar.gz and directories"
-            )
+
         # build_text_corpus method returns id, so rename id to poem_id
         yield from (
             {"poem_id": p["id"], "text": p["text"]}
-            for p in corpus_method(self.text_path, disable_progress=disable_progress)
+            for p in corpus_method(
+                self.config.text_path, disable_progress=disable_progress
+            )
         )
 
 
 class InternetPoems(LocalTextCorpus):
     """Curated corpus of poems with plain text content sourced from
     the internet, for high priority sources known to occur in excerpts,
-    including full text of Shakespeare's plays. Metadata is inferred based on
-    filename, with a naming convention of `Firstname-Lastname_Poem-Title.txt`.
-    The filename without extension is used as the `poem_id`.
+    including full text of Shakespeare's plays. Metadata was originally based on
+    filename (naming convention of `Firstname-Lastname_Poem-Title.txt`),
+    but has since been converted to a CSV file for correction and augmentation.
+    The text filename without extension is used as the `poem_id`.
     """
 
     #: id for this reference corpus: internet_poems
     corpus_id: str = "internet_poems"
     corpus_name: str = "Internet Poems"
-    # inherits text_path
+    # inherits config with text_path
 
     # no init/validation needed beyond that provided by LocalTextCorpus
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
+        if (
+            self.config.metadata_path is not None
+            and self.config.metadata_path.is_file()
+        ):
+            # load metadata and add reference corpus id
+            df = pl.read_csv(
+                self.config.metadata_path, schema_overrides=METADATA_SCHEMA
+            ).with_columns(ref_corpus=pl.lit(self.corpus_id))
+            # if poem length is requested, get from the files and add to df
+            if poem_length:
+                length_df = self.get_metadata_from_files(poem_length=poem_length)
+                df = df.join(
+                    length_df.select("poem_id", "num_lines", "num_words", "char_len"),
+                    on="poem_id",
+                )
+        else:
+            # fallback metadata: generate from filenames
+            df = self.get_metadata_from_files(poem_length=poem_length)
+
+        return df
+
+    def get_metadata_from_files(self, poem_length=False) -> pl.DataFrame:
         metadata = []
         # returns a generator of dicts with id and text string
-        # TODO: when called from compile script, might be nice to show progress bar
+        # NOTE: when called from compile script, might be nice to show progress bar
         for poem in self.get_text_corpus():
             # filename format:
             #   Firstname-Lastname_Poem-Title.txt
@@ -191,27 +163,13 @@ class ChadwyckHealey(LocalTextCorpus):
     #: id for this reference corpus: chadwyck-healey
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"
-    # inherits text_path
-
-    def __init__(self):
-        # use LocalTextCorpus init to configure and validate text_path
-        super().__init__()
-        # get configuration to set metadata path
-        config_opts = self.get_config_opts()
-
-        self.metadata_path = pathlib.Path(config_opts["metadata_path"])
-        # if metadata path is not absolute, assume relative to ref_corpus base dir
-        if not self.metadata_path.is_absolute():
-            self.metadata_path = config_opts["base_dir"] / self.metadata_path
-        if not (self.metadata_path.exists() and self.metadata_path.is_file()):
-            raise ValueError(
-                f"Configuration error: {self.corpus_name} metadata {self.metadata_path} does not exist"
-            )
+    # inherits config with text_path & metadata path
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # disable schema inference; the fields we care about are all strings
+        # TODO: check / update for revised metadata
         df = (
-            pl.read_csv(self.metadata_path, infer_schema=False)
+            pl.read_csv(self.config.metadata_path, infer_schema=False)
             # rename fields
             .rename({"title_main": "title", "id": "poem_id"})
             # construct author name from separate fields in the metadata
@@ -228,7 +186,6 @@ class ChadwyckHealey(LocalTextCorpus):
 
         if poem_length:
             poem_lengths = []
-
             # text corpus returns a generator of dicts with id and text string
             # NOTE: when called from compile script, might be nice to show progress bar
             for poem in self.get_text_corpus():
@@ -261,25 +218,20 @@ class OtherPoems(BaseReferenceCorpus):
     #: id for this reference corpus (currently "other")
     corpus_id: str = "other"
     corpus_name: str = "Other Poems"
-    #: URL or local path for metadata (can pull from Google Sheets published csv)
-    metadata_path: str
+    #: config with metadata_path for URL or local path to metadata
+    config: CorpusConfig
 
-    def __init__(self):
+    def __init__(self, config_opts: CorpusConfig):
         # get configuration for this corpus
-        config_opts = self.get_config_opts()
-        # set data path from config file and check that path exists
-        try:
-            self.metadata_path = config_opts["metadata_path"]
-        except KeyError:
-            raise ValueError(
-                f"Configuration error: {self.corpus_name} 'metadata_path' is not set"
-            )
+        self.config = config_opts
+        # validate configuration - metadata only
+        self.config.validate(text=False)
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # polars can load csv directly from a url
-        return pl.read_csv(self.metadata_path, schema=METADATA_SCHEMA).with_columns(
-            ref_corpus=pl.lit(self.corpus_id)
-        )
+        return pl.read_csv(
+            self.config.metadata_path, schema=METADATA_SCHEMA
+        ).with_columns(ref_corpus=pl.lit(self.corpus_id))
 
     # this is a metadata-only corpus; get_text_corpus is intentionally not implemented
 
@@ -287,13 +239,22 @@ class OtherPoems(BaseReferenceCorpus):
 def all_corpora() -> list[BaseReferenceCorpus]:
     """Convenience access to all reference corpora, for generating
     compiled versions of reference data."""
-    return [InternetPoems(), ChadwyckHealey(), OtherPoems()]
+    config = get_config()
+    return [
+        InternetPoems(config.reference_corpora["internet_poems"]),
+        ChadwyckHealey(config.reference_corpora["chadwyck-healey"]),
+        OtherPoems(config.reference_corpora["other_poems"]),
+    ]
 
 
 def fulltext_corpora() -> list[BaseReferenceCorpus]:
     """Convenience access to all full-text reference corpora, for generating
     compiled metadata and text."""
-    return [InternetPoems(), ChadwyckHealey()]
+    config = get_config()
+    return [
+        InternetPoems(config.reference_corpora["internet_poems"]),
+        ChadwyckHealey(config.reference_corpora["chadwyck-healey"]),
+    ]
 
 
 def compile_metadata_df(poem_length=False) -> pl.DataFrame:
@@ -310,10 +271,19 @@ def compile_metadata_df(poem_length=False) -> pl.DataFrame:
 
 
 def save_poem_metadata(
-    output_file: pathlib.Path, excerpts_df: Optional[pl.DataFrame] = None
+    output_file: pathlib.Path,
+    excerpts_df: Optional[pl.DataFrame] = None,
+    poem_clusters_df: Optional[pl.DataFrame] = None,
 ):
     """Generate and save compiled poetry metadata as a data file in the
-    poem dataset.
+    poem dataset. Loads and compiles metadata for all reference corpora,
+    including poem length calculations (:meth:`compile_metadata_df`)
+    and saves the result to the specified `output_file`.  When the optional
+    `excerpts_df` is present, calculates work-level excerpt total for poems
+    based on primary poem id (number of excerpts, number of PPA works,
+    number of PPA pages).  When the optional `poem_clusters_df` is provided,
+    adds a `cluster_id` field to poems known to be duplicates, near-duplicates
+    or subsets.
     """
     # check & report if the file already exists
     output_verb = "Creating"
@@ -348,6 +318,17 @@ def save_poem_metadata(
             pl.col("num_excerpts").fill_null(pl.lit(0)),
             pl.col("num_ppa_works").fill_null(pl.lit(0)),
             pl.col("num_ppa_pages").fill_null(pl.lit(0)),
+        )
+    if poem_clusters_df is not None:
+        df = df.join(
+            poem_clusters_df.select("poem_id", "cluster_id"), on="poem_id", how="left"
+        )
+        # report on cluster ids and number of unique clusters (don't include nulls)
+        df_with_cluster_ids = df.filter(pl.col.cluster_id.is_not_null())
+        n_with_cluster_ids = df_with_cluster_ids.height
+        n_uniq_clusters = df_with_cluster_ids["cluster_id"].n_unique()
+        print(
+            f"{n_with_cluster_ids:,} poems with cluster ids ({n_uniq_clusters:,} unique cluster{'s' if n_uniq_clusters != 1 else ''})"
         )
 
     print(f"{df.height:,} poem metadata entries ({'; '.join(totals)})")

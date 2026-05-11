@@ -217,7 +217,7 @@ def test_run_poem_metadata_step_with_df(mock_load, mock_extract, mock_save, tmp_
     mock_load.assert_not_called()
     mock_extract.assert_called_once_with(input_df)
     mock_save.assert_called_once_with(
-        compile_opts["poem_metadata_file"], mock_extract.return_value
+        compile_opts["poem_metadata_file"], mock_extract.return_value, None
     )
 
 
@@ -234,7 +234,33 @@ def test_run_poem_metadata_step(mock_load, mock_extract, mock_save, tmp_path):
     mock_load.assert_called_once_with(compile_opts)
     mock_extract.assert_not_called()
     mock_save.assert_called_once_with(
-        compile_opts["poem_metadata_file"], mock_load.return_value
+        compile_opts["poem_metadata_file"], mock_load.return_value, None
+    )
+
+
+@patch("corppa.poetry_detection.compile_dataset.pl")
+@patch("corppa.poetry_detection.compile_dataset.save_poem_metadata")
+@patch("corppa.poetry_detection.compile_dataset.extract_page_meta")
+@patch("corppa.poetry_detection.compile_dataset.load_compiled_excerpts")
+def test_run_poem_metadata_step_with_clusters(
+    mock_load, mock_extract, mock_save, mock_pl, tmp_path
+):
+    mock_load.return_value = pl.DataFrame({"id": [1]})
+
+    compile_opts = {
+        "poem_metadata_file": tmp_path / "/out/poem_meta.csv",
+        "source_poem_clusters": "path/to/cluster_ids.csv",
+    }
+
+    run_poem_metadata_step(compile_opts, None)
+
+    mock_load.assert_called_once_with(compile_opts)
+    mock_extract.assert_not_called()
+    mock_pl.read_csv.assert_called_once_with(compile_opts["source_poem_clusters"])
+    mock_save.assert_called_once_with(
+        compile_opts["poem_metadata_file"],
+        mock_load.return_value,
+        mock_pl.read_csv.return_value,
     )
 
 

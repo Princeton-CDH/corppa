@@ -18,6 +18,7 @@ import argparse
 import os
 import re
 import sys
+from collections import namedtuple
 from collections.abc import Iterable
 from pathlib import Path
 from subprocess import CalledProcessError, run
@@ -66,15 +67,24 @@ def build_input_string(ppa_corpus: Path, ref_corpora: Iterable[Path]) -> str:
     return f"{{{','.join(map(str, corpus_files))}}}"
 
 
+PassimOptions = namedtuple(
+    "PassimOptions", ["ngram_size", "min_align", "gap", "max_df"]
+)
+#: default options for running passim on PPA for poetry detection
+PASSIM_DEFAULTS = PassimOptions(ngram_size=15, min_align=25, gap=300, max_df=10_000)
+# NOTE: these differ from the current passim defaults, which are:
+#   ngram size 25, min align 50, gap 600, max df 100
+
+
 def run_passim(
     ppa_corpus: Path,
     ref_corpora: Iterable[Path],
     output_dir: Path,
-    max_df: int = 100,
+    max_df: int = PASSIM_DEFAULTS.max_df,
     min_match: int = 5,
-    ngram_size: int = 25,
-    gap: int = 600,
-    min_align: int = 50,
+    ngram_size: int = PASSIM_DEFAULTS.ngram_size,
+    gap: int = PASSIM_DEFAULTS.gap,
+    min_align: int = PASSIM_DEFAULTS.min_align,
     floating_ngrams: bool = False,
     verbose: bool = False,
 ) -> bool:
@@ -156,7 +166,7 @@ def main():
         "--max-df",
         help="Passim parameter (maxDF): upper limit on document frequency",
         type=int,
-        default=10000,
+        default=PASSIM_DEFAULTS.max_df,  # 10k
     )
     parser.add_argument(
         "--min-match",
@@ -168,7 +178,7 @@ def main():
         "--ngram-size",
         help="Passim parameter (n): n-gram order",
         type=int,
-        default=15,
+        default=PASSIM_DEFAULTS.ngram_size,  # 15
     )
     parser.add_argument(
         "--floating-ngrams",
@@ -179,13 +189,13 @@ def main():
         "--gap",
         help="Passim parameter (gap): minimum size of gap that separates passage",
         type=int,
-        default=300,
+        default=PASSIM_DEFAULTS.gap,  # 300
     )
     parser.add_argument(
         "--min-align",
-        help="Passim paramaeter (min-align): minimum length of alignment",
+        help="Passim parameter (min-align): minimum length of alignment",
         type=int,
-        default=25,
+        default=PASSIM_DEFAULTS.min_align,  # 25
     )
     parser.add_argument("-v", "--verbose", action="store_true")
 

@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # corppa configuration for automated tests / continuous integration
+base_dir: .
 
 # local path to compiled poem dataset files
-poem_dataset:
-  # Use relative path for CI, since the path depends on the build.
-  # For notebooks, relative path starts from the notebook directory.
-  data_dir: "sample_data/"
+# Use relative path for CI, since the path depends on the build.
+# For notebooks, relative path starts from the notebook directory.
+compiled_dataset_dir: sample_data
+
