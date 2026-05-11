@@ -163,7 +163,7 @@ class ChadwyckHealey(LocalTextCorpus):
     #: id for this reference corpus: chadwyck-healey
     corpus_id: str = "chadwyck-healey"
     corpus_name: str = "Chadwyck-Healey"
-    # inherits config with text_path &  metadata path
+    # inherits config with text_path & metadata path
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # disable schema inference; the fields we care about are all strings

@@ -118,7 +118,7 @@ class CorpusConfig:
 @dataclass
 class PPACorpusConfig(CorpusConfig):
     """
-    PPA corpus config. Defines suffixes to for text
+    PPA corpus config. Defines suffixes for text
     and metadata to match the known filenames used in PPA full-text dataset.
     """
 
