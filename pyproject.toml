@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "corppa"
-description = "Utilities for working with Princeton Prosody Archive full-text corpus"
+description = "Software for working with Princeton Prosody Archive full-text corpus, including poetry detection"
+authors = [
+  {name = "Center for Digital Humanities at Princeton", email = "cdh-info@princeton.edu"},
+]
 requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "Apache-2"}
