@@ -2,7 +2,11 @@
 
 ## 0.5
 
-- Now supports and tested against Python 3.12 and 3.12; dropped 3.11
+- Logic for managing poetry detection configuration for reference corpora 
+  and found poems dataset compilation
+- Now supports and tested against Python 3.12; dropped support for 3.11
+- Now using uv for GitHub Actions and local development
+- Sphinx code documentation split out into modules
 
 ### Misc
 - Use uv for python dependency management in for unit test and Jupyter notebook
