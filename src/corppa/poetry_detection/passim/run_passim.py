@@ -72,17 +72,19 @@ PassimOptions = namedtuple(
 )
 #: default options for running passim on PPA for poetry detection
 PASSIM_DEFAULTS = PassimOptions(ngram_size=15, min_align=25, gap=300, max_df=10_000)
+# NOTE: these differ from the current passim defaults, which are:
+#   ngram size 25, min align 50, gap 600, max df 100
 
 
 def run_passim(
     ppa_corpus: Path,
     ref_corpora: Iterable[Path],
     output_dir: Path,
-    max_df: int = PASSIM_DEFAULTS.max_df,  # was 100
+    max_df: int = PASSIM_DEFAULTS.max_df,
     min_match: int = 5,
-    ngram_size: int = PASSIM_DEFAULTS.ngram_size,  # was 25
-    gap: int = PASSIM_DEFAULTS.gap,  # was 600
-    min_align: int = PASSIM_DEFAULTS.min_align,  # was 50
+    ngram_size: int = PASSIM_DEFAULTS.ngram_size,
+    gap: int = PASSIM_DEFAULTS.gap,
+    min_align: int = PASSIM_DEFAULTS.min_align,
     floating_ngrams: bool = False,
     verbose: bool = False,
 ) -> bool:

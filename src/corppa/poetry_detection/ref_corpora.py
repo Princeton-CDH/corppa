@@ -218,9 +218,8 @@ class OtherPoems(BaseReferenceCorpus):
     #: id for this reference corpus (currently "other")
     corpus_id: str = "other"
     corpus_name: str = "Other Poems"
+    #: config with metadata_path for URL or local path to metadata
     config: CorpusConfig
-    #: URL or local path for metadata (can pull from Google Sheets published csv)
-    # metadata_path: str
 
     def __init__(self, config_opts: CorpusConfig):
         # get configuration for this corpus

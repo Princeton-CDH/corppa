@@ -87,6 +87,11 @@ class CorpusConfig:
         self.metadata_path = resolve_path(self.metadata_path, self.base_dir)
 
     def validate(self, text=True, metadata=True) -> bool:
+        """Check that configured paths are valid.  By default, checks both
+        text and metadata paths to confirm they are set and appropriate
+        supported file types (directory or .tar.gz for text path, file for metadata).
+        Raises ValueError for any configuration error.
+        """
         if text:
             if self.text_path is None:
                 raise ValueError(
@@ -104,6 +109,10 @@ class CorpusConfig:
                     f"Configuration error: {self.name} text_path {self.text_path} is not a directory or a tar.gz"
                 )
         if metadata:
+            if not self.metadata_path:  # check for None or empty string
+                raise ValueError(
+                    f"Configuration error: {self.name} metadata_path is not set"
+                )
             if (
                 isinstance(self.metadata_path, Path)
                 and not self.metadata_path.is_file()
@@ -151,9 +160,7 @@ class ConfigOpts:
 
     def __post_init__(self):
         self.excerpt_data_dir = resolve_path(self.excerpt_data_dir, self.base_dir)
-        self.compiled_dataset_dir = resolve_path(
-            self.compiled_dataset_dir, self.base_dir
-        )
+        # compiled dataset dir is NOT assumed relative to base dir
 
 
 def get_config():

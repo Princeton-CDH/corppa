@@ -90,13 +90,14 @@ reference_corpora:
 
 
 def test_get_config_maximal(tmp_path):
-    # create a test config file with one section and one value
+    # create and check a test config file with all possible values
     test_config = tmp_path / "test.cfg"
-    test_config.write_text("""
+    poem_cluster_url = "http://example.com/poem_groups.csv"
+    test_config.write_text(f"""
 base_dir: data/
 compiled_dataset_dir: found-poems/
 excerpt_data_dir: excerpt-data/
-poem_clusters_path: http://example.com/poem_groups.csv
+poem_clusters_path: {poem_cluster_url}
 ppa_corpus:
   base_dir: ppa-corpus
 reference_corpora:
@@ -108,8 +109,11 @@ reference_corpora:
     # use patch to override the config path and load our test file
     with patch.object(config, "CORPPA_CONFIG_PATH", new=test_config):
         config_opts = config.get_config()
-        assert config_opts.compiled_dataset_dir == Path("data/found-poems")
+        # compiled dataset dir should not be resolved relative to base dir
+        assert not config_opts.compiled_dataset_dir.is_relative_to(config_opts.base_dir)
         assert config_opts.poem_clusters_path == "http://example.com/poem_groups.csv"
+        assert config_opts.excerpt_data_dir == Path("data/excerpt-data")
+        assert config_opts.poem_clusters_path == poem_cluster_url
         assert len(config_opts.reference_corpora) == 3
         ref_corpora_names = [
             "chadwyck-healey",
@@ -220,7 +224,7 @@ class TestCorpusConfig:
         # text file only
         ref_corpus.base_dir.mkdir()
         ref_corpus.text_path.touch()
-        # text-only validation should pass
+        # text-only validation should pass without error
         assert ref_corpus.validate(metadata=False)
         # text and metadata should fail
         with pytest.raises(ValueError):
@@ -235,7 +239,7 @@ class TestCorpusConfig:
         # metadata only should pass
         assert ref_corpus.validate(text=False)
         # text and metadata should fail
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="does not exist"):
             ref_corpus.validate()
 
         # wrong kind of text file
@@ -250,6 +254,21 @@ class TestCorpusConfig:
             ValueError, match=f"Configuration error: {corpus_id} text_path is not set"
         ):
             ref_corpus.validate()
+
+        # metadata_path set to None (shouldn't happen normally)
+        ref_corpus.metadata_path = None
+        with pytest.raises(
+            ValueError,
+            match=f"Configuration error: {corpus_id} metadata_path is not set",
+        ):
+            ref_corpus.validate(text=False)
+        # similar for empty string
+        ref_corpus.metadata_path = ""
+        with pytest.raises(
+            ValueError,
+            match=f"Configuration error: {corpus_id} metadata_path is not set",
+        ):
+            ref_corpus.validate(text=False)
 
     def test_metadata_url(self):
         metadata_url = "http://example.com/poetry/metadata.csv"
