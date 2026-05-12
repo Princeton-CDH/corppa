@@ -5,7 +5,6 @@
 General-purpose methods for working with paths, PPA identifiers, and directories
 """
 
-import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -189,25 +188,18 @@ def find_relative_paths(
     # Create lowercase extension set from passed in exts
     ext_set = {ext.lower() for ext in exts}
 
-    # Using pathlib.Path.walk / os.walk over glob because (1) it allows us to
+    # Using pathlib.Path.walk over glob because (1) it allows us to
     # find files with multiple extensions in a single walk of the directory
     # and (2) lets us leverage additional functionality of pathlib.
-    walk_generator: Iterator[tuple[str | Path, list[str], list[str]]]  # for mypy
-    if hasattr(base_dir, "walk"):
-        # As of Python 3.12, Path.walk exists
-        walk_generator = base_dir.walk(follow_symlinks=follow_symlinks)
-    else:
-        # For Python 3.11, fall back to os.walk
-        walk_generator = os.walk(base_dir, followlinks=follow_symlinks)
+    walk_generator: Iterator[tuple[Path, list[str], list[str]]]  # for mypy
+    # As of Python 3.12, Path.walk exists
+    walk_generator = base_dir.walk(follow_symlinks=follow_symlinks)
     for dirpath, dirnames, filenames in walk_generator:
-        if isinstance(dirpath, str):
-            # Convert str produced by os.walk to Path object
-            dirpath = Path(dirpath)
         # Create a generator of relevant files in the current directory
         include_files = (
             dirpath.joinpath(file).relative_to(base_dir)
             for file in filenames
-            if os.path.splitext(file)[1].lower() in ext_set
+            if Path(file).suffix.lower() in ext_set
         )
         # if group by dir is specified, yield dirpath and list of files,
         # but only if at least one relevant file is found

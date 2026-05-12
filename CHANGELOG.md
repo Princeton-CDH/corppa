@@ -1,16 +1,34 @@
 # CHANGELOG
 
-## 0.5
+## [0.5] 2026-05-12
 
-- Now supports and tested against Python 3.12 and 3.12; dropped 3.11
+Updates to support publication of PPA found poems v0.5 dataset
+
+### Poetry Detection 
+- Logic for managing poetry detection configuration for reference corpora 
+  and found poems dataset compilation; a sample config file is provided
+  - Compile dataset script uses config file to combine excerpts and 
+    metadata (poem and PPA) for publishable dataset
+  - `merge_excerpts` method now combines any excerpts with matching
+    spans in PPA text; conflicting poem ids are preserved in `alt_poem_ids`
+  - Poem metadata now supports optional `cluster_id` for known duplicates
+- ReferenceCorpus classes for a consistent way to access reference corpora
+  metadata and text
+- New utility methods for working with PPA metadata when compiling or loading excerpt data
+  in `corppa.poetry_dection.ppa_works`
+- Now supports building text corpus from tar.gz file in addition to directory of text files
+- Update `run_passim` script to use same corppa-specific defaults for command line and `run_passim` method
+- Includes new marimo notebooks for exploring found poems excerpt data
 
 ### Misc
-- Use uv for python dependency management in for unit test and Jupyter notebook
-  check Github Actions workflows
+- Now supports and tested against both Python 3.12 and 3.13; dropped support for 3.11
+- Now using uv for GitHub Actions and local development
 - Added pre-commit hook to validate GitHub Actions workflow files
+- Sphinx code documentation split out into files matching python modules 
+- Experimental scripts to subset excerpt data and upload to Grist 
+- Configured intentionally untested code to be exempted from code coverage (CH TML parsing)
 
-
-## 0.4.0
+## [0.4] 2025-04-30
 - Now supports and tested against both Python 3.11 and 3.12
 - Now licensed under Apache 2
 ### Documentation
@@ -45,7 +63,7 @@
 - Increased use of Python type hinting
 - Configured codecov with separate reporting for tests and whole project, with different targets for coverage
 
-## 0.3.0
+## [0.3] 2024-11-01
 - New dependency: intspan
 ### Poetry Detection
 - New Prodigy recipe for adjudicating text annotations
@@ -55,7 +73,7 @@
 ### Misc
 - Fixed Codecov integration
 
-## 0.2.0
+## [0.2] 2024-10-07
 - Now requires Python 3.12
 ### Corppa Utilities
 - Basic readme documentation for filter script
@@ -74,8 +92,15 @@
 - Ruff precommit hook now configured to autofix import order
 
 
-## 0.1.0
+## [0.1] 2024-06-05
 - Utility to filter the full text corpus by source ID
 - Experimental Scripts
   - OCR evaluation
   - Character-level statistics
+  
+
+[0.1]: https://github.com/Princeton-CDH/corppa/releases/tag/0.1
+[0.2]: https://github.com/Princeton-CDH/corppa/releases/tag/0.2
+[0.3]: https://github.com/Princeton-CDH/corppa/releases/tag/0.3
+[0.4]: https://github.com/Princeton-CDH/corppa/releases/tag/0.4
+[0.5]: https://github.com/Princeton-CDH/corppa/releases/tag/0.5

@@ -9,8 +9,10 @@ from unittest.mock import NonCallableMock, patch
 import pytest
 
 from corppa.poetry_detection.passim.run_passim import (
+    PASSIM_DEFAULTS,
     build_input_string,
     get_java_version,
+    main,
     run_passim,
     set_spark_env_vars,
 )
@@ -198,3 +200,76 @@ def test_run_passim(mock_java, mock_build_input_str, mock_run, tmp_path, capsys)
     )
     captured_stderr = capsys.readouterr().err
     assert captured_stderr == "ERROR: An error occurred while running passim\n"
+
+
+@patch("corppa.poetry_detection.passim.run_passim.set_spark_env_vars")
+@patch("corppa.poetry_detection.passim.run_passim.run_passim")
+def test_main(mock_run_passim, mock_set_spark_env_vars, tmp_path):
+    # required parameters
+    ppa_corpus = tmp_path / "ppa_pages.jsonl"
+    ppa_corpus.touch()
+    ref_corpus = tmp_path / "ref_corpus.jsonl"
+    ref_corpus.touch()
+    output_dir = tmp_path / "passim-output"
+
+    args = [
+        "--ppa-corpus",
+        str(ppa_corpus),
+        "--ref-corpus",
+        str(ref_corpus),
+        "--output-dir",
+        str(output_dir),
+    ]
+    main(args)
+    mock_set_spark_env_vars.assert_called_once()
+    mock_run_passim.assert_called_once_with(
+        ppa_corpus,
+        [ref_corpus],
+        output_dir,
+        # defaults from passim defaults object
+        max_df=PASSIM_DEFAULTS.max_df,
+        min_match=PASSIM_DEFAULTS.min_match,
+        ngram_size=PASSIM_DEFAULTS.ngram_size,
+        gap=PASSIM_DEFAULTS.gap,
+        min_align=PASSIM_DEFAULTS.min_align,
+        floating_ngrams=False,  # off by default
+        verbose=False,  # off by default
+    )
+
+    # test with non-default parameters
+    max_df = 50
+    min_match = 7
+    gap = 21
+    min_align = 19
+    ngram_size = 5
+    args.extend(
+        [
+            "--max-df",
+            str(max_df),
+            "--min-match",
+            str(min_match),
+            "--ngram-size",
+            str(ngram_size),
+            "--floating-ngrams",
+            "--gap",
+            str(gap),
+            "--min-align",
+            str(min_align),
+            "-v",
+        ]
+    )
+    mock_run_passim.reset_mock()
+    main(args)
+    mock_run_passim.assert_called_once_with(
+        ppa_corpus,
+        [ref_corpus],
+        output_dir,
+        # uses values specified
+        max_df=max_df,
+        min_match=min_match,
+        ngram_size=ngram_size,
+        gap=gap,
+        min_align=min_align,
+        floating_ngrams=True,
+        verbose=True,
+    )

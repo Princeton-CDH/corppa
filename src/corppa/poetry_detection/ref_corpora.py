@@ -167,7 +167,6 @@ class ChadwyckHealey(LocalTextCorpus):
 
     def get_metadata_df(self, poem_length=False) -> pl.DataFrame:
         # disable schema inference; the fields we care about are all strings
-        # TODO: check / update for revised metadata
         df = (
             pl.read_csv(self.config.metadata_path, infer_schema=False)
             # rename fields
