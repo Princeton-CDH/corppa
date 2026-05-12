@@ -1,16 +1,15 @@
 # Copyright (c) 2024-2025, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+import tarfile
 from inspect import isgenerator
-from pathlib import Path
 from unittest.mock import call, patch
-
-import pytest
 
 from corppa.utils.build_text_corpus import (
     build_text_corpus,
     get_text_record,
     save_text_corpus,
+    text_corpus_from_tarfile,
 )
 
 
@@ -52,6 +51,25 @@ def test_build_text_corpus(mock_get_text_record, tmp_path):
     assert list(results) == ["b", "c"]
     assert mock_get_text_record.call_count == 2
     mock_get_text_record.assert_has_calls([call(txt_b), call(txt_c)])
+
+
+def test_build_text_corpus_from_tarfile(tmp_path):
+    # create tar.gzip of text files to test
+    tarfile_path = tmp_path / "texts.tar.gz"
+    textfile = tmp_path / "foo.txt"
+    textfile.write_text("some texty text")
+    osx_meta_file = tmp_path / "._meta"
+    osx_meta_file.touch()
+
+    with tarfile.open(tarfile_path, "w:gz") as tar:
+        tar.add(textfile)
+        tar.add(osx_meta_file)
+
+    # should ignore the meta file and result in a corpus with one entry
+    corpus = list(text_corpus_from_tarfile(tarfile_path, disable_progress=True))
+    assert len(corpus) == 1
+    assert corpus[0]["id"] == "foo"
+    assert corpus[0]["text"] == "some texty text"
 
 
 @patch("corppa.utils.build_text_corpus.build_text_corpus")
