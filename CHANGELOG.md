@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 0.5
+## 0.5.0
 
 Updates to support publication of PPA found poems v0.5
 
