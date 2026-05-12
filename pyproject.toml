@@ -45,6 +45,8 @@ poem_id = [
   "unidecode",
   "rapidfuzz",
 ]
+# NOTE: v0.5 and prior run against passim 7f52b95fc7f0314b6084a565c63bbde9e094a79f
+# from Nov 24, 2024 a few bugfixes after the 2.0.1 release from Feb 2024
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
 chadwyck_healey = ["bs4", "lxml"]
 notebooks = ["jupyterlab", "itables", "treon", "polars"]
