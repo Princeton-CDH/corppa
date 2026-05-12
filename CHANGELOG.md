@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6
+
+- 
+
 ## [0.5] 2026-05-12
 
 Updates to support publication of PPA found poems v0.5 dataset
