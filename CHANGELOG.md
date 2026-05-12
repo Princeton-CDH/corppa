@@ -11,7 +11,7 @@ Updates to support publication of PPA found poems v0.5
 - Now supports building text corpus from tar.gz file in addition to directory of text files
 - Compile dataset script that uses config file to combine excerpts and 
   metadata (poem and PPA) for publishable dataset
-- Update run_passim script to use same defaults for command line and run_passim method
+- Update run_passim script to use same corppa-specific defaults for command line and run_passim method
 - Includes new marimo notebooks for exploring found poems excerpt data
 - Now supports and tested against both Python 3.12 and 3.13; dropped support for 3.11
 - Now using uv for GitHub Actions and local development
