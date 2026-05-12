@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Annotation &#8212; corppa 0.5.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=1dd76d02"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Poetry Detection" href="poetry-detection.html" />
+    <link rel="prev" title="Utils" href="utils.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="annotation">
+<h1>Annotation<a class="headerlink" href="#annotation" title="Link to this heading">¶</a></h1>
+<section id="data-preparation">
+<h2>Data Preparation<a class="headerlink" href="#data-preparation" title="Link to this heading">¶</a></h2>
+<section id="module-corppa.poetry_detection.annotation.create_pageset">
+<span id="preliminary-page-set-creation"></span><h3>Preliminary Page Set Creation<a class="headerlink" href="#module-corppa.poetry_detection.annotation.create_pageset" title="Link to this heading">¶</a></h3>
+<p>This hard-coded script was used to create a PPA page set for our preliminary
+annotation efforts. Note: this script may not work.</p>
+<p>This script takes three inputs:</p>
+<ol class="arabic simple">
+<li><p>A directory for a PPA text corpus</p></li>
+<li><p>Our poetry testset file (CSV) that included manual identifications of pages
+containing poetry for several works in the PPA</p></li>
+<li><p>An output JSONL</p></li>
+</ol>
+<p>The script then returned a CSV containing page-level metadata for every page of
+the PPA works covered in our poetry testet. This page-level metadata included
+an image path, if the page is known to contain poetry, and some work-level
+information.</p>
+<p>Example usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">create_pageset</span><span class="o">.</span><span class="n">py</span> <span class="n">ppa_corpus_dir</span> <span class="n">poetry_testset</span><span class="o">.</span><span class="n">csv</span> <span class="n">out</span><span class="o">.</span><span class="n">jsonl</span>
+</pre></div>
+</div>
+</section>
+<section id="module-corppa.poetry_detection.annotation.add_metadata">
+<span id="add-metadata"></span><h3>Add Metadata<a class="headerlink" href="#module-corppa.poetry_detection.annotation.add_metadata" title="Link to this heading">¶</a></h3>
+<p>This script is used to prepare the page-level PPA corpus data for use in
+Prodigy annotation. It adds work-level metadata (title, author, year) in the
+locations that Prodigy requires for display, and allows adjusting image paths
+for display from the Prodigy interface. It assumes the input page corpus has
+corpus has already been annotated with image paths with an <code class="docutils literal notranslate"><span class="pre">image_path</span></code>
+attribute using <a class="reference internal" href="utils.html#module-corppa.utils.add_image_relpaths" title="corppa.utils.add_image_relpaths"><code class="xref py py-mod docutils literal notranslate"><span class="pre">corppa.utils.add_image_relpaths</span></code></a>.</p>
+<p>Example usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">add_metadata</span><span class="o">.</span><span class="n">py</span> <span class="n">ppa_with_images</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">ppa_metadata</span><span class="o">.</span><span class="n">csv</span> <span class="n">out</span><span class="o">.</span><span class="n">jsonl</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="module-corppa.poetry_detection.annotation.annotation_recipes">
+<span id="annotation-recipes"></span><h2>Annotation Recipes<a class="headerlink" href="#module-corppa.poetry_detection.annotation.annotation_recipes" title="Link to this heading">¶</a></h2>
+<p>This module provides custom recipes for Prodigy annotation. These were
+created with page-level annotation in mind and assume a page is associated
+with both text and an image. Each recipe displays a page’s image and text
+side-by-side.</p>
+<dl class="simple">
+<dt>Recipes:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">annotate_page_text</span></code>: Annotate a page’s text.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">annotate_text_and_image</span></code>: Annotate both a page’s text and image side-by-side.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">review_page_spans</span></code>: Review existing page-level text annotations to produce
+a final, adjudicated set of annotations.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Referenced images must be served out independently for display; the image url
+prefix for images should be specified when initializing the recipe.</p>
+<p>Example use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">prodigy</span> <span class="n">annotate_page_text</span> <span class="n">poetry_spans</span> <span class="n">poetry_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">--</span><span class="n">label</span> <span class="n">POETRY</span><span class="p">,</span><span class="n">PROSODY</span> <span class="o">-</span><span class="n">F</span> <span class="n">annotation_recipes</span><span class="o">.</span><span class="n">py</span> <span class="o">--</span><span class="n">image</span><span class="o">-</span><span class="n">prefix</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="mi">8000</span><span class="o">/</span>
+
+<span class="n">prodigy</span> <span class="n">annotate_text_and_image</span> <span class="n">poetry_text_image</span> <span class="n">poetry_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="o">-</span><span class="n">l</span> <span class="n">POETRY</span> <span class="o">-</span><span class="n">F</span> <span class="n">annotation_recipes</span><span class="o">.</span><span class="n">py</span> <span class="o">--</span><span class="n">image</span><span class="o">-</span><span class="n">prefix</span> <span class="o">../</span><span class="n">ppa</span><span class="o">-</span><span class="n">web</span><span class="o">-</span><span class="n">images</span> <span class="o">-</span><span class="n">FM</span>
+
+<span class="n">prodigy</span> <span class="n">review_page_spans</span> <span class="n">adjudicate</span> <span class="n">poetry_spans</span> <span class="o">-</span><span class="n">l</span> <span class="n">POETRY</span> <span class="o">-</span><span class="n">F</span> <span class="n">annotation_recipes</span><span class="o">.</span><span class="n">py</span> <span class="o">--</span><span class="n">image</span><span class="o">-</span><span class="n">prefix</span> <span class="o">../</span><span class="n">ppa</span><span class="o">-</span><span class="n">web</span><span class="o">-</span><span class="n">images</span> <span class="o">-</span><span class="n">FM</span> <span class="o">--</span><span class="n">sessions</span> <span class="n">alice</span><span class="p">,</span><span class="n">bob</span>
+</pre></div>
+</div>
+</section>
+<section id="module-corppa.poetry_detection.annotation.command_recipes">
+<span id="command-recipes"></span><h2>Command Recipes<a class="headerlink" href="#module-corppa.poetry_detection.annotation.command_recipes" title="Link to this heading">¶</a></h2>
+<p>This module contains custom command recipes for Prodigy.</p>
+<p>Recipes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ppa-task-progress</span></code>: Report the current progress for a PPA annotation task
+at the page and annotator level.</p></li>
+</ul>
+<p>Example use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">prodigy</span> <span class="n">ppa</span><span class="o">-</span><span class="n">stats</span> <span class="n">task_id</span> <span class="o">-</span><span class="n">F</span> <span class="n">command_recipes</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+</section>
+<section id="module-corppa.poetry_detection.annotation.process_adjudication_data">
+<span id="process-adjudication-data"></span><h2>Process Adjudication Data<a class="headerlink" href="#module-corppa.poetry_detection.annotation.process_adjudication_data" title="Link to this heading">¶</a></h2>
+<p>This script processes the adjudication data produced by Prodigy for our
+poetry detection task into two outputs:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>A JSONL file that compiles the annotation data into page-level records.
+So, each record contains some page-level metdata and the compiled list
+of poetry excerpts (if any) determined in the adjudication process.</p></li>
+<li><p>A CSV file containing excerpt-level data per line.</p></li>
+</ol>
+</div></blockquote>
+<p>Note that the first file explicitly include information on the pages where
+no poetry was identified, while the second will only implicitly through
+absence and requires external knowledge of what pages were covered in
+the annotation rounds. So, the former is particularly useful for the evaluation
+process while the latter is better suited for building a final excerpt dataset.</p>
+<p>Example command line usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">process_adjudication_data</span><span class="o">.</span><span class="n">py</span> <span class="n">prodigy_data</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">adj_pages</span><span class="o">.</span><span class="n">jsonl</span> <span class="n">adj_excerpts</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">corppa</a></h1>
+
+
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=Princeton-CDH&repo=corppa&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../readme.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../dev-notes.html">Developer Notes</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Code Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="ocr.html">OCR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utils</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Annotation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="poetry-detection.html">Poetry Detection</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../eop-docs.html">Ends of Prosody: corppa utilities</a></li>
+</ul>
+
+
+  <div>
+    <h3><a href="../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Annotation</a><ul>
+<li><a class="reference internal" href="#data-preparation">Data Preparation</a><ul>
+<li><a class="reference internal" href="#module-corppa.poetry_detection.annotation.create_pageset">Preliminary Page Set Creation</a></li>
+<li><a class="reference internal" href="#module-corppa.poetry_detection.annotation.add_metadata">Add Metadata</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-corppa.poetry_detection.annotation.annotation_recipes">Annotation Recipes</a></li>
+<li><a class="reference internal" href="#module-corppa.poetry_detection.annotation.command_recipes">Command Recipes</a></li>
+<li><a class="reference internal" href="#module-corppa.poetry_detection.annotation.process_adjudication_data">Process Adjudication Data</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><div class="powered_by">
+<p>Powered by:</p>
+<a href="http://cdh.princeton.edu/">
+<img src="_static/cdhlogo_square.jpg"
+    alt="Center for Digital Humanities @ Princeton" />
+</a>
+</div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2024—2026 Center for Digital Humanities, Princeton University.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/code-docs/annotation.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
