@@ -68,12 +68,15 @@ def build_input_string(ppa_corpus: Path, ref_corpora: Iterable[Path]) -> str:
 
 
 PassimOptions = namedtuple(
-    "PassimOptions", ["ngram_size", "min_align", "gap", "max_df"]
+    "PassimOptions", ["ngram_size", "min_match", "min_align", "gap", "max_df"]
 )
 #: default options for running passim on PPA for poetry detection
-PASSIM_DEFAULTS = PassimOptions(ngram_size=15, min_align=25, gap=300, max_df=10_000)
+PASSIM_DEFAULTS = PassimOptions(
+    ngram_size=15, min_match=5, min_align=25, gap=300, max_df=10_000
+)
 # NOTE: these differ from the current passim defaults, which are:
 #   ngram size 25, min align 50, gap 600, max df 100
+#   min_match 5 is passim default; included to be explicit
 
 
 def run_passim(
@@ -81,7 +84,7 @@ def run_passim(
     ref_corpora: Iterable[Path],
     output_dir: Path,
     max_df: int = PASSIM_DEFAULTS.max_df,
-    min_match: int = 5,
+    min_match: int = PASSIM_DEFAULTS.min_match,
     ngram_size: int = PASSIM_DEFAULTS.ngram_size,
     gap: int = PASSIM_DEFAULTS.gap,
     min_align: int = PASSIM_DEFAULTS.min_align,
@@ -139,7 +142,11 @@ def run_passim(
     return True
 
 
-def main():
+def main(cli_args=None):
+    """
+    Takes an optional list of arguments to parse (list of strings); if not
+    specified, uses `argparse` default of `sys.argv.`
+    """
     parser = argparse.ArgumentParser("Run passim to identify poetry excerpts")
     # Required arguments
     parser.add_argument(
@@ -157,7 +164,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir",
-        help="Pathnname to the top-level output directory where results will be written",
+        help="Path to the top-level output directory where results will be written",
         type=Path,
         required=True,
     )
@@ -172,7 +179,7 @@ def main():
         "--min-match",
         help="Passim parameter (min-match): minimum number of n-gram matches between documents",
         type=int,
-        default=5,
+        default=PASSIM_DEFAULTS.min_match,  # 5,
     )
     parser.add_argument(
         "--ngram-size",
@@ -199,7 +206,7 @@ def main():
     )
     parser.add_argument("-v", "--verbose", action="store_true")
 
-    args = parser.parse_args()
+    args = parser.parse_args(args=cli_args)
 
     # Validate paths
     if not args.ppa_corpus.is_file():

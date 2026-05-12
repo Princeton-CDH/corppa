@@ -4,7 +4,7 @@
 
 Updates to support publication of PPA found poems v0.5 dataset
 
-### Poetry detection 
+### Poetry Detection 
 - Logic for managing poetry detection configuration for reference corpora 
   and found poems dataset compilation; a sample config file is provided
   - Compile dataset script uses config file to combine excerpts and 
@@ -26,6 +26,7 @@ Updates to support publication of PPA found poems v0.5 dataset
 - Added pre-commit hook to validate GitHub Actions workflow files
 - Sphinx code documentation split out into files matching python modules 
 - Experimental scripts to subset excerpt data and upload to Grist 
+- Configured intentionally untested code to be exempted from code coverage (CH TML parsing)
 
 ## [0.4] 2025-04-30
 - Now supports and tested against both Python 3.11 and 3.12
