@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## [0.5] - 2026-05-12
+## [0.5] 2026-05-12
 
 Updates to support publication of PPA found poems v0.5 dataset
 
@@ -27,7 +27,7 @@ Updates to support publication of PPA found poems v0.5 dataset
 - Sphinx code documentation split out into files matching python modules 
 - Experimental scripts to subset excerpt data and upload to Grist 
 
-## [0.4] - 2025-04-30
+## [0.4] 2025-04-30
 - Now supports and tested against both Python 3.11 and 3.12
 - Now licensed under Apache 2
 ### Documentation
@@ -62,7 +62,7 @@ Updates to support publication of PPA found poems v0.5 dataset
 - Increased use of Python type hinting
 - Configured codecov with separate reporting for tests and whole project, with different targets for coverage
 
-## [0.3] - 2024-11-01
+## [0.3] 2024-11-01
 - New dependency: intspan
 ### Poetry Detection
 - New Prodigy recipe for adjudicating text annotations
@@ -72,7 +72,7 @@ Updates to support publication of PPA found poems v0.5 dataset
 ### Misc
 - Fixed Codecov integration
 
-## [0.2] - 2024-10-07
+## [0.2] 2024-10-07
 - Now requires Python 3.12
 ### Corppa Utilities
 - Basic readme documentation for filter script
@@ -91,7 +91,7 @@ Updates to support publication of PPA found poems v0.5 dataset
 - Ruff precommit hook now configured to autofix import order
 
 
-## [0.1] - 2024-06-05
+## [0.1] 2024-06-05
 - Utility to filter the full text corpus by source ID
 - Experimental Scripts
   - OCR evaluation
