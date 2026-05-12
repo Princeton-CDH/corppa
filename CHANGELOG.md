@@ -13,7 +13,7 @@ Updates to support publication of PPA found poems v0.5
   metadata (poem and PPA) for publishable dataset
 - Update run_passim script to use same defaults for command line and run_passim method
 - Includes new marimo notebooks for exploring found poems excerpt data
-- Now supports and tested against Python 3.12; dropped support for 3.11
+- Now supports and tested against both Python 3.12 and 3.13; dropped support for 3.11
 - Now using uv for GitHub Actions and local development
 - Sphinx code documentation split out into files matching python modules 
 - Experimental scripts to subset excerpt data and upload to Grist 
