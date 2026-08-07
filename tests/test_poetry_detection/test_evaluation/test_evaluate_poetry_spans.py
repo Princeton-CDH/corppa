@@ -280,7 +280,7 @@ class TestPageEvaluation:
         ## With reference spans
         page_ref_spans = NonCallableMock(page_id="id", spans=["s"])
         page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
-        assert page_eval.precision() == 0
+        assert page_eval.precision() == 1
         mock_retrieved_count.assert_not_called()
         mock_relevance.assert_not_called()
         ## No reference spans
@@ -322,7 +322,7 @@ class TestPageEvaluation:
         ## With system spans
         page_sys_spans = NonCallableMock(page_id="id", labeled_spans=["s"])
         page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
-        assert page_eval.recall() == 0
+        assert page_eval.recall() == 1
         mock_relevance.assert_not_called()
         ## No system spans
         page_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
@@ -347,6 +347,37 @@ class TestPageEvaluation:
         )
         assert page_eval.recall(partial_match_weight="weight") == 2.1 / 3
         mock_relevance.assert_called_once_with("span_pairs", "ignore_label", "weight")
+
+    @patch.object(PageEvaluation, "recall")
+    @patch.object(PageEvaluation, "precision")
+    def test_f1_score(self, mock_precision, mock_recall):
+        page_no_ref_spans = NonCallableMock(page_id="id", spans=[])
+        page_no_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
+        page_ref_spans = NonCallableMock(page_id="id", spans=["a"])
+        page_sys_spans = NonCallableMock(page_id="id", labeled_spans=["s"])
+
+        # Edge case: precision and recall are 0
+        ## No system or ref spans
+        mock_precision.return_value = 0
+        mock_recall.return_value = 0
+        page_eval = PageEvaluation(page_no_ref_spans, page_no_sys_spans)
+        assert page_eval.f1_score() == 1
+        mock_precision.assert_called_once_with(partial_match_weight=1)
+        mock_recall.assert_called_once_with(partial_match_weight=1)
+        ## With system spans
+        mock_precision.reset_mock()
+        mock_recall.reset_mock()
+        page_eval = PageEvaluation(page_no_ref_spans, page_sys_spans)
+        assert page_eval.f1_score() == 0
+        mock_precision.assert_called_once_with(partial_match_weight=1)
+        mock_recall.assert_called_once_with(partial_match_weight=1)
+        ## With ref spans
+        mock_precision.reset_mock()
+        mock_recall.reset_mock()
+        page_eval = PageEvaluation(page_ref_spans, page_no_sys_spans)
+        assert page_eval.f1_score() == 0
+        mock_precision.assert_called_once_with(partial_match_weight=1)
+        mock_recall.assert_called_once_with(partial_match_weight=1)
 
     def test_get_match_counts(self):
         expected_results = {
@@ -418,6 +449,7 @@ class TestPageEvaluation:
         expected_results["n_poem_spurious"] = 1
         assert results == expected_results
 
+    @patch.object(PageEvaluation, "f1_score", return_value="f1_score")
     @patch.object(PageEvaluation, "recall", return_value="recall_score")
     @patch.object(PageEvaluation, "precision", return_value="precision_score")
     @patch.object(PageEvaluation, "_get_spurious_counts")
@@ -432,6 +464,7 @@ class TestPageEvaluation:
         mock_spurious,
         mock_precision,
         mock_recall,
+        mock_f1,
     ):
         # Set mock count values
         mock_matches.return_value = {
@@ -454,6 +487,7 @@ class TestPageEvaluation:
             "page_id": "id",
             "precision": "precision_score",
             "recall": "recall_score",
+            "f1": "f1_score",
             "n_span_matches": "a",
             "n_span_misses": "b",
             "n_span_spurious": "A",
@@ -526,6 +560,7 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
         "page_id": "a",
         "precision": 1,
         "recall": 1,
+        "f1": 1,
         "n_span_matches": 0,
         "n_span_misses": 0,
         "n_span_spurious": 0,
@@ -538,6 +573,7 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
         "page_id": "b",
         "precision": 2 / 3,
         "recall": 1 / 3,
+        "f1": 2 / 9,
         "n_span_matches": 2,
         "n_span_misses": 1,
         "n_span_spurious": 3,
@@ -566,6 +602,7 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
         "page_id",
         "precision",
         "recall",
+        "f1",
         "n_span_matches",
         "n_span_misses",
         "n_span_spurious",
@@ -576,8 +613,8 @@ def test_write_page_evals(mock_get_page_evals, tmp_path):
     # Validate output file contents
     expected_lines = [
         ",".join(fieldnames) + "\n",
-        "a,1,1,0,0,0,0,0,0\n",
-        f"b,{2/3},{1/3},2,1,3,1,0,1\n",
+        "a,1,1,1,0,0,0,0,0,0\n",
+        f"b,{2/3},{1/3},{2/9},2,1,3,1,0,1\n",
     ]
     expected_text = "".join(expected_lines)
     assert out_csv.read_text() == expected_text
