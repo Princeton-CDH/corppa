@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Evaluate the poetry spans detectede and identified by some *system*
+Evaluate the poetry spans detected and identified by some *system*
 against a provided *reference* set of span annotations.
 
 Examples:
@@ -250,12 +250,12 @@ class PageEvaluation:
 
     def precision(self, partial_match_weight: float = 1) -> float:
         """
-        Calculate page-level precision. Edge case: If there are no system spans,
-        return 1 if there are also no reference spans and 0 otherwise.
+        Calculate page-level precision.
+        Edge case: If there are no system spans, returns 1.
         """
         if not self.sys_spans:
             # Edge case to avoid divide by zero error
-            return 1 if not self.ref_spans else 0
+            return 1
 
         n_retrieved = self._retrieved_count(self.sys_to_refs)
         relevance_score = self._relevance_score(
@@ -265,18 +265,32 @@ class PageEvaluation:
 
     def recall(self, partial_match_weight: float = 1) -> float:
         """
-        Calculate page-level recall. Edge case: If there are no reference spans,
-        return 1 if there are also no system spans and 0 otherwise.
+        Calculate page-level recall.
+        Edge case: If there are no reference spans, returns 1.
         """
         if not self.ref_spans:
             # Edge case to avoid divide by zero error
-            return 1 if not self.sys_spans else 0
+            return 1
 
         n_relevant = len(self.ref_spans)
         relevance_score = self._relevance_score(
             self.span_pairs, self.ignore_label, partial_match_weight
         )
         return relevance_score / n_relevant
+
+    def f1_score(self, partial_match_weight: float = 1) -> float:
+        """
+        Calculate page-level F1 score.
+        Edge case: If precision and recall are 0, return 1 if there are
+        no system or reference spans (TP+FP+FN=0) and 0 otherwise.
+        """
+        p = self.precision(partial_match_weight=partial_match_weight)
+        r = self.recall(partial_match_weight=partial_match_weight)
+        if p == 0 and r == 0:
+            # Edge case to avoid divide by zero
+            return 1 if not self.sys_spans and not self.ref_spans else 0
+        else:
+            return 2 * (p * r) / (p + r)
 
     @staticmethod
     def _get_match_counts(
@@ -343,8 +357,9 @@ class PageEvaluation:
         Perform page-level evaluation and return results as a struct with the
         following fields:
             * page_id: page id
-            * precision: precision score
-            * recall: recalls score
+            * precision: page-level precision score
+            * recall: page-level recall score
+            * f1: page-level F1 score
             * n_span_matches: number of (partial) span matches
             * n_span_misses: number of span misses
             * n_span_spurious: number of spurious system spans
@@ -360,14 +375,16 @@ class PageEvaluation:
             self.ref_spans, self.sys_spans, self.sys_to_refs
         )
 
-        # Calculate precision and recall
+        # Calculate precision, recall,
         precision = self.precision(partial_match_weight=partial_match_weight)
         recall = self.recall(partial_match_weight=partial_match_weight)
+        f1 = self.f1_score(partial_match_weight=partial_match_weight)
 
         result: dict[str, str | int | float] = {
             "page_id": self.page_id,
             "precision": precision,
             "recall": recall,
+            "f1": f1,
         }
         result.update(match_results)
         result.update(spurious_results)
@@ -427,12 +444,14 @@ def write_page_evals(
     # For reporting average results
     cumulative_precision = 0.0
     cumulative_recall = 0.0
+    cumulative_f1 = 0.0
     page_count = 0
 
     field_names = [
         "page_id",
         "precision",
         "recall",
+        "f1",
         "n_span_matches",
         "n_span_misses",
         "n_span_spurious",
@@ -454,12 +473,14 @@ def write_page_evals(
             # Update reporting variables
             cumulative_precision += page_results["precision"]
             cumulative_recall += page_results["recall"]
+            cumulative_f1 += page_results["f1"]
             page_count += 1
 
     avg_precision = cumulative_precision / page_count
     avg_recall = cumulative_recall / page_count
+    avg_f1 = cumulative_f1 / page_count
     print(
-        f"Overall: {page_count} Pages | Precision = {avg_precision:.4g} | Recall = {avg_recall:.4g}"
+        f"Overall: {page_count} Pages | Precision = {avg_precision:.4g} | Recall = {avg_recall:.4g} | F1 = {avg_f1:4g}"
     )
 
 
