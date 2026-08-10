@@ -315,7 +315,7 @@ class TestPageEvaluation:
 
     @patch.object(PageEvaluation, "_relevance_score")
     @patch.object(PageEvaluation, "_get_span_pairs", return_value="span_pairs")
-    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("", ""))
+    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("r2s", "s2rs"))
     def test_recall(self, mock_span_maps, mock_span_pairs, mock_relevance):
         # Edge case: No reference spans
         page_ref_spans = NonCallableMock(page_id="id", spans=[])
@@ -350,7 +350,11 @@ class TestPageEvaluation:
 
     @patch.object(PageEvaluation, "recall")
     @patch.object(PageEvaluation, "precision")
-    def test_f1_score(self, mock_precision, mock_recall):
+    @patch.object(PageEvaluation, "_get_span_pairs", return_value="span_pairs")
+    @patch.object(PageEvaluation, "_get_span_mappings", return_value=("r2s", "s2rs"))
+    def test_f1_score(
+        self, mock_span_maps, mock_span_pairs, mock_precision, mock_recall
+    ):
         page_no_ref_spans = NonCallableMock(page_id="id", spans=[])
         page_no_sys_spans = NonCallableMock(page_id="id", labeled_spans=[])
         page_ref_spans = NonCallableMock(page_id="id", spans=["a"])
@@ -378,6 +382,35 @@ class TestPageEvaluation:
         assert page_eval.f1_score() == 0
         mock_precision.assert_called_once_with(partial_match_weight=1)
         mock_recall.assert_called_once_with(partial_match_weight=1)
+        ## With both
+        mock_precision.reset_mock()
+        mock_recall.reset_mock()
+        page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
+        assert page_eval.f1_score() == 0
+        mock_precision.assert_called_once_with(partial_match_weight=1)
+        mock_recall.assert_called_once_with(partial_match_weight=1)
+
+        # Standard
+        mock_precision.reset_mock()
+        mock_recall.reset_mock()
+        mock_precision.return_value = 0.25
+        mock_recall.return_value = 0.75
+        page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
+        assert page_eval.f1_score() == 0.375  # (2*.25*.75)/1
+        mock_precision.assert_called_once_with(partial_match_weight=1)
+        mock_recall.assert_called_once_with(partial_match_weight=1)
+
+        mock_precision.return_value = 0.75
+        mock_recall.return_value = 0.5
+        page_eval = PageEvaluation(page_ref_spans, page_sys_spans)
+        assert page_eval.f1_score() == 0.6  # (2*.5*.75)/1.25
+
+        ## Check propagation of optional var
+        mock_precision.reset_mock()
+        mock_recall.reset_mock()
+        page_eval.f1_score(partial_match_weight=0.2)
+        mock_precision.assert_called_once_with(partial_match_weight=0.2)
+        mock_recall.assert_called_once_with(partial_match_weight=0.2)
 
     def test_get_match_counts(self):
         expected_results = {
