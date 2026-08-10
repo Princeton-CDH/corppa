@@ -2,7 +2,10 @@
 
 ## 0.6
 
-- 
+### Poetry Detection
+- Update evaluation code
+  - Now include page-level F1 scores
+  - Updated edge cases for precision and recall, returns 1 when denominator is 0
 
 ## [0.5] 2026-05-12
 
