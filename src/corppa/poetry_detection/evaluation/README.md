@@ -159,9 +159,8 @@ $$ Recall = \frac{relevance\textunderscore score}{\text{\\# reference spans}} $$
 
 **Edge Cases.**
 If a page has no relevant items (i.e. the page contains no poem excerpts), precision is equal to 1
-if there are no system spans for the page, otherwise 0. Likewise, if a system produces no system
-spans for a page (i.e., the system identifies no poem excerpts within the page), recall is equal to 1
-if the page has no poem excerpts (i.e., there are no reference spans for this page), and 0 otherwise.
+if there are no system spans for the page. Likewise, if a system produces no system spans for a page
+(i.e., the system identifies no poem excerpts within the page), recall is equal to 1.
 
 ## Ignoring Poem Labels
 Optionally, poem labels can be ignored. This turns the task from identifying particular poems instead to
