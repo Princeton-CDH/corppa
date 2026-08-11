@@ -509,7 +509,7 @@ def write_page_evals(
     )
 
 
-def main():
+def main():  # pragma: no cover
     """
     Calculates page-level span evaluations given some reference (i.e, adjudicated
     annotations) and system annotations (e.g. passim results) JSONL files. These
