@@ -438,6 +438,9 @@ def get_page_evals(
     )
     for ref_page in progress_pages:
         page_id = ref_page["page_id"]
+        # Skip pages without system annotations
+        if page_id not in system_pages:
+            continue
         sys_page = system_pages[page_id]
         yield get_page_eval(
             ref_page,
