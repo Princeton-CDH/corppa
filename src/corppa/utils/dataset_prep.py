@@ -25,6 +25,18 @@ def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
                 yield (file_id, content)
 
 
+def add_zip_file_to_tar(
+    zf: ZipFile, zip_filename: str, tar: tarfile.TarFile, arcname: str
+) -> None:
+    """Add a single file from an open ZipFile to an open TarFile without
+    extracting to disk. arcname sets the path inside the tar archive."""
+    info = zf.getinfo(zip_filename)
+    tarinfo = tarfile.TarInfo(name=arcname)
+    tarinfo.size = info.file_size
+    with zf.open(info) as f:
+        tar.addfile(tarinfo, fileobj=f)
+
+
 # determine alignment between pages in different versions of hathitrust
 def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
     expected_page_count = pages_df.height

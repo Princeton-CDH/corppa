@@ -1,13 +1,18 @@
 # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+import tarfile
 from pathlib import Path
 from zipfile import ZipFile
 
 import polars as pl
 import pytest
 
-from corppa.utils.dataset_prep import align_pages, get_zip_textfiles
+from corppa.utils.dataset_prep import (
+    add_zip_file_to_tar,
+    align_pages,
+    get_zip_textfiles,
+)
 
 WORK_ID = "htid:test.12345678"
 
@@ -100,6 +105,21 @@ def test_get_zip_textfiles_utf8_content(tmp_path):
     content = "café naïve résumé"
     results = list(get_zip_textfiles(make_zip(tmp_path, {"00000001.txt": content})))
     assert results == [("00000001", content)]
+
+
+# --- add_zip_file_to_tar ---
+
+
+def test_add_zip_file_to_tar(tmp_path):
+    content = b"image data"
+    zip_path = make_zip(tmp_path, {"00000001.jpg": content})
+    tar_path = tmp_path / "images.tar"
+    with ZipFile(zip_path) as zf:
+        with tarfile.open(tar_path, "w") as tar:
+            add_zip_file_to_tar(zf, "00000001.jpg", tar, "work_id/00000001.jpg")
+    with tarfile.open(tar_path) as tar:
+        assert tar.getnames() == ["work_id/00000001.jpg"]
+        assert tar.extractfile("work_id/00000001.jpg").read() == content
 
 
 # --- align_pages ---
