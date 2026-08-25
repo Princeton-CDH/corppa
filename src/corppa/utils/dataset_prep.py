@@ -11,7 +11,12 @@ import polars as pl
 import polars_ds as pds
 from tqdm import tqdm
 
-from corppa.utils.path_utils import encode_htid, get_ppa_source, get_volume_id
+from corppa.utils.path_utils import (
+    encode_htid,
+    get_ppa_source,
+    get_vol_dir,
+    get_volume_id,
+)
 
 
 def get_zip_textfiles(zipfile: ZipFile) -> Iterator[tuple[str, str]]:
@@ -118,12 +123,32 @@ def process_work(
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
-            pass  #
-            # process_gale_work(work_id, pages, image_dir)
+            yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
             yield from process_ht_work(work_id, pages, image_dir, tar)
         case "ECCO":
-            pass  # no images
+            yield from pages  # no images
+
+
+def process_gale_work(
+    work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
+) -> Iterator[dict]:
+    vol_img_dir = image_dir / get_vol_dir(get_volume_id(work_id))
+    if vol_img_dir.is_dir():
+        print(f"{work_id} : {vol_img_dir} : {len(pages)} pages")
+        for page in pages:
+            # page id is work id + sequence, e.g. CB0127060085.0005
+            # image filename can be constructed directly from page id
+            image_path = vol_img_dir / f"{page['id'].replace('.', '_')}0.TIF"
+            if image_path.is_file():
+                tar_image_path = f"{work_id}/{image_path.name}"
+                tar.add(image_path, arcname=tar_image_path)
+                # add the image path in the tar file to the page data
+                page["image_path"] = tar_image_path
+            # yield page data either way (with or without image path)
+            yield page
+    else:
+        yield pages
 
 
 def process_ht_work(
@@ -134,7 +159,7 @@ def process_ht_work(
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
         print(f"Warning: zipfile {zipfile_path} does not exist, omitting images")
-        # yield pages without images
+        # yield pages without image paths
         yield from pages
     else:
         with ZipFile(zipfile_path) as ht_zip:
@@ -143,7 +168,7 @@ def process_ht_work(
                 print(
                     f"Warning: no page mapping found for work {work_id}, omitting images"
                 )
-                # should yield pages without images
+                # yield pages without image paths
                 yield from pages
             else:
                 # when image mapping was returned, add images to tar file and image paths to page data
