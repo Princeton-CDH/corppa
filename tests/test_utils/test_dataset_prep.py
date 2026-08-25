@@ -65,17 +65,19 @@ def pages_df():
 
 
 def test_get_zip_textfiles_returns_iterator(tmp_path):
-    result = get_zip_textfiles(make_zip(tmp_path, {"00000001.txt": "text"}))
-    assert hasattr(result, "__iter__")
-    assert hasattr(result, "__next__")
+    with ZipFile(make_zip(tmp_path, {"00000001.txt": "text"})) as zf:
+        result = get_zip_textfiles(zf)
+        assert hasattr(result, "__iter__")
+        assert hasattr(result, "__next__")
 
 
 def test_get_zip_textfiles_multiple(tmp_path):
     files = {"00000001.txt": "page one", "00000002.txt": "page two"}
-    assert dict(get_zip_textfiles(make_zip(tmp_path, files))) == {
-        "00000001": "page one",
-        "00000002": "page two",
-    }
+    with ZipFile(make_zip(tmp_path, files)) as zf:
+        assert dict(get_zip_textfiles(zf)) == {
+            "00000001": "page one",
+            "00000002": "page two",
+        }
 
 
 def test_get_zip_textfiles_skips_non_txt(tmp_path):
@@ -84,27 +86,32 @@ def test_get_zip_textfiles_skips_non_txt(tmp_path):
         "image.jpg": "binary",
         "metadata.xml": "<xml/>",
     }
-    results = list(get_zip_textfiles(make_zip(tmp_path, files)))
-    assert results == [("00000001", "page text")]
+    with ZipFile(make_zip(tmp_path, files)) as zf:
+        assert list(get_zip_textfiles(zf)) == [("00000001", "page text")]
 
 
 def test_get_zip_textfiles_no_txt_files(tmp_path):
     # covers both empty zip and zip with only non-txt files
-    assert list(get_zip_textfiles(make_zip(tmp_path, {}))) == []
-    assert list(get_zip_textfiles(make_zip(tmp_path, {"image.jpg": "binary"}))) == []
+    with ZipFile(make_zip(tmp_path, {})) as zf:
+        assert list(get_zip_textfiles(zf)) == []
+    with ZipFile(make_zip(tmp_path, {"image.jpg": "binary"})) as zf:
+        assert list(get_zip_textfiles(zf)) == []
 
 
 def test_get_zip_textfiles_prefixed_filename(tmp_path):
     # OSU-style filenames: stem is preserved as-is
-    files = {"OSU_32435051461309_00000602.txt": "page text"}
-    results = list(get_zip_textfiles(make_zip(tmp_path, files)))
-    assert results == [("OSU_32435051461309_00000602", "page text")]
+    with ZipFile(
+        make_zip(tmp_path, {"OSU_32435051461309_00000602.txt": "page text"})
+    ) as zf:
+        assert list(get_zip_textfiles(zf)) == [
+            ("OSU_32435051461309_00000602", "page text")
+        ]
 
 
 def test_get_zip_textfiles_utf8_content(tmp_path):
     content = "café naïve résumé"
-    results = list(get_zip_textfiles(make_zip(tmp_path, {"00000001.txt": content})))
-    assert results == [("00000001", content)]
+    with ZipFile(make_zip(tmp_path, {"00000001.txt": content})) as zf:
+        assert list(get_zip_textfiles(zf)) == [("00000001", content)]
 
 
 # --- add_zip_file_to_tar ---
@@ -126,7 +133,8 @@ def test_add_zip_file_to_tar(tmp_path):
 
 
 def test_align_pages_good_match_returns_mapping(pages_df, aligned_zip):
-    result = align_pages(WORK_ID, pages_df, aligned_zip)
+    with ZipFile(aligned_zip) as zf:
+        result = align_pages(WORK_ID, pages_df, zf)
     assert result == {
         "00000001": "00000001",
         "00000002": "00000002",
@@ -143,7 +151,8 @@ def test_align_pages_low_match_returns_none(tmp_path, pages_df):
             "00000003.txt": "alpha beta gamma delta epsilon zeta eta",
         },
     )
-    assert align_pages(WORK_ID, pages_df, zip_path) is None
+    with ZipFile(zip_path) as zf:
+        assert align_pages(WORK_ID, pages_df, zf) is None
 
 
 def test_align_pages_join_mismatch_returns_none(tmp_path, pages_df):
@@ -155,13 +164,15 @@ def test_align_pages_join_mismatch_returns_none(tmp_path, pages_df):
             "00000002.txt": PAGE_TEXTS["00000002"],
         },
     )
-    assert align_pages(WORK_ID, pages_df, zip_path) is None
+    with ZipFile(zip_path) as zf:
+        assert align_pages(WORK_ID, pages_df, zf) is None
 
 
 def test_align_pages_insufficient_zip_pages(tmp_path, pages_df):
     # Zip has fewer pages than corpus -> join mismatch -> returns None
     zip_path = make_zip(tmp_path, {"00000001.txt": PAGE_TEXTS["00000001"]})
-    assert align_pages(WORK_ID, pages_df, zip_path) is None
+    with ZipFile(zip_path) as zf:
+        assert align_pages(WORK_ID, pages_df, zf) is None
 
 
 def test_align_pages_prefixed_filenames(tmp_path):
@@ -174,15 +185,17 @@ def test_align_pages_prefixed_filenames(tmp_path):
             "OSU_32435051461309_00000002.txt": PAGE_TEXTS["00000002"],
         },
     )
-    assert align_pages(WORK_ID, pages_df, zip_path) == {
-        "00000001": "OSU_32435051461309_00000001",
-        "00000002": "OSU_32435051461309_00000002",
-    }
+    with ZipFile(zip_path) as zf:
+        assert align_pages(WORK_ID, pages_df, zf) == {
+            "00000001": "OSU_32435051461309_00000001",
+            "00000002": "OSU_32435051461309_00000002",
+        }
 
 
 def test_align_pages_underscore_page_id(aligned_zip):
     # Corpus page ids use underscore separator instead of dot
     pages_df = make_pages_df(["work_00000001", "work_00000002", "work_00000003"])
-    result = align_pages(WORK_ID, pages_df, aligned_zip)
+    with ZipFile(aligned_zip) as zf:
+        result = align_pages(WORK_ID, pages_df, zf)
     assert isinstance(result, dict)
     assert set(result.keys()) == {"00000001", "00000002", "00000003"}
