@@ -77,6 +77,18 @@ def align_pages(pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
     )
 
 
+def process_work(work_id: str, pages: list[dict], image_dir: Path) -> None:
+    htid = get_volume_id(work_id)
+    htid_suffix = htid.split(".")[-1]
+    zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
+    if not zipfile_path.exists():
+        print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
+        return
+    work_pages_df = pl.DataFrame(pages)
+    print(f"{work_id} - {work_pages_df.height:,} pages")
+    _page_mapping = align_pages(work_pages_df, zipfile_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Prepare PPA full-text dataset for publication by aligning pages and organizing images",
@@ -99,31 +111,23 @@ def main():
 
     args = parser.parse_args()
 
-    def process_work(work_id: str, pages: list[dict]) -> None:
-        htid = get_volume_id(work_id)
-        htid_suffix = htid.split(".")[-1]
-        zipfile_path = args.image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
-        if not zipfile_path.exists():
-            print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
-            return
-        work_pages_df = pl.DataFrame(pages)
-        print(f"{work_id} - {work_pages_df.height:,} pages")
-        _page_mapping = align_pages(work_pages_df, zipfile_path)
-
     # Stream pages one at a time; corpus is sorted by work+page so we can
-    # process and discard each work's pages as soon as the work_id changes.
-    current_work_id: Optional[str] = None
-    current_pages: list[dict] = []
+    # process pages by work as the work_id changes.
+    prev_work_id: Optional[str] = None
+    pages: list[dict] = []
     for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
         work_id = page["work_id"]
-        if work_id != current_work_id:
-            if current_work_id is not None:
-                process_work(current_work_id, current_pages)
-            current_work_id = work_id
-            current_pages = []
-        current_pages.append(page)
-    if current_work_id is not None:
-        process_work(current_work_id, current_pages)
+        # when work id changes, process the previous work pages and reset for the next
+        if work_id != prev_work_id:
+            if prev_work_id is not None:
+                process_work(prev_work_id, pages, args.image_dir)
+            prev_work_id = work_id
+            pages = []
+        pages.append(page)
+
+    # handle the pages for the last work at end of loop
+    if prev_work_id is not None:
+        process_work(prev_work_id, pages, args.image_dir)
 
 
 if __name__ == "__main__":
