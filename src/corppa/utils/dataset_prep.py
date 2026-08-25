@@ -1,5 +1,6 @@
 # prep ppa text+image dataset for publication
 import argparse
+import tarfile
 from pathlib import Path
 from typing import Iterator, Optional
 from zipfile import ZipFile
@@ -13,6 +14,8 @@ from corppa.utils.path_utils import encode_htid, get_ppa_source, get_volume_id
 
 
 def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
+    """Return a generator of text files from a zip archive. Returns tuples of (file_id, content)
+    where file_id is the stem of the filename."""
     with ZipFile(zipfile_path) as ht_zip:
         txtfile_list = [fn for fn in ht_zip.namelist() if fn.endswith(".txt")]
         for filename in txtfile_list:
@@ -116,26 +119,36 @@ def main():
         type=Path,
     )
     parser.add_argument(
-        "output",
-        help="Filename where the updated corpus should be saved",
+        "output_dir",
+        help="Directory where the updated page corpus and image archive file should be saved",
         type=Path,
     )
 
     args = parser.parse_args()
 
+    if not args.output_dir.is_dir():
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_pages_path = args.output_dir / "ppa_pages.jsonl.gz"
+    output_archive_path = args.output_dir / "ppa_images.tar.gz"
+    if output_pages_path.exists():
+        print(f"Warning: output file {output_pages_path} already exists, overwriting")
+    if output_archive_path.exists():
+        print(f"Warning: output file {output_archive_path} already exists, overwriting")
+
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
-    prev_work_id: Optional[str] = None
-    pages: list[dict] = []
-    for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
-        work_id = page["work_id"]
-        # when work id changes, process the previous work pages and reset for the next
-        if work_id != prev_work_id:
-            if prev_work_id is not None:
-                process_work(prev_work_id, pages, args.image_dir)
-            prev_work_id = work_id
-            pages = []
-        pages.append(page)
+    with tarfile.open(output_archive_path, "w:gz") as _tar_filehandle:
+        prev_work_id: Optional[str] = None
+        pages: list[dict] = []
+        for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
+            work_id = page["work_id"]
+            # when work id changes, process the previous work pages and reset for the next
+            if work_id != prev_work_id:
+                if prev_work_id is not None:
+                    process_work(prev_work_id, pages, args.image_dir)
+                prev_work_id = work_id
+                pages = []
+            pages.append(page)
 
     # handle the pages for the last work at end of loop
     if prev_work_id is not None:
