@@ -1,11 +1,13 @@
 # prep ppa text+image dataset for publication
 import argparse
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 from zipfile import ZipFile
 
+import orjsonl
 import polars as pl
 import polars_ds as pds
+from tqdm import tqdm
 
 from corppa.utils.path_utils import encode_htid, get_volume_id
 
@@ -97,21 +99,31 @@ def main():
 
     args = parser.parse_args()
 
-    # for now just read into a dataframe (will probably need orjsonl or lazy for full dataset)
-    pages_df = pl.read_ndjson(args.input)
-    work_ids = pages_df["work_id"].unique().to_list()
-    for work_id in work_ids:
-        # get pages for just this work
-        work_pages_df = pages_df.filter(pl.col("work_id") == work_id)
+    def process_work(work_id: str, pages: list[dict]) -> None:
         htid = get_volume_id(work_id)
         htid_suffix = htid.split(".")[-1]
-        # construct path to the zip file that includes the text and images
         zipfile_path = args.image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
         if not zipfile_path.exists():
             print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
-            continue
+            return
+        work_pages_df = pl.DataFrame(pages)
         print(f"{work_id} - {work_pages_df.height:,} pages")
         _page_mapping = align_pages(work_pages_df, zipfile_path)
+
+    # Stream pages one at a time; corpus is sorted by work+page so we can
+    # process and discard each work's pages as soon as the work_id changes.
+    current_work_id: Optional[str] = None
+    current_pages: list[dict] = []
+    for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
+        work_id = page["work_id"]
+        if work_id != current_work_id:
+            if current_work_id is not None:
+                process_work(current_work_id, current_pages)
+            current_work_id = work_id
+            current_pages = []
+        current_pages.append(page)
+    if current_work_id is not None:
+        process_work(current_work_id, current_pages)
 
 
 if __name__ == "__main__":
