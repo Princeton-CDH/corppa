@@ -9,7 +9,7 @@ import polars as pl
 import polars_ds as pds
 from tqdm import tqdm
 
-from corppa.utils.path_utils import encode_htid, get_volume_id
+from corppa.utils.path_utils import encode_htid, get_ppa_source, get_volume_id
 
 
 def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
@@ -23,7 +23,7 @@ def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
 
 
 # determine alignment between pages in different versions of hathitrust
-def align_pages(pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
+def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
     expected_page_count = pages_df.height
     # load text files from zipfile into a polars dataframe
     zip_pages_df = pl.DataFrame(
@@ -58,7 +58,10 @@ def align_pages(pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
 
     # for now, just report the average score
     avg = pages_join_df["text_match"].mean()
-    print(avg)
+    tqdm.write(
+        f"{work_id} - {pages_df.height:,} pages; average text match score: {avg:.3f}"
+    )
+    # might be lower than this; at least one 0.87 is probably correct alignment
     if avg is not None and avg > 0.9:
         return {
             row["page_id"]: row["page_filename"]
@@ -66,9 +69,8 @@ def align_pages(pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
                 named=True
             )
         }
+    # TODO: handle case where we need to determine shifted alignment
 
-    # if avg is None:
-    # print(pages_join_df.head())
     print(
         pages_join_df.filter(pl.col.text.is_not_null())
         .select(["id", "text", "text_right", "text_match", "page_filename"])
@@ -78,15 +80,25 @@ def align_pages(pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
 
 
 def process_work(work_id: str, pages: list[dict], image_dir: Path) -> None:
+    # generic process work method, which calls appropriate source-specific method
+    match get_ppa_source(work_id):
+        case "Gale":
+            pass  #
+            # process_gale_work(work_id, pages, image_dir)
+        case "HathiTrust":
+            process_ht_work(work_id, pages, image_dir)
+        case "ECCO":
+            pass  # no images
+
+
+def process_ht_work(work_id: str, pages: list[dict], image_dir: Path) -> None:
     htid = get_volume_id(work_id)
     htid_suffix = htid.split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
         print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
         return
-    work_pages_df = pl.DataFrame(pages)
-    print(f"{work_id} - {work_pages_df.height:,} pages")
-    _page_mapping = align_pages(work_pages_df, zipfile_path)
+    _page_mapping = align_pages(work_id, pl.DataFrame(pages), zipfile_path)
 
 
 def main():
