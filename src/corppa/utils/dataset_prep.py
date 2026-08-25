@@ -2,6 +2,7 @@
 import argparse
 import tarfile
 from pathlib import Path
+from time import mktime
 from typing import Iterator, Optional
 from zipfile import ZipFile
 
@@ -13,36 +14,53 @@ from tqdm import tqdm
 from corppa.utils.path_utils import encode_htid, get_ppa_source, get_volume_id
 
 
-def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
-    """Return a generator of text files from a zip archive. Returns tuples of (file_id, content)
+def get_zip_textfiles(zipfile: ZipFile) -> Iterator[tuple[str, str]]:
+    """Return a generator of text files from an open zip archive. Returns tuples of (file_id, content)
     where file_id is the stem of the filename."""
-    with ZipFile(zipfile_path) as ht_zip:
-        txtfile_list = [fn for fn in ht_zip.namelist() if fn.endswith(".txt")]
-        for filename in txtfile_list:
-            with ht_zip.open(filename) as txtfile:
-                file_id = Path(filename).stem
-                content = txtfile.read().decode("utf-8")
-                yield (file_id, content)
+    txtfile_list = [fn for fn in zipfile.namelist() if fn.endswith(".txt")]
+    for filename in txtfile_list:
+        with zipfile.open(filename) as txtfile:
+            # path stem is the filename without the extension; return file id + contents
+            yield (Path(filename).stem, txtfile.read().decode("utf-8"))
 
 
 def add_zip_file_to_tar(
-    zf: ZipFile, zip_filename: str, tar: tarfile.TarFile, tar_file_path: str
+    zipfile: ZipFile,
+    zip_filename: str,
+    tar: tarfile.TarFile,
+    tar_file_path: str,
 ) -> None:
     """Add a single file from an open ZipFile to an open TarFile without
     extracting to disk. tar_file_path sets the path within the tar archive."""
-    info = zf.getinfo(zip_filename)
+    zipinfo = zipfile.getinfo(zip_filename)
+    # create tar info object for destination path with size and modification time
     tarinfo = tarfile.TarInfo(name=tar_file_path)
-    tarinfo.size = info.file_size
-    with zf.open(info) as f:
+    tarinfo.size = zipinfo.file_size
+    # convert zip info modification time to tar info mtime
+    tarinfo.mtime = mktime(zipinfo.date_time + (0, 0, -1))  # convert to timestamp
+    with zipfile.open(zipinfo) as f:
         tar.addfile(tarinfo, fileobj=f)
 
 
+def get_zip_imgext(zipfile: ZipFile) -> list[str]:
+    """HathiTrust zip files include in images in multiple formats; returns
+    a list of all unique image extensions found in the zip file."""
+    exts = set()
+    for filename in zipfile.namelist():
+        file_path = Path(filename)
+        # compare case-insensitive but return actual case
+        if file_path.suffix.lower() in [".tif", ".jpg", ".jpeg", ".jp2"]:
+            exts.add(file_path.suffix)
+
+    return list(exts)
+
+
 # determine alignment between pages in different versions of hathitrust
-def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile_path: Path):  #  -> dict:
+def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> dict:
     expected_page_count = pages_df.height
     # load text files from zipfile into a polars dataframe
     zip_pages_df = pl.DataFrame(
-        data=get_zip_textfiles(zipfile_path),
+        data=get_zip_textfiles(zipfile),
         schema=["page_filename", "text"],
     ).with_columns(
         # extract the numeric page id for joining with page data
@@ -94,26 +112,66 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile_path: Path):  #  -
     )
 
 
-def process_work(work_id: str, pages: list[dict], image_dir: Path) -> None:
+def process_work(
+    work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
+) -> None:
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
             pass  #
             # process_gale_work(work_id, pages, image_dir)
         case "HathiTrust":
-            process_ht_work(work_id, pages, image_dir)
+            process_ht_work(work_id, pages, image_dir, tar)
         case "ECCO":
             pass  # no images
 
 
-def process_ht_work(work_id: str, pages: list[dict], image_dir: Path) -> None:
+def process_ht_work(
+    work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
+) -> None:
     htid = get_volume_id(work_id)
     htid_suffix = htid.split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
         print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
+        # FIXME: should yield pages without images
         return
-    _page_mapping = align_pages(work_id, pl.DataFrame(pages), zipfile_path)
+    with ZipFile(zipfile_path) as ht_zip:
+        page_mapping = align_pages(work_id, pl.DataFrame(pages), ht_zip)
+        if not page_mapping:
+            print(f"Warning: no page mapping found for work {work_id}, skipping")
+            # FIXME: should yield pages without images
+            return
+
+        img_exts = get_zip_imgext(ht_zip)
+        print(f"image extension: {img_exts}")
+        # can we guarantee page mapping matches pages order?
+        for page in pages:
+            page_id = page["id"].split(".")[-1]
+            # get the corresponding image from the zip, add to the tar file with appropriate name,
+            # and add the image path to the page record for output
+            page_basename = page_mapping.get(page_id)
+
+            # add the image from the corresponding path in the zipfile to the
+            # appropriate path for this page in the tarfile
+            file_namelist = ht_zip.namelist()
+            if page_basename is not None:
+                zip_image_basepath = f"{htid_suffix}/{page_basename}"
+                for img_ext in img_exts:
+                    zip_image_path = f"{zip_image_basepath}{img_ext}"
+                    if zip_image_path in file_namelist:
+                        break
+                tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
+                try:
+                    add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
+                except KeyError:
+                    has_text = page["text"].strip() != ""
+                    if has_text:
+                        print(
+                            f"Warning: image {zip_image_path} not found in zipfile but page has text; skipping"
+                        )
+                    print([f for f in file_namelist if page_basename in f])
+                    continue
 
 
 def main():
@@ -149,7 +207,7 @@ def main():
 
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
-    with tarfile.open(output_archive_path, "w:gz") as _tar_filehandle:
+    with tarfile.open(output_archive_path, "w:gz") as tar:
         prev_work_id: Optional[str] = None
         pages: list[dict] = []
         for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
@@ -157,14 +215,14 @@ def main():
             # when work id changes, process the previous work pages and reset for the next
             if work_id != prev_work_id:
                 if prev_work_id is not None:
-                    process_work(prev_work_id, pages, args.image_dir)
+                    process_work(prev_work_id, pages, args.image_dir, tar)
                 prev_work_id = work_id
                 pages = []
             pages.append(page)
 
-    # handle the pages for the last work at end of loop
-    if prev_work_id is not None:
-        process_work(prev_work_id, pages, args.image_dir)
+        # handle the pages for the last work at end of loop
+        if prev_work_id is not None:
+            process_work(prev_work_id, pages, args.image_dir, tar)
 
 
 if __name__ == "__main__":
