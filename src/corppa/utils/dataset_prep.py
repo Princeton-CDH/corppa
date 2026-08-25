@@ -42,7 +42,7 @@ def add_zip_file_to_tar(
         tar.addfile(tarinfo, fileobj=f)
 
 
-def get_zip_imgext(zipfile: ZipFile) -> list[str]:
+def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
     """HathiTrust zip files include in images in multiple formats; returns
     a list of all unique image extensions found in the zip file."""
     exts = set()
@@ -114,64 +114,72 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
 
 def process_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
-) -> None:
+) -> Iterator[dict]:
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
             pass  #
             # process_gale_work(work_id, pages, image_dir)
         case "HathiTrust":
-            process_ht_work(work_id, pages, image_dir, tar)
+            yield from process_ht_work(work_id, pages, image_dir, tar)
         case "ECCO":
             pass  # no images
 
 
 def process_ht_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
-) -> None:
+) -> Iterator[dict]:
     htid = get_volume_id(work_id)
     htid_suffix = htid.split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
-        print(f"Warning: zipfile {zipfile_path} does not exist, skipping")
-        # FIXME: should yield pages without images
-        return
-    with ZipFile(zipfile_path) as ht_zip:
-        page_mapping = align_pages(work_id, pl.DataFrame(pages), ht_zip)
-        if not page_mapping:
-            print(f"Warning: no page mapping found for work {work_id}, skipping")
-            # FIXME: should yield pages without images
-            return
+        print(f"Warning: zipfile {zipfile_path} does not exist, omitting images")
+        # yield pages without images
+        yield from pages
+    else:
+        with ZipFile(zipfile_path) as ht_zip:
+            page_mapping = align_pages(work_id, pl.DataFrame(pages), ht_zip)
+            if not page_mapping:
+                print(
+                    f"Warning: no page mapping found for work {work_id}, omitting images"
+                )
+                # should yield pages without images
+                yield from pages
+            else:
+                # when image mapping was returned, add images to tar file and image paths to page data
+                img_exts = get_zip_imgexts(ht_zip)
+                # can we guarantee page mapping matches pages order?
+                for page in pages:
+                    page_id = page["id"].split(".")[-1]
+                    # get the corresponding image from the zip, add to the tar file with appropriate name,
+                    # and add the image path to the page record for output
+                    page_basename = page_mapping.get(page_id)
 
-        img_exts = get_zip_imgext(ht_zip)
-        print(f"image extension: {img_exts}")
-        # can we guarantee page mapping matches pages order?
-        for page in pages:
-            page_id = page["id"].split(".")[-1]
-            # get the corresponding image from the zip, add to the tar file with appropriate name,
-            # and add the image path to the page record for output
-            page_basename = page_mapping.get(page_id)
+                    # add the image from the corresponding path in the zipfile to the
+                    # appropriate path for this page in the tarfile
+                    file_namelist = ht_zip.namelist()
+                    if page_basename is not None:
+                        zip_image_basepath = f"{htid_suffix}/{page_basename}"
+                        for img_ext in img_exts:
+                            zip_image_path = f"{zip_image_basepath}{img_ext}"
+                            if zip_image_path in file_namelist:
+                                break
+                        tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
+                        try:
+                            add_zip_file_to_tar(
+                                ht_zip, zip_image_path, tar, tar_image_path
+                            )
+                            # if adding succeeded, add the image path in the page record for output
+                            page["image_path"] = tar_image_path
+                        except KeyError:
+                            has_text = page["text"].strip() != ""
+                            if has_text:
+                                print(
+                                    f"Warning: image {zip_image_path} not found in zipfile but page has text; skipping"
+                                )
+                            print([f for f in file_namelist if page_basename in f])
 
-            # add the image from the corresponding path in the zipfile to the
-            # appropriate path for this page in the tarfile
-            file_namelist = ht_zip.namelist()
-            if page_basename is not None:
-                zip_image_basepath = f"{htid_suffix}/{page_basename}"
-                for img_ext in img_exts:
-                    zip_image_path = f"{zip_image_basepath}{img_ext}"
-                    if zip_image_path in file_namelist:
-                        break
-                tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
-                try:
-                    add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
-                except KeyError:
-                    has_text = page["text"].strip() != ""
-                    if has_text:
-                        print(
-                            f"Warning: image {zip_image_path} not found in zipfile but page has text; skipping"
-                        )
-                    print([f for f in file_namelist if page_basename in f])
-                    continue
+                        yield page
 
 
 def main():
@@ -198,10 +206,17 @@ def main():
 
     if not args.output_dir.is_dir():
         args.output_dir.mkdir(parents=True, exist_ok=True)
-    output_pages_path = args.output_dir / "ppa_pages.jsonl.gz"
+    output_pages_path = (
+        args.output_dir / "ppa_pages.jsonl"
+    )  # .gz # disable compression for now, for testing
     output_archive_path = args.output_dir / "ppa_images.tar.gz"
     if output_pages_path.exists():
-        print(f"Warning: output file {output_pages_path} already exists, overwriting")
+        # because we extend, we need to rename any existing outpt file
+        old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
+        output_archive_path.rename(old_output_pages)
+        print(
+            f"Warning: output file {output_pages_path} exists; renamed to {old_output_pages}"
+        )
     if output_archive_path.exists():
         print(f"Warning: output file {output_archive_path} already exists, overwriting")
 
@@ -215,14 +230,16 @@ def main():
             # when work id changes, process the previous work pages and reset for the next
             if work_id != prev_work_id:
                 if prev_work_id is not None:
-                    process_work(prev_work_id, pages, args.image_dir, tar)
+                    pages = process_work(prev_work_id, pages, args.image_dir, tar)
+                    orjsonl.extend(output_pages_path, list(pages))
                 prev_work_id = work_id
                 pages = []
             pages.append(page)
 
         # handle the pages for the last work at end of loop
         if prev_work_id is not None:
-            process_work(prev_work_id, pages, args.image_dir, tar)
+            pages = process_work(prev_work_id, pages, args.image_dir, tar)
+            orjsonl.extend(output_pages_path, list(pages))
 
 
 if __name__ == "__main__":
