@@ -26,12 +26,12 @@ def get_zip_textfiles(zipfile_path: Path) -> Iterator[tuple[str, str]]:
 
 
 def add_zip_file_to_tar(
-    zf: ZipFile, zip_filename: str, tar: tarfile.TarFile, arcname: str
+    zf: ZipFile, zip_filename: str, tar: tarfile.TarFile, tar_file_path: str
 ) -> None:
     """Add a single file from an open ZipFile to an open TarFile without
-    extracting to disk. arcname sets the path inside the tar archive."""
+    extracting to disk. tar_file_path sets the path within the tar archive."""
     info = zf.getinfo(zip_filename)
-    tarinfo = tarfile.TarInfo(name=arcname)
+    tarinfo = tarfile.TarInfo(name=tar_file_path)
     tarinfo.size = info.file_size
     with zf.open(info) as f:
         tar.addfile(tarinfo, fileobj=f)
