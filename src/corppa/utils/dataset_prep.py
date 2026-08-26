@@ -99,8 +99,8 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     tqdm.write(
         f"{work_id} - {pages_df.height:,} pages; average text match score: {avg:.3f}"
     )
-    # might be lower than this; at least one 0.87 is probably correct alignment
-    if avg is not None and avg > 0.9:
+    # might be lower than this; at least one 0.87 is visibly correct alignment
+    if avg is not None and avg > 0.87:
         return {
             row["page_id"]: row["page_filename"]
             for row in pages_join_df.select(["page_id", "page_filename"]).iter_rows(
@@ -158,6 +158,7 @@ def process_ht_work(
     htid_suffix = htid.split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
+        # TODO: should we add a quiet mode for running without all data present?
         print(f"Warning: zipfile {zipfile_path} does not exist, omitting images")
         # yield pages without image paths
         yield from pages
