@@ -2,7 +2,7 @@
 import argparse
 import tarfile
 from pathlib import Path
-from time import mktime
+from time import mktime, perf_counter
 from typing import Iterator, Optional
 from zipfile import ZipFile
 
@@ -239,19 +239,31 @@ def main():
     if output_pages_path.exists():
         # because we extend, we need to rename any existing outpt file
         old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
-        output_archive_path.rename(old_output_pages)
+        output_pages_path.rename(old_output_pages)
         print(
             f"Warning: output file {output_pages_path} exists; renamed to {old_output_pages}"
         )
     if output_archive_path.exists():
         print(f"Warning: output file {output_archive_path} already exists, overwriting")
 
+    # use a polars lazy frame to calculate the total so tqdm can estimate completion
+    start_time = perf_counter()
+    total_pages = pl.scan_ndjson(args.input).select(pl.len()).collect().item()
+    end_time = perf_counter()
+    print(f"{total_pages:,} total pages (calculated in {end_time - start_time:0.2f}s)")
+    # configure tqdm to format as comma delimited numbers - from https://stackoverflow.com/a/76964589
+    tqdm.format_sizeof = lambda x, divisor=None: (f"{x:,}" if divisor else f"{x:5.2f}")
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
     with tarfile.open(output_archive_path, "w:gz") as tar:
         prev_work_id: Optional[str] = None
         pages: list[dict] = []
-        for page in tqdm(orjsonl.stream(args.input), desc="Reading pages"):
+        for page in tqdm(
+            orjsonl.stream(args.input),
+            desc="Reading pages",
+            total=total_pages,
+            unit_scale=True,
+        ):
             work_id = page["work_id"]
             # when work id changes, process the previous work pages and reset for the next
             if work_id != prev_work_id:
