@@ -155,7 +155,9 @@ def process_ht_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
     htid = get_volume_id(work_id)
-    htid_suffix = htid.split(".")[-1]
+    # zip file is named based on id without institution prefix
+    # must be encoded to convert ark style ids to file safe format
+    htid_suffix = encode_htid(htid).split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
         # TODO: should we add a quiet mode for running without all data present?
