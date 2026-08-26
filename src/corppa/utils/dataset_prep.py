@@ -97,7 +97,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     # for now, just report the average score
     avg = pages_join_df["text_match"].mean()
     tqdm.write(
-        f"{work_id} - {pages_df.height:,} pages; average text match score: {avg:.3f}"
+        f"{work_id: <30} {pages_df.height:> 4,} pages; average indel similarity score: {avg:.3f}"
     )
     # might be lower than this; at least one 0.87 is visibly correct alignment
     if avg is not None and avg > 0.87:
