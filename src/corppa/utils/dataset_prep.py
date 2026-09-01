@@ -116,6 +116,22 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
             # if match score is zero, it fell below our threshold - no good match was found
             shift = None
 
+        # head chunk: on the first iteration, map any pages before the first
+        # anchor (typically short pages that were filtered out) using this
+        # anchor's shift so the mapping covers the start of the work
+        if search_i == 0 and shift is not None and page["index"] > 0:
+            head_chunk_df = orig_pages_df.slice(0, page["index"])
+            zip_shift_df = zip_pages_df.with_columns(
+                aligned_order=pl.col("order") + shift
+            )
+            head_mapping_df = head_chunk_df.join(
+                zip_shift_df,
+                left_on="order",
+                right_on="aligned_order",
+                how="left",
+            ).select(["id", "page_filename"])
+            page_mapping_df = page_mapping_df.vstack(head_mapping_df)
+
         # generate mapping for chunk between this one and the previous
         if prev_shift is not None and prev_index is not None:
             # TODO: include short pages before/after first and last search pages when generating alignment

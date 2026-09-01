@@ -262,6 +262,38 @@ def test_align_shifted_pages_consistent_shift():
     }
 
 
+def test_align_shifted_pages_includes_head_pages():
+    # Pages before the first anchor are typically short pages that got
+    # filtered out. They must still be included in the mapping via the
+    # first anchor's shift.
+    seeds = [f"chapter-{i}-unique-content" for i in range(6)]
+    zip_pages_df = pl.DataFrame(
+        {
+            "page_filename": [f"{11 + i:08d}" for i in range(6)],
+            "order": [11 + i for i in range(6)],
+            "text": [_long_text(s) for s in seeds],
+        }
+    )
+    # page 1 is short (below the 600-char filter); pages 2-6 are long and
+    # share text with zip pages at orders 12-16 (uniform shift = -10)
+    pages_df = pl.DataFrame(
+        {
+            "id": [f"work.{1 + i:08d}" for i in range(6)],
+            "order": [1 + i for i in range(6)],
+            "text": ["short leading page"] + [_long_text(s) for s in seeds[1:]],
+        }
+    )
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is not None
+    mapping = dict(result.select(["id", "page_filename"]).iter_rows())
+    # page 1 (short, before the first anchor) is mapped via the anchor's shift
+    assert mapping["work.00000001"] == "00000011"
+    # last page still covered by the tail fix
+    assert mapping["work.00000006"] == "00000016"
+
+
 def test_align_shifted_pages_returns_id_and_filename_columns():
     seeds = [f"page-{i}-content" for i in range(3)]
     pages_df, zip_pages_df = _make_shifted_frames([1, 2, 3], [5, 6, 7], seeds)
