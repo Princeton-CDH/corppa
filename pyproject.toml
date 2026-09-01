@@ -14,7 +14,7 @@ license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",    
+    "Programming Language :: Python :: 3.13",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -46,6 +46,10 @@ poem_id = [
   "unidecode",
   "rapidfuzz",
 ]
+ppa_fulltext_dataprep = [
+    "polars-ds>=0.12.1",
+    "rapidfuzz"
+]
 # NOTE: v0.5 and prior run against passim 7f52b95fc7f0314b6084a565c63bbde9e094a79f
 # from Nov 24, 2024 a few bugfixes after the 2.0.1 release from Feb 2024
 passim = ["passim @ git+https://github.com/dasmiq/passim.git"]
@@ -70,7 +74,7 @@ test = [
   "pytest-cov",
   "corppa[poem_id]",
   "corppa[chadwyck_healey]",
-  "corppa[notebooks]",  
+  "corppa[notebooks]",
 ]
 
 [project.scripts]

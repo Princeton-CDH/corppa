@@ -9,6 +9,7 @@ from zipfile import ZipFile
 import orjsonl
 import polars as pl
 import polars_ds as pds
+import rapidfuzz
 from tqdm import tqdm
 
 from corppa.utils.path_utils import (
@@ -60,37 +61,145 @@ def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
     return list(exts)
 
 
+def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
+    # Implementation for finding alignment between pages
+    # calculate text length - may need to filter out short pages to avoid mismatches
+    # ensure pages are sorted by order so we can compare first, middle, and last pages for alignment
+    pages_df = pages_df.sort("order", descending=False).with_row_index()
+    orig_pages_df = pages_df  # save a copy of the unfiltered set
+    # filter out short pages to avoid unreliable matches
+    pages_df = pages_df.with_columns(text_len=pl.col.text.str.len_chars()).filter(
+        pl.col.text_len.gt(600)
+    )
+    # texts to find matches for
+    page_texts = pages_df["text"].to_list()
+    total_pages = pages_df.height
+    # print(f"total pages {total_pages}; filtered pages {pages_df.height}")
+    # create a dict of search texts for first, middle, and last pages to compare against the zip pages
+    # key is the index in the filtered pages df so we can get back to page data
+    # TODO: if total pages is small, align all pages
+    search_texts = {i: page_texts[i] for i in [0, total_pages // 2, total_pages - 1]}
+    # texts to match against
+    zip_page_texts = zip_pages_df["text"].to_list()
+
+    scores = rapidfuzz.process.cdist(
+        search_texts.values(),
+        zip_page_texts,
+        scorer=rapidfuzz.fuzz.ratio,
+        workers=-1,
+        score_cutoff=85,
+    )
+
+    prev_index = None
+    prev_shift = None
+    # iterate over the resulting scores for each search text; if an alignment is consistent
+    # between two pairs, generate the page id to filename mapping for that chunk.
+
+    # enumeration index is the index into search text and resulting scores
+    # search_page_i is the index into the filtered pages df so we can get back to the original page data
+    for search_i, search_page_i in enumerate(search_texts.keys()):
+        page = pages_df.row(search_page_i, named=True)
+        # get the index of the highest scoreh in the zip pages for this search text
+        zip_page_i = scores[search_i].argmax()
+        # get the value for the best score
+        match_score = scores[search_i][zip_page_i]
+        if match_score:
+            # get the data for the matched page
+            zip_page = zip_pages_df.row(zip_page_i, named=True)
+            # how much did pages shift?
+            shift = page["order"] - zip_page["order"]
+        else:
+            # if match score is zero, it fell below our threshold - no good match was found
+            shift = None
+
+        # create an empty dataframe to add page chunks to as alignments are determined
+        page_mapping_df = pl.DataFrame(
+            schema={"id": pl.String, "page_filename": pl.String}
+        )
+
+        # generate mapping for chunk between this one and the previous
+        if prev_shift is not None and prev_index is not None:
+            # TODO: include short pages before/after first and last search pages when generating alignment
+            # (assume matches alignment of pages we are able to match)
+            page_chunk_df = orig_pages_df.slice(prev_index, page["index"] - prev_index)
+            chunk_p1 = page_chunk_df.row(0, named=True)
+            chunk_p2 = page_chunk_df.row(page_chunk_df.height - 1, named=True)
+            # if shift amount matches, we have an alignment;
+            # generate page mappings for the chunk between this search text and the previous
+            if shift == prev_shift:
+                print(
+                    f"found alignment shift={shift} for pages {chunk_p1['order']} (i{chunk_p1['index']}) to {chunk_p2['order']} (i{chunk_p2['index']})"
+                )
+                # create an order field adjusted by the required shift, so we can join
+                zip_shift_df = zip_pages_df.with_columns(
+                    aligned_order=pl.col("order") + prev_shift
+                )
+                # join the chunk of pages with the zip pages based on the aligned order
+                chunk_mapping_df = page_chunk_df.join(
+                    zip_shift_df,
+                    left_on="order",
+                    right_on="aligned_order",
+                    how="left",
+                ).select(["id", "page_filename"])
+            else:
+                # if shifts don't match, recurse on this chunk of pages
+                print(
+                    f"### recursing for pages {chunk_p1['order']} (i{chunk_p1['index']}) to {chunk_p2['order']} (i{chunk_p2['index']})"
+                )
+                # drop row index for current loop so it can be added for the smaller chunk
+                # TODO: limit zip_pages to pages *after* any previously found alignments
+                chunk_mapping_df = align_shifted_pages(
+                    page_chunk_df.drop("index"), zip_pages_df
+                )
+
+            # add mapping for each set of pages to the aggregate mapping df
+            if chunk_mapping_df is not None and not chunk_mapping_df.is_empty():
+                page_mapping_df = page_mapping_df.vstack(chunk_mapping_df)
+
+        # update previous values for next loop
+        prev_shift = shift
+        prev_index = page["index"]
+
+    return page_mapping_df
+
+
 # determine alignment between pages in different versions of hathitrust
 def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> dict:
     expected_page_count = pages_df.height
     # load text files from zipfile into a polars dataframe
-    zip_pages_df = pl.DataFrame(
-        data=get_zip_textfiles(zipfile),
-        schema=["page_filename", "text"],
-    ).with_columns(
-        # extract the numeric page id for joining with page data
-        # some works have filenames like OSU_32435051461309_00000602 ; others are simply numeric
-        page_id=pl.col.page_filename.str.extract(r"_?([0-9]+$)", 1)
+    zip_pages_df = (
+        pl.DataFrame(
+            data=get_zip_textfiles(zipfile),
+            schema=["page_filename", "text"],
+        )
+        .with_columns(
+            # extract the numeric page id for joining with page data
+            # some works have filenames like OSU_32435051461309_00000602 ; others are simply numeric
+            page_id=pl.col.page_filename.str.extract(r"_?([0-9]+$)", 1)
+        )
+        .with_columns(
+            # make an order field to match page id so we can calculate size of shift
+            order=pl.col.page_id.cast(pl.Int64),
+            text_len=pl.col.text.str.len_chars(),
+        )
     )
+
     # NOTE: for excerpt, page count is not expected to match but should be >= total
     if zip_pages_df.height < expected_page_count:
         print(
-            f"Warning: insufficient pages found in zipfiles ({zip_pages_df.height}; expected at least {expected_page_count})"
+            f"Warning: page count mismatcH; pages in zipfiles ({zip_pages_df.height}, expected at least {expected_page_count})"
         )
     # extract bare page id from work_id.page_id globally unique page identifier
     pages_join_df = (
         pages_df.with_columns(page_id=pl.col.id.str.extract(r"[._]([0-9]+$)", 1))
-        # page_id=pl.col.id.str.split(".").list.last())
         .join(zip_pages_df, on="page_id")
         .with_columns(text_match=pds.str_fuzz("text", "text_right", parallel=True))
     )
     if expected_page_count != pages_join_df.height:
+        # TODO: don't repeat if we already warned about zip total page count
         print(
             f"Warning: joined pages ({pages_join_df.height}) does not match expected page count ({expected_page_count})"
         )
-        print(zip_pages_df.head())
-        print(pages_df.head())
-        return
 
     # maybe filter out pages with no text when checking score? (probably omits nulls anyway...)
 
@@ -101,20 +210,17 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     )
     # might be lower than this; at least one 0.87 is visibly correct alignment
     if avg is not None and avg > 0.87:
-        return {
-            row["page_id"]: row["page_filename"]
-            for row in pages_join_df.select(["page_id", "page_filename"]).iter_rows(
-                named=True
-            )
-        }
-    # TODO: handle case where we need to determine shifted alignment
+        page_mapping_df = pages_join_df
+    else:
+        page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
+        if page_mapping_df is None or page_mapping_df.is_empty():
+            return
 
-    print(
-        pages_join_df.filter(pl.col.text.is_not_null())
-        .select(["id", "text", "text_right", "text_match", "page_filename"])
-        .sort("text_match", descending=False)
-        .head(10)
-    )
+    # construct and return a dictionary mapping original page id to corresponding filename in the zipfile
+    return {
+        r["id"]: r["page_filename"]
+        for r in page_mapping_df.select(["id", "page_filename"]).iter_rows(named=True)
+    }
 
 
 def process_work(
@@ -123,7 +229,8 @@ def process_work(
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
-            yield from process_gale_work(work_id, pages, image_dir, tar)
+            pass  # skip for debug/test
+            # yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
             yield from process_ht_work(work_id, pages, image_dir, tar)
         case "ECCO":
@@ -135,7 +242,7 @@ def process_gale_work(
 ) -> Iterator[dict]:
     vol_img_dir = image_dir / get_vol_dir(get_volume_id(work_id))
     if vol_img_dir.is_dir():
-        print(f"{work_id} : {vol_img_dir} : {len(pages)} pages")
+        # print(f"{work_id} : {vol_img_dir} : {len(pages)} pages")
         for page in pages:
             # page id is work id + sequence, e.g. CB0127060085.0005
             # image filename can be constructed directly from page id
@@ -160,8 +267,10 @@ def process_ht_work(
     htid_suffix = encode_htid(htid).split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
-        # TODO: should we add a quiet mode for running without all data present?
-        print(f"Warning: zipfile {zipfile_path} does not exist, omitting images")
+        # TODO: add a quiet mode or switch to logging to simplify running without all data present
+        # print(
+        # f"Warning: zipfile {zipfile_path} does not exist, omitting images"
+        # )
         # yield pages without image paths
         yield from pages
     else:
@@ -176,9 +285,8 @@ def process_ht_work(
             else:
                 # when image mapping was returned, add images to tar file and image paths to page data
                 img_exts = get_zip_imgexts(ht_zip)
-                # can we guarantee page mapping matches pages order?
                 for page in pages:
-                    page_id = page["id"].split(".")[-1]
+                    page_id = page["id"]  # .split(".")[-1]
                     # get the corresponding image from the zip, add to the tar file with appropriate name,
                     # and add the image path to the page record for output
                     page_basename = page_mapping.get(page_id)
@@ -199,6 +307,7 @@ def process_ht_work(
                             )
                             # if adding succeeded, add the image path in the page record for output
                             page["image_path"] = tar_image_path
+
                         except KeyError:
                             has_text = page["text"].strip() != ""
                             if has_text:
