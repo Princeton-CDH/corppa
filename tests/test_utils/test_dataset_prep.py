@@ -322,9 +322,73 @@ def test_align_shifted_pages_no_content_match():
     assert result is None or result.is_empty()
 
 
-def test_align_shifted_pages_all_pages_short():
-    # Every page below the 600-char filter -> filtered frame is empty.
-    # Currently raises; guarding empty input is one of the identified TODOs.
+def test_align_shifted_pages_small_df_uses_all_anchors():
+    # Only 2 long pages in pages_df -> can't sample first/middle/last without
+    # duplicates; all long pages get used as anchors, and if they agree on a
+    # shift, every original page (short or long) gets mapped.
+    zip_pages_df = pl.DataFrame(
+        {
+            "page_filename": [f"{11 + i:08d}" for i in range(3)],
+            "order": [11, 12, 13],
+            "text": [_long_text(f"chapter-{i}") for i in range(3)],
+        }
+    )
+    # pages 1 and 2 are long (used as anchors), page 3 is short
+    pages_df = pl.DataFrame(
+        {
+            "id": ["work.00000001", "work.00000002", "work.00000003"],
+            "order": [1, 2, 3],
+            "text": [
+                _long_text("chapter-0"),
+                _long_text("chapter-1"),
+                "short trailing page",
+            ],
+        }
+    )
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is not None
+    mapping = dict(result.select(["id", "page_filename"]).iter_rows())
+    # all three pages mapped via the shared shift (-10)
+    assert mapping == {
+        "work.00000001": "00000011",
+        "work.00000002": "00000012",
+        "work.00000003": "00000013",
+    }
+
+
+def test_align_shifted_pages_single_long_anchor():
+    # Only one long page; the single-anchor shift is applied to every
+    # original page via the head-chunk-extended-to-end branch.
+    zip_pages_df = pl.DataFrame(
+        {
+            "page_filename": ["00000011", "00000012", "00000013"],
+            "order": [11, 12, 13],
+            "text": [_long_text(f"chapter-{i}") for i in range(3)],
+        }
+    )
+    pages_df = pl.DataFrame(
+        {
+            "id": ["work.00000001", "work.00000002", "work.00000003"],
+            "order": [1, 2, 3],
+            "text": ["short", _long_text("chapter-1"), "also short"],
+        }
+    )
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    mapping = dict(result.select(["id", "page_filename"]).iter_rows())
+    assert mapping == {
+        "work.00000001": "00000011",
+        "work.00000002": "00000012",
+        "work.00000003": "00000013",
+    }
+
+
+def test_align_shifted_pages_all_pages_short_returns_empty():
+    # Every page below the 600-char filter -> no long-enough anchors.
+    # Short-chunk guard returns an empty mapping instead of crashing.
     pages_df = pl.DataFrame(
         {
             "id": [f"work.{i:08d}" for i in range(1, 4)],
@@ -336,8 +400,10 @@ def test_align_shifted_pages_all_pages_short():
         [1, 2, 3], [1, 2, 3], ["short one", "short two", "short three"]
     )
 
-    with pytest.raises((IndexError, Exception)):
-        align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is not None
+    assert result.is_empty()
 
 
 def test_align_pages_underscore_page_id(aligned_zip):
