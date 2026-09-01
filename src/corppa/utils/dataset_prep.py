@@ -100,6 +100,7 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
 
     # enumeration index is the index into search text and resulting scores
     # search_page_i is the index into the filtered pages df so we can get back to the original page data
+    last_search_i = len(search_texts) - 1
     for search_i, search_page_i in enumerate(search_texts.keys()):
         page = pages_df.row(search_page_i, named=True)
         # get the index of the highest scoreh in the zip pages for this search text
@@ -119,7 +120,14 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         if prev_shift is not None and prev_index is not None:
             # TODO: include short pages before/after first and last search pages when generating alignment
             # (assume matches alignment of pages we are able to match)
-            page_chunk_df = orig_pages_df.slice(prev_index, page["index"] - prev_index)
+            # on the last iteration, extend the chunk to the end of pages so the
+            # final anchor and any pages after it are included in the mapping
+            if search_i == last_search_i:
+                page_chunk_df = orig_pages_df.slice(prev_index)
+            else:
+                page_chunk_df = orig_pages_df.slice(
+                    prev_index, page["index"] - prev_index
+                )
             chunk_p1 = page_chunk_df.row(0, named=True)
             chunk_p2 = page_chunk_df.row(page_chunk_df.height - 1, named=True)
             # if shift amount matches, we have an alignment;

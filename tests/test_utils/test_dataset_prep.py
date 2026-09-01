@@ -11,6 +11,7 @@ import pytest
 from corppa.utils.dataset_prep import (
     add_zip_file_to_tar,
     align_pages,
+    align_shifted_pages,
     get_zip_textfiles,
 )
 
@@ -135,28 +136,36 @@ def test_add_zip_file_to_tar(tmp_path):
 def test_align_pages_good_match_returns_mapping(pages_df, aligned_zip):
     with ZipFile(aligned_zip) as zf:
         result = align_pages(WORK_ID, pages_df, zf)
+    # mapping is keyed by the full page id (matches how process_ht_work looks it up)
     assert result == {
-        "00000001": "00000001",
-        "00000002": "00000002",
-        "00000003": "00000003",
+        "work.00000001": "00000001",
+        "work.00000002": "00000002",
+        "work.00000003": "00000003",
     }
 
 
-def test_align_pages_low_match_returns_none(tmp_path, pages_df):
+def test_align_pages_low_match_falls_through_to_shifted(tmp_path):
+    # Content differs entirely -> avg score is low -> falls through to
+    # align_shifted_pages, which finds no matches and returns None.
+    # align_shifted_pages needs an `order` column and long-enough texts.
+    pages_df = pl.DataFrame(
+        {
+            "id": ["work.00000001", "work.00000002", "work.00000003"],
+            "order": [1, 2, 3],
+            "text": [_long_text(f"alpha-{i}") for i in range(3)],
+        }
+    )
     zip_path = make_zip(
         tmp_path,
-        {
-            "00000001.txt": "zzz qqq xxx aaa bbb ccc ddd eee fff ggg",
-            "00000002.txt": "111 222 333 444 555 666 777 888 999 000",
-            "00000003.txt": "alpha beta gamma delta epsilon zeta eta",
-        },
+        {f"0000000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)},
     )
     with ZipFile(zip_path) as zf:
         assert align_pages(WORK_ID, pages_df, zf) is None
 
 
-def test_align_pages_join_mismatch_returns_none(tmp_path, pages_df):
-    # Zip is missing one page -> join count mismatch -> returns None
+def test_align_pages_join_mismatch_returns_partial(tmp_path, pages_df):
+    # Zip is missing one page -> join count mismatch is warned about but the
+    # partial mapping for the pages that did join is still returned.
     zip_path = make_zip(
         tmp_path,
         {
@@ -165,14 +174,19 @@ def test_align_pages_join_mismatch_returns_none(tmp_path, pages_df):
         },
     )
     with ZipFile(zip_path) as zf:
-        assert align_pages(WORK_ID, pages_df, zf) is None
+        assert align_pages(WORK_ID, pages_df, zf) == {
+            "work.00000001": "00000001",
+            "work.00000002": "00000002",
+        }
 
 
 def test_align_pages_insufficient_zip_pages(tmp_path, pages_df):
-    # Zip has fewer pages than corpus -> join mismatch -> returns None
+    # Zip has only one of the corpus's three pages -> partial mapping returned.
     zip_path = make_zip(tmp_path, {"00000001.txt": PAGE_TEXTS["00000001"]})
     with ZipFile(zip_path) as zf:
-        assert align_pages(WORK_ID, pages_df, zf) is None
+        assert align_pages(WORK_ID, pages_df, zf) == {
+            "work.00000001": "00000001",
+        }
 
 
 def test_align_pages_prefixed_filenames(tmp_path):
@@ -187,9 +201,111 @@ def test_align_pages_prefixed_filenames(tmp_path):
     )
     with ZipFile(zip_path) as zf:
         assert align_pages(WORK_ID, pages_df, zf) == {
-            "00000001": "OSU_32435051461309_00000001",
-            "00000002": "OSU_32435051461309_00000002",
+            "work.00000001": "OSU_32435051461309_00000001",
+            "work.00000002": "OSU_32435051461309_00000002",
         }
+
+
+# --- align_shifted_pages ---
+
+
+def _long_text(seed: str, length: int = 700) -> str:
+    """Repeat `seed` until the result exceeds `length` chars so it survives
+    the >600-char filter inside align_shifted_pages, while staying distinct
+    from other seeds (each repeated seed produces a unique long string)."""
+    reps = (length // len(seed)) + 2
+    return (seed + " ") * reps
+
+
+def _make_shifted_frames(page_orders, zip_orders, seeds):
+    """Build (pages_df, zip_pages_df) where pages_df.order[i] and
+    zip_pages_df.order[i] share the same long text derived from seeds[i]."""
+    texts = [_long_text(s) for s in seeds]
+    pages_df = pl.DataFrame(
+        {
+            "id": [f"work.{o:08d}" for o in page_orders],
+            "order": page_orders,
+            "text": texts,
+        }
+    )
+    zip_pages_df = pl.DataFrame(
+        {
+            "page_filename": [f"{o:08d}" for o in zip_orders],
+            "order": zip_orders,
+            "text": texts,
+        }
+    )
+    return pages_df, zip_pages_df
+
+
+def test_align_shifted_pages_consistent_shift():
+    # pages orders 1..5 correspond to zip orders 11..15 (uniform shift = -10);
+    # every page should map to its shifted zip counterpart, including the
+    # first and last anchors.
+    seeds = [f"chapter-{i}-unique-content" for i in range(5)]
+    pages_df, zip_pages_df = _make_shifted_frames(
+        page_orders=list(range(1, 6)),
+        zip_orders=list(range(11, 16)),
+        seeds=seeds,
+    )
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is not None
+    mapping = dict(result.select(["id", "page_filename"]).iter_rows())
+    assert mapping == {
+        "work.00000001": "00000011",
+        "work.00000002": "00000012",
+        "work.00000003": "00000013",
+        "work.00000004": "00000014",
+        "work.00000005": "00000015",
+    }
+
+
+def test_align_shifted_pages_returns_id_and_filename_columns():
+    seeds = [f"page-{i}-content" for i in range(3)]
+    pages_df, zip_pages_df = _make_shifted_frames([1, 2, 3], [5, 6, 7], seeds)
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is not None
+    assert set(result.columns) >= {"id", "page_filename"}
+
+
+def test_align_shifted_pages_no_content_match():
+    # No shared content between pages and zip -> no anchor clears the cutoff
+    pages_df, _ = _make_shifted_frames(
+        [1, 2, 3, 4, 5],
+        [1, 2, 3, 4, 5],
+        [f"alpha-{i}" for i in range(5)],
+    )
+    _, zip_pages_df = _make_shifted_frames(
+        [1, 2, 3, 4, 5],
+        [1, 2, 3, 4, 5],
+        [f"zzzzz-{i}-qqqqq" for i in range(5)],
+    )
+
+    result = align_shifted_pages(pages_df, zip_pages_df)
+
+    assert result is None or result.is_empty()
+
+
+def test_align_shifted_pages_all_pages_short():
+    # Every page below the 600-char filter -> filtered frame is empty.
+    # Currently raises; guarding empty input is one of the identified TODOs.
+    pages_df = pl.DataFrame(
+        {
+            "id": [f"work.{i:08d}" for i in range(1, 4)],
+            "order": [1, 2, 3],
+            "text": ["short one", "short two", "short three"],
+        }
+    )
+    _, zip_pages_df = _make_shifted_frames(
+        [1, 2, 3], [1, 2, 3], ["short one", "short two", "short three"]
+    )
+
+    with pytest.raises((IndexError, Exception)):
+        align_shifted_pages(pages_df, zip_pages_df)
 
 
 def test_align_pages_underscore_page_id(aligned_zip):
@@ -198,4 +314,8 @@ def test_align_pages_underscore_page_id(aligned_zip):
     with ZipFile(aligned_zip) as zf:
         result = align_pages(WORK_ID, pages_df, zf)
     assert isinstance(result, dict)
-    assert set(result.keys()) == {"00000001", "00000002", "00000003"}
+    assert set(result.keys()) == {
+        "work_00000001",
+        "work_00000002",
+        "work_00000003",
+    }
