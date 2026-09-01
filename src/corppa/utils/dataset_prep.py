@@ -95,6 +95,9 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     # iterate over the resulting scores for each search text; if an alignment is consistent
     # between two pairs, generate the page id to filename mapping for that chunk.
 
+    # create an empty dataframe to add page chunks to as alignments are determined
+    page_mapping_df = pl.DataFrame(schema={"id": pl.String, "page_filename": pl.String})
+
     # enumeration index is the index into search text and resulting scores
     # search_page_i is the index into the filtered pages df so we can get back to the original page data
     for search_i, search_page_i in enumerate(search_texts.keys()):
@@ -111,11 +114,6 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         else:
             # if match score is zero, it fell below our threshold - no good match was found
             shift = None
-
-        # create an empty dataframe to add page chunks to as alignments are determined
-        page_mapping_df = pl.DataFrame(
-            schema={"id": pl.String, "page_filename": pl.String}
-        )
 
         # generate mapping for chunk between this one and the previous
         if prev_shift is not None and prev_index is not None:
