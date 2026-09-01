@@ -1,5 +1,6 @@
 # prep ppa text+image dataset for publication
 import argparse
+import logging
 import tarfile
 from pathlib import Path
 from time import mktime, perf_counter
@@ -18,6 +19,8 @@ from corppa.utils.path_utils import (
     get_vol_dir,
     get_volume_id,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_zip_textfiles(zipfile: ZipFile) -> Iterator[tuple[str, str]]:
@@ -166,8 +169,13 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
             # if shift amount matches, we have an alignment;
             # generate page mappings for the chunk between this search text and the previous
             if shift == prev_shift:
-                print(
-                    f"found alignment shift={shift} for pages {chunk_p1['order']} (i{chunk_p1['index']}) to {chunk_p2['order']} (i{chunk_p2['index']})"
+                logger.debug(
+                    "found alignment shift=%s for pages %s (i%s) to %s (i%s)",
+                    shift,
+                    chunk_p1["order"],
+                    chunk_p1["index"],
+                    chunk_p2["order"],
+                    chunk_p2["index"],
                 )
                 # create an order field adjusted by the required shift, so we can join
                 zip_shift_df = zip_pages_df.with_columns(
@@ -182,8 +190,12 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
                 ).select(["id", "page_filename"])
             else:
                 # if shifts don't match, recurse on this chunk of pages
-                print(
-                    f"### recursing for pages {chunk_p1['order']} (i{chunk_p1['index']}) to {chunk_p2['order']} (i{chunk_p2['index']})"
+                logger.debug(
+                    "recursing for pages %s (i%s) to %s (i%s)",
+                    chunk_p1["order"],
+                    chunk_p1["index"],
+                    chunk_p2["order"],
+                    chunk_p2["index"],
                 )
                 # drop row index for current loop so it can be added for the smaller chunk
                 # TODO: limit zip_pages to pages *after* any previously found alignments
@@ -225,8 +237,10 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
 
     # NOTE: for excerpt, page count is not expected to match but should be >= total
     if zip_pages_df.height < expected_page_count:
-        print(
-            f"Warning: page count mismatcH; pages in zipfiles ({zip_pages_df.height}, expected at least {expected_page_count})"
+        logger.warning(
+            "page count mismatch; pages in zipfiles (%d, expected at least %d)",
+            zip_pages_df.height,
+            expected_page_count,
         )
     # extract bare page id from work_id.page_id globally unique page identifier
     pages_join_df = (
@@ -236,8 +250,10 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     )
     if expected_page_count != pages_join_df.height:
         # TODO: don't repeat if we already warned about zip total page count
-        print(
-            f"Warning: joined pages ({pages_join_df.height}) does not match expected page count ({expected_page_count})"
+        logger.warning(
+            "joined pages (%d) does not match expected page count (%d)",
+            pages_join_df.height,
+            expected_page_count,
         )
 
     # maybe filter out pages with no text when checking score? (probably omits nulls anyway...)
@@ -306,18 +322,15 @@ def process_ht_work(
     htid_suffix = encode_htid(htid).split(".")[-1]
     zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
-        # TODO: add a quiet mode or switch to logging to simplify running without all data present
-        # print(
-        # f"Warning: zipfile {zipfile_path} does not exist, omitting images"
-        # )
+        logger.warning("zipfile %s does not exist, omitting images", zipfile_path)
         # yield pages without image paths
         yield from pages
     else:
         with ZipFile(zipfile_path) as ht_zip:
             page_mapping = align_pages(work_id, pl.DataFrame(pages), ht_zip)
             if not page_mapping:
-                print(
-                    f"Warning: no page mapping found for work {work_id}, omitting images"
+                logger.warning(
+                    "no page mapping found for work %s, omitting images", work_id
                 )
                 # yield pages without image paths
                 yield from pages
@@ -350,10 +363,14 @@ def process_ht_work(
                         except KeyError:
                             has_text = page["text"].strip() != ""
                             if has_text:
-                                print(
-                                    f"Warning: image {zip_image_path} not found in zipfile but page has text; skipping"
+                                logger.warning(
+                                    "image %s not found in zipfile but page has text; skipping",
+                                    zip_image_path,
                                 )
-                            print([f for f in file_namelist if page_basename in f])
+                            logger.debug(
+                                "matching filenames: %s",
+                                [f for f in file_namelist if page_basename in f],
+                            )
 
                         yield page
 
@@ -377,8 +394,27 @@ def main():
         help="Directory where the updated page corpus and image archive file should be saved",
         type=Path,
     )
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        type=str.lower,
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Logging verbosity (default: info); case-insensitive",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        help="Write log output to this file instead of stderr",
+    )
 
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=args.log_level.upper(),
+        format="%(levelname)s: %(message)s",
+        filename=args.log_file,
+    )
 
     if not args.output_dir.is_dir():
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -390,17 +426,25 @@ def main():
         # because we extend, we need to rename any existing outpt file
         old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
         output_pages_path.rename(old_output_pages)
-        print(
-            f"Warning: output file {output_pages_path} exists; renamed to {old_output_pages}"
+        logger.warning(
+            "output file %s exists; renamed to %s",
+            output_pages_path,
+            old_output_pages,
         )
     if output_archive_path.exists():
-        print(f"Warning: output file {output_archive_path} already exists, overwriting")
+        logger.warning(
+            "output file %s already exists, overwriting", output_archive_path
+        )
 
     # use a polars lazy frame to calculate the total so tqdm can estimate completion
     start_time = perf_counter()
     total_pages = pl.scan_ndjson(args.input).select(pl.len()).collect().item()
     end_time = perf_counter()
-    print(f"{total_pages:,} total pages (calculated in {end_time - start_time:0.2f}s)")
+    logger.info(
+        "%s total pages (calculated in %0.2fs)",
+        f"{total_pages:,}",
+        end_time - start_time,
+    )
     # configure tqdm to format as comma delimited numbers - from https://stackoverflow.com/a/76964589
     tqdm.format_sizeof = lambda x, divisor=None: (f"{x:,}" if divisor else f"{x:5.2f}")
     # Stream pages one at a time; corpus is sorted by work+page so we can
