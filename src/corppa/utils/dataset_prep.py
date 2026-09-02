@@ -230,7 +230,8 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     )
 
     # NOTE: for excerpt, page count is not expected to match but should be >= total
-    if zip_pages_df.height < expected_page_count:
+    zip_count_mismatch = zip_pages_df.height < expected_page_count
+    if zip_count_mismatch:
         logger.warning(
             "page count mismatch; pages in zipfiles (%d, expected at least %d)",
             zip_pages_df.height,
@@ -242,8 +243,9 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
         .join(zip_pages_df, on="page_id")
         .with_columns(text_match=pds.str_fuzz("text", "text_right", parallel=True))
     )
-    if expected_page_count != pages_join_df.height:
-        # TODO: don't repeat if we already warned about zip total page count
+    # only warn about the joined page count if we didn't already warn about
+    # the zip page count above, to avoid a redundant warning
+    if not zip_count_mismatch and expected_page_count != pages_join_df.height:
         logger.warning(
             "joined pages (%d) does not match expected page count (%d)",
             pages_join_df.height,
@@ -254,7 +256,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
 
     # for now, just report the average score
     avg = pages_join_df["text_match"].mean()
-    tqdm.write(
+    logger.info(
         f"{work_id: <30} {pages_df.height:> 4,} pages; average indel similarity score: {avg:.3f}"
     )
     # might be lower than this; at least one 0.87 is visibly correct alignment
