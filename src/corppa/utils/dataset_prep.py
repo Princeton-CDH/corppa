@@ -103,6 +103,10 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     ).filter(pl.col.text_len.gt(MIN_MATCH_TEXT_LEN))
     if long_pages_df.height == 0:
         # no long-enough pages at all - can't determine a shift, so give up
+        logger.warning(
+            "No pages over %d characters; cannot determine page shift",
+            MIN_MATCH_TEXT_LEN,
+        )
         return empty_mapping_df
 
     # single vectorized fuzzy comparison of every long page against every zip
@@ -119,8 +123,10 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     long_orders = long_pages_df["order"].to_numpy()
 
     # best match per long page, plus the runner-up for the ambiguity guard
+    # - get index of best match for each long page
     best_idx = scores.argmax(axis=1)
     row_idx = np.arange(scores.shape[0])
+    # - get the best score for each long page
     best_score = scores[row_idx, best_idx]
     if scores.shape[1] >= 2:
         # second-highest score in each row (np.partition puts the 2nd-largest
