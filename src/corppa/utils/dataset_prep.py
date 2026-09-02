@@ -12,6 +12,7 @@ import orjsonl
 import polars as pl
 import polars_ds as pds
 import rapidfuzz
+from intspan import intspan
 from tqdm import tqdm
 
 from corppa.utils.path_utils import (
@@ -179,20 +180,18 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         n_pages=pl.len(),
     )
 
-    # summarize the page shift(s) applied to align this work at info level,
-    # including the page ranges each shift covers
-    shift_counts = (
-        seg_summary_df.group_by("shift")
-        .agg(
-            n_pages=pl.col.n_pages.sum(),
-            ranges=pl.concat_str(pl.col.first_order, pl.lit("-"), pl.col.last_order),
-        )
+    # summarize the page shift(s) applied to align this work at info level.
+    # intspan consolidates each shift's orders into compact, contiguous page
+    # ranges (e.g. 1-510), so segments that split for other reasons merge.
+    shift_orders = (
+        pages_shift_df.group_by("seg_shift")
+        .agg(orders=pl.col.order, n_pages=pl.len())
         .sort("n_pages", descending=True)
     )
     shift_summary = ", ".join(
-        f"{int(row['shift'])} ({row['n_pages']:,} pages, "
-        f"pp. {'; '.join(row['ranges'])})"
-        for row in shift_counts.iter_rows(named=True)
+        f"{int(row['seg_shift'])} ({row['n_pages']:,} pages, "
+        f"pp. {intspan(row['orders'])})"
+        for row in shift_orders.iter_rows(named=True)
     )
     logger.info("page shift: %s", shift_summary)
 
