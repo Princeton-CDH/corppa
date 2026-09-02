@@ -79,9 +79,7 @@ MATCH_SCORE_MARGIN = 3
 MATCH_SCORE_STRONG = 99
 
 
-def align_shifted_pages(
-    work_id: str, pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame
-):
+def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     """Align corpus pages to zip page filenames when page order has shifted
     between versions. Shifts are determined only from long (reliable) pages via
     a single vectorized fuzzy comparison; short pages inherit the shift of the
@@ -195,7 +193,7 @@ def align_shifted_pages(
         f"pp. {intspan(row['orders'])})"
         for row in shift_orders.iter_rows(named=True)
     )
-    logger.info("%s page shift: %s", work_id, shift_summary)
+    logger.info("page shift: %s", shift_summary)
 
     if logger.isEnabledFor(logging.DEBUG):
         for seg in seg_summary_df.iter_rows(named=True):
@@ -281,7 +279,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     if avg is not None and avg > 0.87:
         page_mapping_df = pages_join_df
     else:
-        page_mapping_df = align_shifted_pages(work_id, pages_df, zip_pages_df)
+        page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
         if page_mapping_df.is_empty():
             return
 
@@ -461,7 +459,7 @@ def main():
         end_time - start_time,
     )
     # configure tqdm to format as comma delimited numbers - from https://stackoverflow.com/a/76964589
-    tqdm.format_sizeof = lambda x, divisor=None: (f"{x:,}" if divisor else f"{x:5.2f}")
+    tqdm.format_sizeof = lambda x, divisor=None: f"{x:,}" if divisor else f"{x:5.2f}"
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
     with tarfile.open(output_archive_path, "w:gz") as tar:
