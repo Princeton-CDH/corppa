@@ -250,7 +250,7 @@ def test_align_shifted_pages_consistent_shift():
         seeds=seeds,
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -285,7 +285,7 @@ def test_align_shifted_pages_includes_head_pages():
         }
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -299,7 +299,7 @@ def test_align_shifted_pages_returns_id_and_filename_columns():
     seeds = [f"page-{i}-content" for i in range(3)]
     pages_df, zip_pages_df = _make_shifted_frames([1, 2, 3], [5, 6, 7], seeds)
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result is not None
     assert set(result.columns) >= {"id", "page_filename"}
@@ -318,7 +318,7 @@ def test_align_shifted_pages_no_content_match():
         [f"zzzzz-{i}-qqqqq" for i in range(5)],
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result.is_empty()
 
@@ -347,7 +347,7 @@ def test_align_shifted_pages_small_df_uses_all_anchors():
         }
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -377,7 +377,7 @@ def test_align_shifted_pages_single_long_anchor():
         }
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
     assert mapping == {
@@ -401,7 +401,7 @@ def test_align_shifted_pages_all_pages_short_returns_empty():
         [1, 2, 3], [1, 2, 3], ["short one", "short two", "short three"]
     )
 
-    result = align_shifted_pages(pages_df, zip_pages_df)
+    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
 
     assert result is not None
     assert result.is_empty()

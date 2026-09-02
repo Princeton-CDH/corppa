@@ -79,7 +79,9 @@ MATCH_SCORE_MARGIN = 3
 MATCH_SCORE_STRONG = 99
 
 
-def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
+def align_shifted_pages(
+    work_id: str, pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame
+):
     """Align corpus pages to zip page filenames when page order has shifted
     between versions. Shifts are determined only from long (reliable) pages via
     a single vectorized fuzzy comparison; short pages inherit the shift of the
@@ -193,7 +195,7 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         f"pp. {intspan(row['orders'])})"
         for row in shift_orders.iter_rows(named=True)
     )
-    logger.info("page shift: %s", shift_summary)
+    logger.info("%s page shift: %s", work_id, shift_summary)
 
     if logger.isEnabledFor(logging.DEBUG):
         for seg in seg_summary_df.iter_rows(named=True):
@@ -247,7 +249,8 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     zip_count_mismatch = zip_pages_df.height < expected_page_count
     if zip_count_mismatch:
         logger.warning(
-            "page count mismatch; pages in zipfiles (%d, expected at least %d)",
+            "%s page count mismatch; pages in zipfiles (%d, expected at least %d)",
+            work_id,
             zip_pages_df.height,
             expected_page_count,
         )
@@ -261,7 +264,8 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     # the zip page count above, to avoid a redundant warning
     if not zip_count_mismatch and expected_page_count != pages_join_df.height:
         logger.warning(
-            "joined pages (%d) does not match expected page count (%d)",
+            "%s joined pages (%d) does not match expected page count (%d)",
+            work_id,
             pages_join_df.height,
             expected_page_count,
         )
@@ -277,7 +281,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
     if avg is not None and avg > 0.87:
         page_mapping_df = pages_join_df
     else:
-        page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
+        page_mapping_df = align_shifted_pages(work_id, pages_df, zip_pages_df)
         if page_mapping_df.is_empty():
             return
 
