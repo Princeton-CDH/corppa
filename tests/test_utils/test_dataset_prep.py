@@ -146,7 +146,8 @@ def test_align_pages_good_match_returns_mapping(pages_df, aligned_zip):
 
 def test_align_pages_low_match_falls_through_to_shifted(tmp_path):
     # Content differs entirely -> avg score is low -> falls through to
-    # align_shifted_pages, which finds no matches and returns None.
+    # align_shifted_pages, which finds no matches and returns an empty
+    # mapping, so align_pages returns None.
     # align_shifted_pages needs an `order` column and long-enough texts.
     pages_df = pl.DataFrame(
         {
@@ -305,7 +306,7 @@ def test_align_shifted_pages_returns_id_and_filename_columns():
 
 
 def test_align_shifted_pages_no_content_match():
-    # No shared content between pages and zip -> no anchor clears the cutoff
+    # No shared content between pages and zip -> no page clears the cutoff
     pages_df, _ = _make_shifted_frames(
         [1, 2, 3, 4, 5],
         [1, 2, 3, 4, 5],
@@ -319,7 +320,7 @@ def test_align_shifted_pages_no_content_match():
 
     result = align_shifted_pages(pages_df, zip_pages_df)
 
-    assert result is None or result.is_empty()
+    assert result.is_empty()
 
 
 def test_align_shifted_pages_small_df_uses_all_anchors():

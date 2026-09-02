@@ -7,6 +7,7 @@ from time import mktime, perf_counter
 from typing import Iterator, Optional
 from zipfile import ZipFile
 
+import numpy as np
 import orjsonl
 import polars as pl
 import polars_ds as pds
@@ -64,158 +65,140 @@ def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
     return list(exts)
 
 
+# minimum text length (in characters) for a page to be trusted as match
+# evidence when determining the page shift; shorter pages match unreliably
+MIN_MATCH_TEXT_LEN = 600
+# minimum fuzzy ratio (0-100) for a page match to be considered at all
+MATCH_SCORE_CUTOFF = 85
+# a page's best zip match must beat its runner-up by at least this many ratio
+# points to be trusted; guards against near-ties from repeated boilerplate pages
+MATCH_SCORE_MARGIN = 3
+# a best match at or above this ratio is treated as an unambiguous match and
+# trusted regardless of the runner-up margin (near-exact text match)
+MATCH_SCORE_STRONG = 99
+
+
 def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
-    # Implementation for finding alignment between pages
-    # calculate text length - may need to filter out short pages to avoid mismatches
-    # ensure pages are sorted by order so we can compare first, middle, and last pages for alignment
-    pages_df = pages_df.sort("order", descending=False).with_row_index()
-    orig_pages_df = pages_df  # save a copy of the unfiltered set
-    # filter out short pages to avoid unreliable matches
-    pages_df = pages_df.with_columns(text_len=pl.col.text.str.len_chars()).filter(
-        pl.col.text_len.gt(600)
-    )
-    # empty mapping frame; also used as an early-return value for chunks we
-    # can't align (see short-chunk guard below)
+    """Align corpus pages to zip page filenames when page order has shifted
+    between versions. Shifts are determined only from long (reliable) pages via
+    a single vectorized fuzzy comparison; short pages inherit the shift of the
+    surrounding long pages. Contiguous runs of equal shift are handled
+    independently so works with mid-document insertions/removals still align.
+
+    Returns a DataFrame with ``id`` and ``page_filename`` columns (possibly
+    empty if no reliable shift can be determined)."""
+    # empty mapping frame, used as the early-return value when no long pages
+    # clear the filter or no reliable shift can be determined
     empty_mapping_df = pl.DataFrame(
         schema={"id": pl.String, "page_filename": pl.String}
     )
-    # No long-enough pages at all - can't determine a shift, so give up.
-    # This is also the recursion base case for chunks where every page is short.
-    total_pages = pages_df.height
-    if total_pages == 0:
-        return empty_mapping_df
-    # positions (in the filtered pages df) of the anchor pages we'll compare
-    # against the zip pages. Normally we sample first/middle/last long pages;
-    # when the filtered set is small (< 3), sampling would produce duplicate
-    # anchors, so use every long page as an anchor instead.
-    if total_pages < 3:
-        anchor_positions = list(range(total_pages))
-    else:
-        anchor_positions = [0, total_pages // 2, total_pages - 1]
-    anchor_texts = pages_df["text"].gather(anchor_positions).to_list()
 
+    # sort by order and keep the full (unfiltered) set; short pages still need
+    # to be mapped even though they don't contribute match evidence
+    orig_pages_df = pages_df.sort("order", descending=False)
+
+    # long pages only: these are the pages we trust to determine the shift
+    long_pages_df = orig_pages_df.with_columns(
+        text_len=pl.col.text.str.len_chars()
+    ).filter(pl.col.text_len.gt(MIN_MATCH_TEXT_LEN))
+    if long_pages_df.height == 0:
+        # no long-enough pages at all - can't determine a shift, so give up
+        return empty_mapping_df
+
+    # single vectorized fuzzy comparison of every long page against every zip
+    # page; scores is an (n_long, n_zip) matrix, 0 where below the cutoff
     scores = rapidfuzz.process.cdist(
-        anchor_texts,
+        long_pages_df["text"].to_list(),
         zip_pages_df["text"].to_list(),
         scorer=rapidfuzz.fuzz.ratio,
         workers=-1,
-        score_cutoff=85,
+        score_cutoff=MATCH_SCORE_CUTOFF,
     )
 
-    prev_index = None
-    prev_shift = None
-    # iterate over the resulting scores for each anchor; if an alignment is
-    # consistent between two pairs, generate the page id to filename mapping
-    # for that chunk.
+    zip_orders = zip_pages_df["order"].to_numpy()
+    long_orders = long_pages_df["order"].to_numpy()
 
-    # accumulator: page id -> filename mappings across all aligned chunks
-    page_mapping_df = empty_mapping_df
+    # best match per long page, plus the runner-up for the ambiguity guard
+    best_idx = scores.argmax(axis=1)
+    row_idx = np.arange(scores.shape[0])
+    best_score = scores[row_idx, best_idx]
+    if scores.shape[1] >= 2:
+        # second-highest score in each row (np.partition puts the 2nd-largest
+        # at position -2); used to reject near-ties
+        second_score = np.partition(scores, -2, axis=1)[:, -2]
+    else:
+        # only one zip page: no runner-up to compare against
+        second_score = np.zeros_like(best_score)
 
-    # search_i indexes into anchor_positions and the rows of scores;
-    # anchor_pos is the row index in the filtered pages df, which lets us
-    # get back to the corresponding original page data via `page["index"]`
-    for search_i, anchor_pos in enumerate(anchor_positions):
-        page = pages_df.row(anchor_pos, named=True)
-        # get the index of the highest scoreh in the zip pages for this search text
-        zip_page_i = scores[search_i].argmax()
-        # get the value for the best score
-        match_score = scores[search_i][zip_page_i]
-        if match_score:
-            # get the data for the matched page
-            zip_page = zip_pages_df.row(zip_page_i, named=True)
-            # how much did pages shift?
-            shift = page["order"] - zip_page["order"]
-        else:
-            # if match score is zero, it fell below our threshold - no good match was found
-            shift = None
+    # a long page's shift is trusted when it has a real match (score > 0, i.e.
+    # above the cutoff) that is either near-exact or clearly beats its runner-up
+    confident = (best_score > 0) & (
+        (best_score >= MATCH_SCORE_STRONG)
+        | ((best_score - second_score) >= MATCH_SCORE_MARGIN)
+    )
+    shifts = long_orders - zip_orders[best_idx]
+    trusted_shift = np.where(confident, shifts, np.nan)
 
-        # head chunk: on the first iteration, map any pages before the first
-        # anchor (typically short pages that were filtered out) using this
-        # anchor's shift so the mapping covers the start of the work.
-        if search_i == 0 and shift is not None and page["index"] > 0:
-            head_chunk_df = orig_pages_df.slice(0, page["index"])
-            zip_shift_df = zip_pages_df.with_columns(
-                aligned_order=pl.col("order") + shift
+    long_shift_df = long_pages_df.select("order").with_columns(
+        # NaN marks unconfident pages; convert to null so fill logic treats
+        # them as gaps to be filled from neighbors
+        shift=pl.Series(trusted_shift).fill_nan(None)
+    )
+    if long_shift_df["shift"].drop_nulls().is_empty():
+        # no long page produced a confident, unambiguous match
+        return empty_mapping_df
+
+    # attach the trusted long-page shifts back onto the full page set; short
+    # pages (and unconfident long pages) start with a null shift
+    pages_shift_df = orig_pages_df.join(long_shift_df, on="order", how="left")
+
+    # fill short/unconfident pages from their neighbors: forward-fill assigns
+    # each gap the preceding long page's shift; backward-fill covers any
+    # leading pages before the first long page. At a run boundary a short page
+    # inherits the preceding run's shift (forward_fill wins).
+    pages_shift_df = pages_shift_df.with_columns(
+        seg_shift=pl.col.shift.forward_fill().backward_fill()
+    )
+
+    # split into contiguous runs of equal shift; each run aligns independently
+    # so a mid-document insertion/removal doesn't corrupt the rest of the work
+    pages_shift_df = pages_shift_df.with_columns(
+        seg_id=(pl.col.seg_shift != pl.col.seg_shift.shift(1)).cum_sum()
+    )
+
+    if logger.isEnabledFor(logging.DEBUG):
+        for seg in (
+            pages_shift_df.group_by("seg_id", maintain_order=True)
+            .agg(
+                shift=pl.col.seg_shift.first(),
+                first_order=pl.col.order.first(),
+                last_order=pl.col.order.last(),
+                n_pages=pl.len(),
             )
-            head_mapping_df = head_chunk_df.join(
-                zip_shift_df,
-                left_on="order",
-                right_on="aligned_order",
-                how="left",
-            ).select(["id", "page_filename"])
-            page_mapping_df = page_mapping_df.vstack(head_mapping_df)
-
-        # generate mapping for the strict chunk between the previous anchor
-        # and this one. Must be strict (not extended to end) so recursion
-        # inputs are always smaller than this call's input; extending to end
-        # here could equal orig_pages_df and cause infinite recursion.
-        if prev_shift is not None and prev_index is not None:
-            page_chunk_df = orig_pages_df.slice(prev_index, page["index"] - prev_index)
-            chunk_p1 = page_chunk_df.row(0, named=True)
-            chunk_p2 = page_chunk_df.row(page_chunk_df.height - 1, named=True)
-            # if shift amount matches, we have an alignment;
-            # generate page mappings for the chunk between this search text and the previous
-            if shift == prev_shift:
-                logger.debug(
-                    "found alignment shift=%s for pages %s (i%s) to %s (i%s)",
-                    shift,
-                    chunk_p1["order"],
-                    chunk_p1["index"],
-                    chunk_p2["order"],
-                    chunk_p2["index"],
-                )
-                # create an order field adjusted by the required shift, so we can join
-                zip_shift_df = zip_pages_df.with_columns(
-                    aligned_order=pl.col("order") + prev_shift
-                )
-                # join the chunk of pages with the zip pages based on the aligned order
-                chunk_mapping_df = page_chunk_df.join(
-                    zip_shift_df,
-                    left_on="order",
-                    right_on="aligned_order",
-                    how="left",
-                ).select(["id", "page_filename"])
-            else:
-                # if shifts don't match, recurse on this chunk of pages
-                logger.debug(
-                    "recursing for pages %s (i%s) to %s (i%s)",
-                    chunk_p1["order"],
-                    chunk_p1["index"],
-                    chunk_p2["order"],
-                    chunk_p2["index"],
-                )
-                # drop row index for current loop so it can be added for the smaller chunk
-                # TODO: limit zip_pages to pages *after* any previously found alignments
-                chunk_mapping_df = align_shifted_pages(
-                    page_chunk_df.drop("index"), zip_pages_df
-                )
-
-            # add mapping for each set of pages to the aggregate mapping df
-            if chunk_mapping_df is not None and not chunk_mapping_df.is_empty():
-                page_mapping_df = page_mapping_df.vstack(chunk_mapping_df)
-
-        # update previous values for next loop
-        prev_shift = shift
-        prev_index = page["index"]
-
-    # tail: map pages from the last anchor to the end using the last anchor's
-    # shift. Handled after the loop so it covers both aligned and recursed
-    # last chunks (the between-anchors block only covers pages before the
-    # current anchor).
-    if prev_shift is not None and prev_index is not None:
-        tail_chunk_df = orig_pages_df.slice(prev_index)
-        if not tail_chunk_df.is_empty():
-            zip_shift_df = zip_pages_df.with_columns(
-                aligned_order=pl.col("order") + prev_shift
+            .iter_rows(named=True)
+        ):
+            logger.debug(
+                "alignment shift=%s for orders %s-%s (%s pages)",
+                seg["shift"],
+                seg["first_order"],
+                seg["last_order"],
+                seg["n_pages"],
             )
-            tail_mapping_df = tail_chunk_df.join(
-                zip_shift_df,
-                left_on="order",
-                right_on="aligned_order",
-                how="left",
-            ).select(["id", "page_filename"])
-            page_mapping_df = page_mapping_df.vstack(tail_mapping_df)
 
+    # single join for the whole work: shift each page's order and look up the
+    # zip page filename at the aligned order
+    page_mapping_df = (
+        pages_shift_df.with_columns(
+            aligned_order=(pl.col.order - pl.col.seg_shift).cast(pl.Int64)
+        )
+        .join(
+            zip_pages_df.select(["order", "page_filename"]),
+            left_on="aligned_order",
+            right_on="order",
+            how="left",
+        )
+        .select(["id", "page_filename"])
+    )
     return page_mapping_df
 
 
@@ -273,7 +256,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
         page_mapping_df = pages_join_df
     else:
         page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
-        if page_mapping_df is None or page_mapping_df.is_empty():
+        if page_mapping_df.is_empty():
             return
 
     # construct and return a dictionary mapping original page id to corresponding filename in the zipfile
@@ -289,7 +272,7 @@ def process_work(
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
-            pass  # skip for debug/test
+            yield from []  # skip for debug/test
             # yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
             yield from process_ht_work(work_id, pages, image_dir, tar)
@@ -335,7 +318,8 @@ def process_ht_work(
             page_mapping = align_pages(work_id, pl.DataFrame(pages), ht_zip)
             if not page_mapping:
                 logger.warning(
-                    "no page mapping found for work %s, omitting images", work_id
+                    "no page mapping found for work %s, omitting images",
+                    work_id,
                 )
                 # yield pages without image paths
                 yield from pages
