@@ -314,7 +314,7 @@ def process_ht_work(
     # zip file is named based on id without institution prefix
     # must be encoded to convert ark style ids to file safe format
     htid_suffix = encode_htid(htid).split(".")[-1]
-    zipfile_path = image_dir / encode_htid(htid) / f"{htid_suffix}.zip"
+    zipfile_path = image_dir / "HathiTrust" / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
         logger.warning("zipfile %s does not exist, omitting images", zipfile_path)
         # yield pages without image paths
