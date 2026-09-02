@@ -172,17 +172,32 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         seg_id=(pl.col.seg_shift != pl.col.seg_shift.shift(1)).cum_sum()
     )
 
+    seg_summary_df = pages_shift_df.group_by("seg_id", maintain_order=True).agg(
+        shift=pl.col.seg_shift.first(),
+        first_order=pl.col.order.first(),
+        last_order=pl.col.order.last(),
+        n_pages=pl.len(),
+    )
+
+    # summarize the page shift(s) applied to align this work at info level,
+    # including the page ranges each shift covers
+    shift_counts = (
+        seg_summary_df.group_by("shift")
+        .agg(
+            n_pages=pl.col.n_pages.sum(),
+            ranges=pl.concat_str(pl.col.first_order, pl.lit("-"), pl.col.last_order),
+        )
+        .sort("n_pages", descending=True)
+    )
+    shift_summary = ", ".join(
+        f"{int(row['shift'])} ({row['n_pages']:,} pages, "
+        f"pp. {'; '.join(row['ranges'])})"
+        for row in shift_counts.iter_rows(named=True)
+    )
+    logger.info("page shift: %s", shift_summary)
+
     if logger.isEnabledFor(logging.DEBUG):
-        for seg in (
-            pages_shift_df.group_by("seg_id", maintain_order=True)
-            .agg(
-                shift=pl.col.seg_shift.first(),
-                first_order=pl.col.order.first(),
-                last_order=pl.col.order.last(),
-                n_pages=pl.len(),
-            )
-            .iter_rows(named=True)
-        ):
+        for seg in seg_summary_df.iter_rows(named=True):
             logger.debug(
                 "alignment shift=%s for orders %s-%s (%s pages)",
                 seg["shift"],
