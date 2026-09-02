@@ -114,7 +114,6 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     # search_i indexes into anchor_positions and the rows of scores;
     # anchor_pos is the row index in the filtered pages df, which lets us
     # get back to the corresponding original page data via `page["index"]`
-    last_search_i = len(anchor_positions) - 1
     for search_i, anchor_pos in enumerate(anchor_positions):
         page = pages_df.row(anchor_pos, named=True)
         # get the index of the highest scoreh in the zip pages for this search text
@@ -132,38 +131,26 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
 
         # head chunk: on the first iteration, map any pages before the first
         # anchor (typically short pages that were filtered out) using this
-        # anchor's shift so the mapping covers the start of the work. When
-        # this is also the only anchor (single-page filtered set), extend
-        # to the end of pages since the between-anchors branch will never fire.
-        if search_i == 0 and shift is not None:
-            head_end = (
-                orig_pages_df.height if search_i == last_search_i else page["index"]
+        # anchor's shift so the mapping covers the start of the work.
+        if search_i == 0 and shift is not None and page["index"] > 0:
+            head_chunk_df = orig_pages_df.slice(0, page["index"])
+            zip_shift_df = zip_pages_df.with_columns(
+                aligned_order=pl.col("order") + shift
             )
-            if head_end > 0:
-                head_chunk_df = orig_pages_df.slice(0, head_end)
-                zip_shift_df = zip_pages_df.with_columns(
-                    aligned_order=pl.col("order") + shift
-                )
-                head_mapping_df = head_chunk_df.join(
-                    zip_shift_df,
-                    left_on="order",
-                    right_on="aligned_order",
-                    how="left",
-                ).select(["id", "page_filename"])
-                page_mapping_df = page_mapping_df.vstack(head_mapping_df)
+            head_mapping_df = head_chunk_df.join(
+                zip_shift_df,
+                left_on="order",
+                right_on="aligned_order",
+                how="left",
+            ).select(["id", "page_filename"])
+            page_mapping_df = page_mapping_df.vstack(head_mapping_df)
 
-        # generate mapping for chunk between this one and the previous
+        # generate mapping for the strict chunk between the previous anchor
+        # and this one. Must be strict (not extended to end) so recursion
+        # inputs are always smaller than this call's input; extending to end
+        # here could equal orig_pages_df and cause infinite recursion.
         if prev_shift is not None and prev_index is not None:
-            # TODO: include short pages before/after first and last search pages when generating alignment
-            # (assume matches alignment of pages we are able to match)
-            # on the last iteration, extend the chunk to the end of pages so the
-            # final anchor and any pages after it are included in the mapping
-            if search_i == last_search_i:
-                page_chunk_df = orig_pages_df.slice(prev_index)
-            else:
-                page_chunk_df = orig_pages_df.slice(
-                    prev_index, page["index"] - prev_index
-                )
+            page_chunk_df = orig_pages_df.slice(prev_index, page["index"] - prev_index)
             chunk_p1 = page_chunk_df.row(0, named=True)
             chunk_p2 = page_chunk_df.row(page_chunk_df.height - 1, named=True)
             # if shift amount matches, we have an alignment;
@@ -210,6 +197,24 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         # update previous values for next loop
         prev_shift = shift
         prev_index = page["index"]
+
+    # tail: map pages from the last anchor to the end using the last anchor's
+    # shift. Handled after the loop so it covers both aligned and recursed
+    # last chunks (the between-anchors block only covers pages before the
+    # current anchor).
+    if prev_shift is not None and prev_index is not None:
+        tail_chunk_df = orig_pages_df.slice(prev_index)
+        if not tail_chunk_df.is_empty():
+            zip_shift_df = zip_pages_df.with_columns(
+                aligned_order=pl.col("order") + prev_shift
+            )
+            tail_mapping_df = tail_chunk_df.join(
+                zip_shift_df,
+                left_on="order",
+                right_on="aligned_order",
+                how="left",
+            ).select(["id", "page_filename"])
+            page_mapping_df = page_mapping_df.vstack(tail_mapping_df)
 
     return page_mapping_df
 
