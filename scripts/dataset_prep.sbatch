@@ -43,7 +43,7 @@ cd /scratch/network/<USER>/corppa
 # multithreaded polars / rapidfuzz honor the allocated CPUs
 export POLARS_MAX_THREADS="${SLURM_CPUS_PER_TASK:-8}"
 
-INPUT=/scratch/network/<USER>/corppa/ppa_corpus.jsonl
+INPUT=/scratch/network/<USER>/corppa/ppa_pages.jsonl.gz
 IMAGE_DIR=/scratch/network/<USER>/corppa/images
 OUTPUT_DIR=/scratch/network/<USER>/corppa/dataset
 
