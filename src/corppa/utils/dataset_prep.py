@@ -84,7 +84,7 @@ def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
 
 
 # minimum text length (in characters) for a page to be matched against zip pages
-MIN_MATCH_TEXT_LEN = 600
+MIN_MATCH_TEXT_LEN = 450
 # minimum similarity (0-100) for a page match to be considered;
 # uses rapidfuzz.fuzz.ratio, which returns normalized Indel similarity
 MATCH_SCORE_CUTOFF = 85
@@ -98,13 +98,15 @@ MATCH_SCORE_STRONG = 99
 
 def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     """Align corpus pages to zip page filenames when page order has shifted
-    between versions. Shifts are determined only from long (reliable) pages via
-    a single vectorized fuzzy comparison; short pages inherit the shift of the
-    surrounding long pages. Contiguous runs of equal shift are handled
-    independently so works with mid-document insertions/removals still align.
+    between versions. Shifts are determined by matching pages with sufficient text
+    in the first dataframe to pages in the zip file using normalized indel similarity
+    (rapidfuzz.fuzz.ratio). Short pages and pages with low-confidence matches are aligned
+    based on the shift of the nearest preceding alignment, or nearest following alignment
+    if no preceding alignment.
 
-    Returns a DataFrame with ``id`` and ``page_filename`` columns (possibly
-    empty if no reliable shift can be determined)."""
+    Returns a DataFrame with ``id`` and ``page_filename`` columns where each row
+    is the determined alignment; returns an empty dataframe if alignment could not be determined.
+    ."""
     # empty mapping frame, used as the early-return value when no long pages
     # clear the filter or no reliable shift can be determined
     empty_mapping_df = pl.DataFrame(
@@ -127,8 +129,8 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         )
         return empty_mapping_df
 
-    # single vectorized fuzzy comparison of every long page against every zip
-    # page; scores is an (n_long, n_zip) matrix, 0 where below the cutoff
+    # compare every long page in the original set with every page in the zip file
+    # returns an (n_long, n_zip) matrix; scores below the cutoff are 0
     scores = rapidfuzz.process.cdist(
         long_pages_df["text"].to_list(),
         zip_pages_df["text"].to_list(),
@@ -137,10 +139,11 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         score_cutoff=MATCH_SCORE_CUTOFF,
     )
 
+    # get page order (digital sequence) for both sets as ndarray
     zip_orders = zip_pages_df["order"].to_numpy()
     long_orders = long_pages_df["order"].to_numpy()
 
-    # best match per long page, plus the runner-up for the ambiguity guard.
+    # determine best match for each long page, plus the next best to ensure high-confidence match
     # argpartition on the last two positions gathers each row's two largest
     # scores (unordered between themselves) in one pass; take their max/min to
     # get the best and runner-up, and the argpartition index for the best.
@@ -172,78 +175,60 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     trusted_shift = np.where(confident, shifts, np.nan)
 
     long_shift_df = long_pages_df.select("order").with_columns(
-        # NaN marks unconfident pages; convert to null so fill logic treats
-        # them as gaps to be filled from neighbors
+        # NaN marks pages without confident matches; convert to nulls so we can forward/back fill
         shift=pl.Series(trusted_shift).fill_nan(None)
     )
     if long_shift_df["shift"].drop_nulls().is_empty():
         # no long page produced a confident, unambiguous match
+        logger.warning("No high-confidence matches found; cannot determine page shift")
         return empty_mapping_df
 
-    # attach the trusted long-page shifts back onto the full page set; short
-    # pages (and unconfident long pages) start with a null shift
-    pages_shift_df = orig_pages_df.join(long_shift_df, on="order", how="left")
-
-    # for pages without a confident match (i.e. short page or ambiguous match),
-    # use the alignment from the nearest long page; fill forward, then fill backward
-    # to cover any short pages before the first long page.
-    pages_shift_df = pages_shift_df.with_columns(
-        seg_shift=pl.col.shift.forward_fill().backward_fill()
+    # combine the high-confidence alignment shift values into the full page dataframe;
+    # left join to keep all pages; shift is null for short pages & low-confidence matches
+    pages_shift_df = orig_pages_df.join(
+        long_shift_df, on="order", how="left"
+    ).with_columns(
+        # determine shift for all pages; use nearest high-confidence match (preceding page, then following)
+        # to determine shift for pages without alignment
+        inferred_shift=pl.col.shift.forward_fill().backward_fill()
     )
-
-    # split into contiguous runs of equal shift; each run aligns independently
-    # so a mid-document insertion/removal doesn't corrupt the rest of the work
-    pages_shift_df = pages_shift_df.with_columns(
-        seg_id=(pl.col.seg_shift != pl.col.seg_shift.shift(1)).cum_sum()
-    )
-
-    seg_summary_df = pages_shift_df.group_by("seg_id", maintain_order=True).agg(
-        shift=pl.col.seg_shift.first(),
-        first_order=pl.col.order.first(),
-        last_order=pl.col.order.last(),
-        n_pages=pl.len(),
-    )
-
-    # summarize the page shift(s) applied to align this work at info level.
-    # intspan consolidates each shift's orders into compact, contiguous page
-    # ranges (e.g. 1-510), so segments that split for other reasons merge.
-    shift_orders = (
-        pages_shift_df.group_by("seg_shift")
-        .agg(orders=pl.col.order, n_pages=pl.len())
-        .sort("n_pages", descending=True)
-    )
-    shift_summary = ", ".join(
-        f"{int(row['seg_shift'])} ({row['n_pages']:,} pages, "
-        f"pp. {intspan(row['orders'])})"
-        for row in shift_orders.iter_rows(named=True)
-    )
-    logger.info("page shift: %s", shift_summary)
-
-    if logger.isEnabledFor(logging.DEBUG):
-        for seg in seg_summary_df.iter_rows(named=True):
-            logger.debug(
-                "alignment shift=%s for orders %s-%s (%s pages)",
-                seg["shift"],
-                seg["first_order"],
-                seg["last_order"],
-                seg["n_pages"],
-            )
+    # summarize the shift for logging output when info-level is enabled
+    if logger.isEnabledFor(logging.INFO):
+        shift_summary_df = pages_shift_df.group_by("inferred_shift").agg(
+            n_pages=pl.len(), orders=pl.col.order
+        )
+        # count how many alignments were inferred
+        num_inferred = pages_shift_df.filter(pl.col.shift.is_null()).height
+        pct_inferred = f"{num_inferred / pages_df.height:.1%}"
+        # use intspan to combine the list of pages into a readable format
+        shift_summary = "; ".join(
+            f"{int(row['inferred_shift']):+d} ({intspan(row['orders'])}, {row['n_pages']:,} pages)"
+            for row in shift_summary_df.iter_rows(named=True)
+        )
+        logger.info(
+            "page shift: %s \t%d alignment%s inferred (%s)",
+            shift_summary,
+            num_inferred,
+            ""
+            if num_inferred == 1
+            else "s",  # conditionallypluralize inferred alignment
+            pct_inferred,
+        )
 
     # single join for the whole work: shift each page's order and look up the
     # zip page filename at the aligned order
-    page_mapping_df = (
-        pages_shift_df.with_columns(
-            aligned_order=(pl.col.order + pl.col.seg_shift).cast(pl.Int64)
-        )
-        .join(
-            zip_pages_df.select(["order", "page_filename"]),
-            left_on="aligned_order",
-            right_on="order",
-            how="left",
-        )
-        .select(["id", "page_filename"])
+    page_mapping_df = pages_shift_df.with_columns(
+        # calculate the aligned order by applying the actual or inferred shift to original order
+        aligned_order=(pl.col.order + pl.col.inferred_shift).cast(pl.Int64)
+    ).join(
+        # then join all pages on the new aligned order
+        zip_pages_df.select(["order", "page_filename"]),
+        left_on="aligned_order",
+        right_on="order",
+        how="left",
     )
-    return page_mapping_df
+    # TODO : check here - no dupes in page filename; is aligned order sequential
+    return page_mapping_df.select(["id", "page_filename"])
 
 
 # determine alignment between pages in different versions of hathitrust
