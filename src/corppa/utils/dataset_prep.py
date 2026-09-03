@@ -3,9 +3,10 @@ import argparse
 import logging
 import signal
 import tarfile
+from collections.abc import Iterator
 from pathlib import Path
 from time import mktime, perf_counter
-from typing import Iterator, Optional
+from typing import Optional
 from zipfile import ZipFile
 
 import numpy as np
@@ -81,10 +82,10 @@ def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
     return list(exts)
 
 
-# minimum text length (in characters) for a page to be trusted as match
-# evidence when determining the page shift; shorter pages match unreliably
+# minimum text length (in characters) for a page to be matched against zip pages
 MIN_MATCH_TEXT_LEN = 600
-# minimum fuzzy ratio (0-100) for a page match to be considered at all
+# minimum similarity (0-100) for a page match to be considered;
+# uses rapidfuzz.fuzz.ratio, which returns normalized Indel similarity
 MATCH_SCORE_CUTOFF = 85
 # a page's best zip match must beat its runner-up by at least this many ratio
 # points to be trusted; guards against near-ties from repeated boilerplate pages
@@ -153,10 +154,13 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         second_score = top2.min(axis=1)
     else:
         # only one zip page: no runner-up to compare against
+        best_idx = scores.argmax(axis=1)
+        best_score = scores[row_idx, best_idx]
         second_score = np.zeros_like(best_score)
 
-    # a long page's shift is trusted when it has a real match (score > 0, i.e.
-    # above the cutoff) that is either near-exact or clearly beats its runner-up
+    # determine match confidence for each long page based on either:
+    # - strong match score
+    # - good match score (above the cutoff) that is clearly better than the next match
     confident = (best_score > 0) & (
         (best_score >= MATCH_SCORE_STRONG)
         | ((best_score - second_score) >= MATCH_SCORE_MARGIN)
@@ -177,10 +181,9 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     # pages (and unconfident long pages) start with a null shift
     pages_shift_df = orig_pages_df.join(long_shift_df, on="order", how="left")
 
-    # fill short/unconfident pages from their neighbors: forward-fill assigns
-    # each gap the preceding long page's shift; backward-fill covers any
-    # leading pages before the first long page. At a run boundary a short page
-    # inherits the preceding run's shift (forward_fill wins).
+    # for pages without a confident match (i.e. short page or ambiguous match),
+    # use the alignment from the nearest long page; fill forward, then fill backward
+    # to cover any short pages before the first long page.
     pages_shift_df = pages_shift_df.with_columns(
         seg_shift=pl.col.shift.forward_fill().backward_fill()
     )
@@ -241,7 +244,7 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
 
 
 # determine alignment between pages in different versions of hathitrust
-def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> dict:
+def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile) -> dict:
     expected_page_count = pages_df.height
     # load text files from zipfile into a polars dataframe
     zip_pages_df = (
@@ -270,10 +273,12 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
             zip_pages_df.height,
             expected_page_count,
         )
-    # extract bare page id from work_id.page_id globally unique page identifier
+    # join origin pages with zip pages on the numeric page id,
+    # and calculate a fuzzy text match score for each page using rapidfuzz fuzz ratio (normalized indel similarity)
     pages_join_df = (
         pages_df.with_columns(page_id=pl.col.id.str.extract(r"[._]([0-9]+$)"))
         .join(zip_pages_df, on="page_id")
+        # NOTE: if any multiprocessing is added to this script, remove parallel=True argument
         .with_columns(text_match=pds.str_fuzz("text", "text_right", parallel=True))
     )
     # only warn about the joined page count if we didn't already warn about
@@ -286,20 +291,20 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
             expected_page_count,
         )
 
-    # maybe filter out pages with no text when checking score? (probably omits nulls anyway...)
-
-    # for now, just report the average score
+    # determine the average score for pages with text (polars skips nulls in aggregation),
+    # as a way to check the overall alignment between the two sets of pages
     avg = pages_join_df["text_match"].mean()
     logger.info(
         f"{work_id: <30} {pages_df.height:> 4,} pages; average indel similarity score: {avg:.3f}"
     )
-    # might be lower than this; at least one 0.87 is visibly correct alignment
-    if avg is not None and avg > 0.87:
+    # at least one 0.87 is visibly correct alignment; use same cutoff as for the
+    # shift alignment, but adjust for the 0-1 score rather than 1-100 like cdist
+    if avg is not None and (avg * 100) > MATCH_SCORE_CUTOFF:
         page_mapping_df = pages_join_df
     else:
         page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
         if page_mapping_df.is_empty():
-            return
+            return {}
 
     # construct and return a dictionary mapping original page id to corresponding filename in the zipfile
     return {
@@ -326,7 +331,7 @@ def process_gale_work(
 ) -> Iterator[dict]:
     vol_img_dir = image_dir / get_vol_dir(get_volume_id(work_id))
     if vol_img_dir.is_dir():
-        # print(f"{work_id} : {vol_img_dir} : {len(pages)} pages")
+        logging.debug("%s : %s : %d pages", work_id, vol_img_dir, len(pages))
         for page in pages:
             # page id is work id + sequence, e.g. CB0127060085.0005
             # image filename can be constructed directly from page id

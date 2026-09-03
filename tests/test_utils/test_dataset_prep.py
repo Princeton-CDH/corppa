@@ -166,7 +166,7 @@ def test_align_pages_low_match_falls_through_to_shifted(tmp_path):
         {f"0000000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)},
     )
     with ZipFile(zip_path) as zf:
-        assert align_pages(WORK_ID, pages_df, zf) is None
+        assert align_pages(WORK_ID, pages_df, zf) == {}
 
 
 def test_align_pages_join_mismatch_returns_partial(tmp_path, pages_df):
