@@ -69,7 +69,7 @@ def add_zip_file_to_tar(
 
 
 def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
-    """HathiTrust zip files include in images in multiple formats; returns
+    """HathiTrust zip files include images in multiple formats; returns
     a list of all unique image extensions found in the zip file."""
     exts = set()
     for filename in zipfile.namelist():
@@ -116,9 +116,9 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     # long pages only: these are the pages we trust to determine the shift
     long_pages_df = orig_pages_df.with_columns(
         text_len=pl.col.text.str.len_chars()
-    ).filter(pl.col.text_len.gt(MIN_MATCH_TEXT_LEN))
+    ).filter(pl.col.text_len > MIN_MATCH_TEXT_LEN)
     if long_pages_df.height == 0:
-        # no long-enough pages at all - can't determine a shift, so give up
+        # no long-enough pages - can't determine a shift, so give up
         logger.warning(
             "No pages over %d characters; cannot determine page shift",
             MIN_MATCH_TEXT_LEN,
@@ -249,7 +249,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
         .with_columns(
             # extract the numeric page id for joining with page data
             # some works have filenames like OSU_32435051461309_00000602 ; others are simply numeric
-            page_id=pl.col.page_filename.str.extract(r"_?([0-9]+$)", 1)
+            page_id=pl.col.page_filename.str.extract(r"_?([0-9]+$)")
         )
         .with_columns(
             # make an order field to match page id so we can calculate size of shift
@@ -269,7 +269,7 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile):  #  -> 
         )
     # extract bare page id from work_id.page_id globally unique page identifier
     pages_join_df = (
-        pages_df.with_columns(page_id=pl.col.id.str.extract(r"[._]([0-9]+$)", 1))
+        pages_df.with_columns(page_id=pl.col.id.str.extract(r"[._]([0-9]+$)"))
         .join(zip_pages_df, on="page_id")
         .with_columns(text_match=pds.str_fuzz("text", "text_right", parallel=True))
     )
