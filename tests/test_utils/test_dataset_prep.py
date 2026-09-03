@@ -3,8 +3,10 @@
 
 import tarfile
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
+import orjsonl
 import polars as pl
 import pytest
 
@@ -13,6 +15,7 @@ from corppa.utils.dataset_prep import (
     align_pages,
     align_shifted_pages,
     get_zip_textfiles,
+    main,
 )
 
 WORK_ID = "htid:test.12345678"
@@ -250,7 +253,7 @@ def test_align_shifted_pages_consistent_shift():
         seeds=seeds,
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -285,7 +288,7 @@ def test_align_shifted_pages_includes_head_pages():
         }
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -299,7 +302,7 @@ def test_align_shifted_pages_returns_id_and_filename_columns():
     seeds = [f"page-{i}-content" for i in range(3)]
     pages_df, zip_pages_df = _make_shifted_frames([1, 2, 3], [5, 6, 7], seeds)
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result is not None
     assert set(result.columns) >= {"id", "page_filename"}
@@ -318,7 +321,7 @@ def test_align_shifted_pages_no_content_match():
         [f"zzzzz-{i}-qqqqq" for i in range(5)],
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result.is_empty()
 
@@ -347,7 +350,7 @@ def test_align_shifted_pages_small_df_uses_all_anchors():
         }
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
@@ -377,7 +380,7 @@ def test_align_shifted_pages_single_long_anchor():
         }
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
     assert mapping == {
@@ -401,7 +404,7 @@ def test_align_shifted_pages_all_pages_short_returns_empty():
         [1, 2, 3], [1, 2, 3], ["short one", "short two", "short three"]
     )
 
-    result = align_shifted_pages("test.work", pages_df, zip_pages_df)
+    result = align_shifted_pages(pages_df, zip_pages_df)
 
     assert result is not None
     assert result.is_empty()
@@ -418,3 +421,170 @@ def test_align_pages_underscore_page_id(aligned_zip):
         "work_00000002",
         "work_00000003",
     }
+
+
+# --- main / --continue ---
+
+
+def _pages_through(work_id, pages, image_dir, tar):
+    """Stand-in for process_work that yields pages unchanged (no images)."""
+    yield from pages
+
+
+def _write_corpus(path: Path, page_records: list[dict]) -> None:
+    """Write a list of page dicts to a JSONL corpus file."""
+    orjsonl.save(path, page_records)
+
+
+def _run_main(input_path, image_dir, output_dir, extra_args=None):
+    """Invoke main() with the given positional args (+ optional extras),
+    patching process_work so no image/zip handling is exercised."""
+    argv = [
+        "dataset_prep.py",
+        str(input_path),
+        str(image_dir),
+        str(output_dir),
+    ]
+    if extra_args:
+        argv += extra_args
+    with (
+        patch("sys.argv", argv),
+        patch(
+            "corppa.utils.dataset_prep.process_work",
+            side_effect=_pages_through,
+        ),
+    ):
+        main()
+
+
+@pytest.fixture
+def corpus_input(tmp_path):
+    """A small two-work corpus with two pages each."""
+    input_path = tmp_path / "input.jsonl"
+    _write_corpus(
+        input_path,
+        [
+            {"work_id": "workA", "id": "workA.0001", "text": "a1"},
+            {"work_id": "workA", "id": "workA.0002", "text": "a2"},
+            {"work_id": "workB", "id": "workB.0001", "text": "b1"},
+            {"work_id": "workB", "id": "workB.0002", "text": "b2"},
+        ],
+    )
+    return input_path
+
+
+def test_main_writes_all_works(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    _run_main(corpus_input, image_dir, output_dir)
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    output_tar = output_dir / "ppa_images.tar"
+    assert output_pages.exists()
+    # tar is uncompressed (not .tar.gz) so it can be appended to on continue
+    assert output_tar.exists()
+    assert not (output_dir / "ppa_images.tar.gz").exists()
+
+    written = list(orjsonl.stream(output_pages))
+    assert [p["id"] for p in written] == [
+        "workA.0001",
+        "workA.0002",
+        "workB.0001",
+        "workB.0002",
+    ]
+
+
+def test_main_continue_skips_completed_works(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    output_tar = output_dir / "ppa_images.tar"
+    # simulate a previous run that already completed workA
+    _write_corpus(
+        output_pages,
+        [
+            {"work_id": "workA", "id": "workA.0001", "text": "a1"},
+            {"work_id": "workA", "id": "workA.0002", "text": "a2"},
+        ],
+    )
+    # and produced an existing (uncompressed) tar
+    with tarfile.open(output_tar, "w"):
+        pass
+
+    _run_main(corpus_input, image_dir, output_dir, extra_args=["--continue"])
+
+    written = list(orjsonl.stream(output_pages))
+    # workA pages are preserved and only appear once; workB is appended
+    assert [p["id"] for p in written] == [
+        "workA.0001",
+        "workA.0002",
+        "workB.0001",
+        "workB.0002",
+    ]
+
+
+def test_main_continue_does_not_rename_existing_output(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    _write_corpus(
+        output_pages,
+        [{"work_id": "workA", "id": "workA.0001", "text": "a1"}],
+    )
+
+    _run_main(corpus_input, image_dir, output_dir, extra_args=["--continue"])
+
+    # continue appends in place; it must not create a .bak backup
+    assert not (output_dir / "ppa_pages.jsonl.bak").exists()
+
+
+def test_main_continue_missing_output_starts_fresh(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    # --continue with no existing output should behave like a fresh run
+    _run_main(corpus_input, image_dir, output_dir, extra_args=["--continue"])
+
+    written = list(orjsonl.stream(output_dir / "ppa_pages.jsonl"))
+    assert [p["id"] for p in written] == [
+        "workA.0001",
+        "workA.0002",
+        "workB.0001",
+        "workB.0002",
+    ]
+
+
+def test_main_without_continue_renames_existing_output(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    _write_corpus(
+        output_pages,
+        [{"work_id": "old", "id": "old.0001", "text": "old"}],
+    )
+
+    _run_main(corpus_input, image_dir, output_dir)
+
+    # existing output is renamed to a .bak file and rewritten fresh
+    backup = output_dir / "ppa_pages.jsonl.bak"
+    assert backup.exists()
+    assert [p["id"] for p in orjsonl.stream(backup)] == ["old.0001"]
+    written = list(orjsonl.stream(output_pages))
+    assert [p["id"] for p in written] == [
+        "workA.0001",
+        "workA.0002",
+        "workB.0001",
+        "workB.0002",
+    ]

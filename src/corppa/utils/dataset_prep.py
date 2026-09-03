@@ -407,6 +407,13 @@ def main():
         type=Path,
     )
     parser.add_argument(
+        "--continue",
+        dest="continue_run",
+        action="store_true",
+        help="Continue a previous run: append to existing output files and "
+        "skip works already present in the output JSONL",
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         type=str.lower,
@@ -433,20 +440,46 @@ def main():
     output_pages_path = (
         args.output_dir / "ppa_pages.jsonl"
     )  # .gz # disable compression for now, for testing
-    output_archive_path = args.output_dir / "ppa_images.tar.gz"
-    if output_pages_path.exists():
-        # because we extend, we need to rename any existing outpt file
-        old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
-        output_pages_path.rename(old_output_pages)
-        logger.warning(
-            "output file %s exists; renamed to %s",
-            output_pages_path,
-            old_output_pages,
-        )
-    if output_archive_path.exists():
-        logger.warning(
-            "output file %s already exists, overwriting", output_archive_path
-        )
+    # uncompressed tar so it can be reopened in append mode when continuing
+    output_archive_path = args.output_dir / "ppa_images.tar"
+
+    # set of work ids already present in the output; populated when continuing
+    completed_work_ids: set[str] = set()
+
+    if args.continue_run:
+        # append to existing output; collect work ids already written so we can
+        # skip them, rather than renaming/overwriting the existing files
+        if output_pages_path.exists():
+            completed_work_ids = {
+                page["work_id"] for page in orjsonl.stream(output_pages_path)
+            }
+            logger.info(
+                "continuing run: %s works already in %s",
+                f"{len(completed_work_ids):,}",
+                output_pages_path,
+            )
+        else:
+            logger.warning(
+                "--continue set but output file %s does not exist; starting fresh",
+                output_pages_path,
+            )
+        # append to the tar if it exists, otherwise create it
+        tar_mode = "a" if output_archive_path.exists() else "w"
+    else:
+        tar_mode = "w"
+        if output_pages_path.exists():
+            # because we extend, we need to rename any existing output file
+            old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
+            output_pages_path.rename(old_output_pages)
+            logger.warning(
+                "output file %s exists; renamed to %s",
+                output_pages_path,
+                old_output_pages,
+            )
+        if output_archive_path.exists():
+            logger.warning(
+                "output file %s already exists, overwriting", output_archive_path
+            )
 
     # use a polars lazy frame to calculate the total so tqdm can estimate completion
     start_time = perf_counter()
@@ -461,9 +494,11 @@ def main():
     tqdm.format_sizeof = lambda x, divisor=None: f"{x:,}" if divisor else f"{x:5.2f}"
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
-    with tarfile.open(output_archive_path, "w:gz") as tar:
+    with tarfile.open(output_archive_path, tar_mode) as tar:
         prev_work_id: Optional[str] = None
         pages: list[dict] = []
+        # whether the current work should be skipped (already in output)
+        skip_work = False
         for page in tqdm(
             orjsonl.stream(args.input),
             desc="Reading pages",
@@ -473,15 +508,18 @@ def main():
             work_id = page["work_id"]
             # when work id changes, process the previous work pages and reset for the next
             if work_id != prev_work_id:
-                if prev_work_id is not None:
+                if prev_work_id is not None and not skip_work:
                     pages = process_work(prev_work_id, pages, args.image_dir, tar)
                     orjsonl.extend(output_pages_path, list(pages))
                 prev_work_id = work_id
                 pages = []
-            pages.append(page)
+                # skip this work if it is already present in the output
+                skip_work = work_id in completed_work_ids
+            if not skip_work:
+                pages.append(page)
 
         # handle the pages for the last work at end of loop
-        if prev_work_id is not None:
+        if prev_work_id is not None and not skip_work:
             pages = process_work(prev_work_id, pages, args.image_dir, tar)
             orjsonl.extend(output_pages_path, list(pages))
 
