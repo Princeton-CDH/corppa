@@ -356,7 +356,8 @@ def process_gale_work(
             # yield page data either way (with or without image path)
             yield page
     else:
-        yield pages
+        # no image directory for this volume; yield each page unchanged
+        yield from pages
 
 
 def process_ht_work(
@@ -419,7 +420,9 @@ def process_ht_work(
                                 [f for f in file_namelist if page_basename in f],
                             )
 
-                        yield page
+                    # yield every page whether or not an image was aligned/added,
+                    # so no pages are dropped from the output corpus
+                    yield page
 
 
 def main():

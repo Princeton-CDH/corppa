@@ -19,6 +19,8 @@ from corppa.utils.dataset_prep import (
     align_shifted_pages,
     get_zip_textfiles,
     main,
+    process_gale_work,
+    process_ht_work,
 )
 
 WORK_ID = "htid:test.12345678"
@@ -211,6 +213,156 @@ def test_align_pages_prefixed_filenames(tmp_path):
             "work.00000001": "OSU_32435051461309_00000001",
             "work.00000002": "OSU_32435051461309_00000002",
         }
+
+
+# --- process_gale_work ---
+
+
+def test_process_gale_work_missing_image_dir_yields_each_page(tmp_path):
+    # when the volume image dir does not exist, every page must be yielded
+    # individually (not the whole list as a single item)
+    pages = [
+        {"work_id": "CB0127060085", "id": "CB0127060085.0001", "text": "one"},
+        {"work_id": "CB0127060085", "id": "CB0127060085.0002", "text": "two"},
+    ]
+    image_dir = tmp_path / "images"  # does not contain the volume dir
+    image_dir.mkdir()
+    with tarfile.open(tmp_path / "out.tar", "w") as tar:
+        result = list(process_gale_work("CB0127060085", pages, image_dir, tar))
+    # each page is yielded as its own dict, unchanged, with no image_path
+    assert result == pages
+    assert all(isinstance(p, dict) for p in result)
+    assert all("image_path" not in p for p in result)
+
+
+def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
+    from corppa.utils.path_utils import get_gale_image_name, get_vol_dir
+
+    vol_id = "CB0127060085"
+    pages = [{"work_id": vol_id, "id": f"{vol_id}.0001", "text": "one"}]
+    image_dir = tmp_path / "images"
+    vol_img_dir = image_dir / get_vol_dir(vol_id)
+    vol_img_dir.mkdir(parents=True)
+    # create the expected Gale image file for page 1
+    img_name = get_gale_image_name(vol_id, 1)
+    (vol_img_dir / img_name).write_bytes(b"fake image data")
+
+    with tarfile.open(tmp_path / "out.tar", "w") as tar:
+        result = list(process_gale_work(vol_id, pages, image_dir, tar))
+
+    assert len(result) == 1
+    assert result[0]["image_path"] == f"{vol_id}/{img_name}"
+
+
+def test_process_gale_work_missing_image_file_omits_path(tmp_path):
+    from corppa.utils.path_utils import get_vol_dir
+
+    vol_id = "CB0127060085"
+    pages = [{"work_id": vol_id, "id": f"{vol_id}.0001", "text": "one"}]
+    image_dir = tmp_path / "images"
+    # volume dir exists but the page image file is missing
+    (image_dir / get_vol_dir(vol_id)).mkdir(parents=True)
+
+    with tarfile.open(tmp_path / "out.tar", "w") as tar:
+        result = list(process_gale_work(vol_id, pages, image_dir, tar))
+
+    assert len(result) == 1
+    assert "image_path" not in result[0]
+
+
+# --- process_ht_work ---
+
+
+def _make_ht_zip(tmp_path, htid_suffix, page_texts, with_images=True):
+    """Build a HathiTrust-style zip at the path process_ht_work expects.
+    page_texts maps zero-padded page filenames (e.g. '00000001') to text."""
+    from corppa.utils.path_utils import encode_htid
+
+    htid = f"test.{htid_suffix}"
+    zip_dir = tmp_path / "HathiTrust" / encode_htid(htid)
+    zip_dir.mkdir(parents=True)
+    zip_path = zip_dir / f"{htid_suffix}.zip"
+    with ZipFile(zip_path, "w") as zf:
+        for name, text in page_texts.items():
+            zf.writestr(f"{htid_suffix}/{name}.txt", text)
+            if with_images:
+                zf.writestr(f"{htid_suffix}/{name}.jpg", b"img-" + name.encode())
+    return htid
+
+
+def test_process_ht_work_no_zip_yields_pages_unchanged(tmp_path):
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    pages = [{"work_id": work_id, "id": f"{work_id}.00000001", "text": "hi"}]
+    image_dir = tmp_path  # no HathiTrust zip present
+    with tarfile.open(tmp_path / "out.tar", "w") as tar:
+        result = list(process_ht_work(work_id, pages, image_dir, tar))
+    assert result == pages
+    assert "image_path" not in result[0]
+
+
+def test_process_ht_work_aligned_pages_get_image_paths(tmp_path):
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS, with_images=True)
+    pages = [
+        {"work_id": work_id, "id": f"{work_id}.{pid}", "text": text}
+        for pid, text in PAGE_TEXTS.items()
+    ]
+    with tarfile.open(tmp_path / "out.tar", "w") as tar:
+        result = list(process_ht_work(work_id, pages, tmp_path, tar))
+    # all pages returned, each with an image path in the tar
+    assert len(result) == len(pages)
+    assert all("image_path" in p for p in result)
+
+
+def test_process_ht_work_does_not_drop_unaligned_pages(tmp_path):
+    # a page with no alignment (page_basename is None) must still be yielded,
+    # just without an image_path -- it should not silently disappear
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS, with_images=True)
+    pages = [
+        {"work_id": work_id, "id": f"{work_id}.{pid}", "text": text}
+        for pid, text in PAGE_TEXTS.items()
+    ]
+    # add an extra corpus page that has no counterpart in the zip
+    pages.append(
+        {"work_id": work_id, "id": f"{work_id}.00000099", "text": "unmatched page"}
+    )
+
+    with patch(
+        "corppa.utils.dataset_prep.align_pages",
+        return_value={
+            f"{work_id}.{pid}": pid for pid in PAGE_TEXTS
+        },  # 00000099 intentionally absent
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_ht_work(work_id, pages, tmp_path, tar))
+
+    # every input page is present in the output, including the unaligned one
+    result_ids = [p["id"] for p in result]
+    assert f"{work_id}.00000099" in result_ids
+    assert len(result) == len(pages)
+    # the unaligned page has no image_path
+    unaligned = next(p for p in result if p["id"] == f"{work_id}.00000099")
+    assert "image_path" not in unaligned
+
+
+def test_process_ht_work_no_mapping_yields_pages_unchanged(tmp_path):
+    # when align_pages returns no mapping, all pages are yielded without images
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS, with_images=True)
+    pages = [
+        {"work_id": work_id, "id": f"{work_id}.{pid}", "text": text}
+        for pid, text in PAGE_TEXTS.items()
+    ]
+    with patch("corppa.utils.dataset_prep.align_pages", return_value={}):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_ht_work(work_id, pages, tmp_path, tar))
+    assert [p["id"] for p in result] == [p["id"] for p in pages]
+    assert all("image_path" not in p for p in result)
 
 
 # --- align_shifted_pages ---
