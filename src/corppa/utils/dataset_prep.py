@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 from corppa.utils.path_utils import (
     encode_htid,
+    get_gale_image_name,
     get_ppa_source,
     get_vol_dir,
     get_volume_id,
@@ -329,13 +330,15 @@ def process_work(
 def process_gale_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
-    vol_img_dir = image_dir / get_vol_dir(get_volume_id(work_id))
+    vol_id = get_volume_id(work_id)
+    vol_img_dir = image_dir / get_vol_dir(vol_id)
     if vol_img_dir.is_dir():
         logging.debug("%s : %s : %d pages", work_id, vol_img_dir, len(pages))
         for page in pages:
-            # page id is work id + sequence, e.g. CB0127060085.0005
-            # image filename can be constructed directly from page id
-            image_path = vol_img_dir / f"{page['id'].replace('.', '_')}0.TIF"
+            # page id is vol id + sequence, e.g. CB0127060085.0005; use the
+            # trailing sequence as the page number for the shared filename helper
+            page_num = int(page["id"].rsplit(".", 1)[-1])
+            image_path = vol_img_dir / get_gale_image_name(vol_id, page_num)
             if image_path.is_file():
                 tar_image_path = f"{work_id}/{image_path.name}"
                 tar.add(image_path, arcname=tar_image_path)

@@ -118,6 +118,15 @@ def get_volume_id(work_id: str) -> str:
     return work_id.rsplit("-p", 1)[0]
 
 
+def get_gale_image_name(vol_id: str, page_num: int) -> str:
+    """
+    Return the Gale/ECCO page image filename for the given volume id and page
+    number, e.g. ``CB0127060085_00050.TIF``. Gale image filenames use a
+    zero-padded page number with a trailing ``0``.
+    """
+    return f"{vol_id}_{page_num:04d}0.TIF"
+
+
 def get_image_relpath(work_id: str, page_num: int) -> Path:
     """
     Get the (relative) image path for specified PPA work page
@@ -126,8 +135,7 @@ def get_image_relpath(work_id: str, page_num: int) -> Path:
     vol_dir = get_vol_dir(vol_id)
     source = get_ppa_source(vol_id)
     if source == "Gale":
-        image_name = f"{vol_id}_{page_num:04d}0.TIF"
-        return vol_dir.joinpath(image_name)
+        return vol_dir.joinpath(get_gale_image_name(vol_id, page_num))
     elif source == "HathiTrust":
         raise NotImplementedError
     else:
