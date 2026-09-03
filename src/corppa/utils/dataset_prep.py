@@ -296,8 +296,7 @@ def process_work(
     # generic process work method, which calls appropriate source-specific method
     match get_ppa_source(work_id):
         case "Gale":
-            yield from []  # skip for debug/test
-            # yield from process_gale_work(work_id, pages, image_dir, tar)
+            yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
             yield from process_ht_work(work_id, pages, image_dir, tar)
         case "ECCO":
