@@ -227,7 +227,29 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         right_on="order",
         how="left",
     )
-    # TODO : check here - no dupes in page filename; is aligned order sequential
+
+    # sanity-check the alignment; warn (but don't fail) on anything suspicious so
+    # a questionable mapping is surfaced without halting the whole run.
+    matched = page_mapping_df.filter(pl.col.page_filename.is_not_null())
+    # report pages that did not align to any zip page (no filename)
+    num_unmatched = page_mapping_df.height - matched.height
+    if num_unmatched:
+        logger.info(
+            "%d of %d page(s) did not align to a zip page filename",
+            num_unmatched,
+            page_mapping_df.height,
+        )
+    # two original pages should never map to the same zip page filename
+    num_dupes = matched.height - matched["page_filename"].n_unique()
+    if num_dupes:
+        logger.warning("alignment produced %d duplicate page filename(s)", num_dupes)
+    # aligned order should preserve original page order: sorting by original
+    # order, aligned_order should be strictly increasing. Gaps are fine (pages
+    # can be removed between versions); order going backwards is not.
+    aligned = matched.sort("order")["aligned_order"]
+    if aligned.len() > 1 and not (aligned.diff().drop_nulls() > 0).all():
+        logger.warning("aligned page order is not monotonic (pages out of order)")
+
     return page_mapping_df.select(["id", "page_filename"])
 
 
@@ -346,7 +368,7 @@ def process_ht_work(
     htid_suffix = encode_htid(htid).split(".")[-1]
     zipfile_path = image_dir / "HathiTrust" / encode_htid(htid) / f"{htid_suffix}.zip"
     if not zipfile_path.exists():
-        logger.warning("zipfile %s does not exist, omitting images", zipfile_path)
+        # logger.warning("zipfile %s does not exist, omitting images", zipfile_path)
         # yield pages without image paths
         yield from pages
     else:

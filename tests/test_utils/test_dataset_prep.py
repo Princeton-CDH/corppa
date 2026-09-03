@@ -413,6 +413,58 @@ def test_align_shifted_pages_all_pages_short_returns_empty():
     assert result.is_empty()
 
 
+def test_align_shifted_pages_monotonic_gap_no_warning(caplog):
+    # two segments with different (increasing) shifts leave a gap in the aligned
+    # orders (11,12 then 20,21). gaps are fine as long as order is preserved,
+    # so this should NOT warn about non-monotonic order.
+    seeds = [f"chapter-{i}-unique-content" for i in range(4)]
+    pages_df, zip_pages_df = _make_shifted_frames(
+        page_orders=[1, 2, 3, 4],
+        zip_orders=[11, 12, 20, 21],
+        seeds=seeds,
+    )
+
+    with caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"):
+        align_shifted_pages(pages_df, zip_pages_df)
+
+    assert "not monotonic" not in caplog.text
+    assert "duplicate page filename" not in caplog.text
+
+
+def test_align_shifted_pages_logs_unmatched_pages(caplog):
+    # pages 1-4 shift +10 -> aligned orders 11,12,13,14, but the zip only has
+    # 11,12,13; page 4 aligns to a missing zip page and gets no filename
+    seeds = [f"chapter-{i}-unique-content" for i in range(4)]
+    pages_df, zip_pages_df = _make_shifted_frames(
+        page_orders=[1, 2, 3, 4],
+        zip_orders=[11, 12, 13, 14],
+        seeds=seeds,
+    )
+    # drop the last zip page so page 4 has nothing to align to
+    zip_pages_df = zip_pages_df.head(3)
+
+    with caplog.at_level("INFO", logger="corppa.utils.dataset_prep"):
+        align_shifted_pages(pages_df, zip_pages_df)
+
+    assert "1 of 4 page(s) did not align to a zip page filename" in caplog.text
+
+
+def test_align_shifted_pages_non_monotonic_warns(caplog):
+    # later original pages align to earlier zip pages: sorting by original order,
+    # aligned_order goes backwards (11,12 then 3,4) -> should warn.
+    seeds = [f"chapter-{i}-unique-content" for i in range(4)]
+    pages_df, zip_pages_df = _make_shifted_frames(
+        page_orders=[1, 2, 3, 4],
+        zip_orders=[11, 12, 3, 4],
+        seeds=seeds,
+    )
+
+    with caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"):
+        align_shifted_pages(pages_df, zip_pages_df)
+
+    assert "aligned page order is not monotonic" in caplog.text
+
+
 def test_align_pages_underscore_page_id(aligned_zip):
     # Corpus page ids use underscore separator instead of dot
     pages_df = make_pages_df(["work_00000001", "work_00000002", "work_00000003"])
