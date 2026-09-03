@@ -25,3 +25,8 @@ Build Text Corpus
 =================
 .. automodule:: corppa.utils.build_text_corpus
 .. Note: not including members for method docs, only top-level script usage
+
+Running Headers
+===============
+.. automodule:: corppa.utils.running_headers
+  :members:
