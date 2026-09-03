@@ -32,6 +32,8 @@ dependencies = [
   "pyyaml",
   "polars",
   "polars-ds>=0.12.1",
+  "rapidfuzz",
+  "numpy"
 ]
 
 [project.optional-dependencies]
@@ -45,11 +47,6 @@ poem_id = [
   "pyarrow",
   "unidecode",
   "rapidfuzz",
-]
-ppa_fulltext_dataprep = [
-    "polars-ds>=0.12.1",
-    "rapidfuzz",
-    "numpy",
 ]
 # NOTE: v0.5 and prior run against passim 7f52b95fc7f0314b6084a565c63bbde9e094a79f
 # from Nov 24, 2024 a few bugfixes after the 2.0.1 release from Feb 2024
