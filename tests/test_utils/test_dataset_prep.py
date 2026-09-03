@@ -246,7 +246,7 @@ def _make_shifted_frames(page_orders, zip_orders, seeds):
 
 
 def test_align_shifted_pages_consistent_shift():
-    # pages orders 1..5 correspond to zip orders 11..15 (uniform shift = -10);
+    # pages orders 1..5 correspond to zip orders 11..15 (uniform shift = +10);
     # every page should map to its shifted zip counterpart, including the
     # first and last anchors.
     seeds = [f"chapter-{i}-unique-content" for i in range(5)]
@@ -282,7 +282,7 @@ def test_align_shifted_pages_includes_head_pages():
         }
     )
     # page 1 is short (below the 600-char filter); pages 2-6 are long and
-    # share text with zip pages at orders 12-16 (uniform shift = -10)
+    # share text with zip pages at orders 12-16 (uniform shift = +10)
     pages_df = pl.DataFrame(
         {
             "id": [f"work.{1 + i:08d}" for i in range(6)],
@@ -357,7 +357,7 @@ def test_align_shifted_pages_small_df_uses_all_anchors():
 
     assert result is not None
     mapping = dict(result.select(["id", "page_filename"]).iter_rows())
-    # all three pages mapped via the shared shift (-10)
+    # all three pages mapped via the shared shift (+10)
     assert mapping == {
         "work.00000001": "00000011",
         "work.00000002": "00000012",

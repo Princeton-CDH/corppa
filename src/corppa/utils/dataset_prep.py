@@ -166,7 +166,9 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
         (best_score >= MATCH_SCORE_STRONG)
         | ((best_score - second_score) >= MATCH_SCORE_MARGIN)
     )
-    shifts = long_orders - zip_orders[best_idx]
+    # shift is defined as zip order minus original order, so the aligned zip
+    # order for a page is recovered by original order + shift
+    shifts = zip_orders[best_idx] - long_orders
     trusted_shift = np.where(confident, shifts, np.nan)
 
     long_shift_df = long_pages_df.select("order").with_columns(
@@ -231,7 +233,7 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     # zip page filename at the aligned order
     page_mapping_df = (
         pages_shift_df.with_columns(
-            aligned_order=(pl.col.order - pl.col.seg_shift).cast(pl.Int64)
+            aligned_order=(pl.col.order + pl.col.seg_shift).cast(pl.Int64)
         )
         .join(
             zip_pages_df.select(["order", "page_filename"]),
