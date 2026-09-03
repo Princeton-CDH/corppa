@@ -450,11 +450,15 @@ def main():
         # append to existing output; collect work ids already written so we can
         # skip them, rather than renaming/overwriting the existing files
         if output_pages_path.exists():
-            completed_work_ids = {
-                page["work_id"] for page in orjsonl.stream(output_pages_path)
-            }
+            completed_work_ids = set(
+                pl.scan_ndjson(output_pages_path)
+                .select("work_id")
+                .unique()
+                .collect()
+                .get_column("work_id")
+            )
             logger.info(
-                "continuing run: %s works already in %s",
+                "Adding to existing output: %s works already in %s",
                 f"{len(completed_work_ids):,}",
                 output_pages_path,
             )
