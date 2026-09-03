@@ -1,6 +1,7 @@
 # prep ppa text+image dataset for publication
 import argparse
 import logging
+import signal
 import tarfile
 from pathlib import Path
 from time import mktime, perf_counter
@@ -23,6 +24,20 @@ from corppa.utils.path_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# set when an interrupt/termination signal is received so the main loop can
+# stop cleanly at the next work boundary (avoids partial-work output)
+_stop_requested = False
+
+
+def _request_stop(signum, frame):
+    """Signal handler: request a clean stop after the current work finishes."""
+    global _stop_requested
+    logger.warning(
+        "received %s; will stop after current work finishes",
+        signal.Signals(signum).name,
+    )
+    _stop_requested = True
 
 
 def get_zip_textfiles(zipfile: ZipFile) -> Iterator[tuple[str, str]]:
@@ -388,6 +403,9 @@ def process_ht_work(
 
 
 def main():
+    global _stop_requested
+    _stop_requested = False
+
     parser = argparse.ArgumentParser(
         description="Prepare PPA full-text dataset for publication by aligning pages and organizing images",
     )
@@ -496,6 +514,11 @@ def main():
     )
     # configure tqdm to format as comma delimited numbers - from https://stackoverflow.com/a/76964589
     tqdm.format_sizeof = lambda x, divisor=None: f"{x:,}" if divisor else f"{x:5.2f}"
+    # stop cleanly at the next work boundary on ctrl-c (SIGINT) or termination
+    # (SIGTERM, e.g. SLURM timeout); output always ends on a whole work so a
+    # --continue run can resume from the first unwritten work
+    signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGTERM, _request_stop)
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
     with tarfile.open(output_archive_path, tar_mode) as tar:
@@ -515,6 +538,12 @@ def main():
                 if prev_work_id is not None and not skip_work:
                     pages = process_work(prev_work_id, pages, args.image_dir, tar)
                     orjsonl.extend(output_pages_path, list(pages))
+                # stop here (at a work boundary) if a signal was received, so we
+                # never interrupt a work's tar/jsonl writes partway through; the
+                # tar is still closed cleanly by the context manager
+                if _stop_requested:
+                    logger.warning("stopping cleanly after work %s", prev_work_id)
+                    break
                 prev_work_id = work_id
                 pages = []
                 # skip this work if it is already present in the output
@@ -522,8 +551,9 @@ def main():
             if not skip_work:
                 pages.append(page)
 
-        # handle the pages for the last work at end of loop
-        if prev_work_id is not None and not skip_work:
+        # handle the pages for the last work at end of loop, unless we broke out
+        # early on a stop signal (that work was already written before the break)
+        if prev_work_id is not None and not skip_work and not _stop_requested:
             pages = process_work(prev_work_id, pages, args.image_dir, tar)
             orjsonl.extend(output_pages_path, list(pages))
 

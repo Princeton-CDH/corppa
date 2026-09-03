@@ -1,6 +1,7 @@
 # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+import signal
 import tarfile
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +11,7 @@ import orjsonl
 import polars as pl
 import pytest
 
+import corppa.utils.dataset_prep as dataset_prep
 from corppa.utils.dataset_prep import (
     add_zip_file_to_tar,
     align_pages,
@@ -426,6 +428,18 @@ def test_align_pages_underscore_page_id(aligned_zip):
 # --- main / --continue ---
 
 
+@pytest.fixture(autouse=True)
+def _restore_signal_state():
+    """main() installs SIGINT/SIGTERM handlers and toggles a module flag;
+    restore both after each test so handlers don't leak across the suite."""
+    orig_int = signal.getsignal(signal.SIGINT)
+    orig_term = signal.getsignal(signal.SIGTERM)
+    yield
+    signal.signal(signal.SIGINT, orig_int)
+    signal.signal(signal.SIGTERM, orig_term)
+    dataset_prep._stop_requested = False
+
+
 def _pages_through(work_id, pages, image_dir, tar):
     """Stand-in for process_work that yields pages unchanged (no images)."""
     yield from pages
@@ -582,6 +596,57 @@ def test_main_without_continue_renames_existing_output(tmp_path, corpus_input):
     assert backup.exists()
     assert [p["id"] for p in orjsonl.stream(backup)] == ["old.0001"]
     written = list(orjsonl.stream(output_pages))
+    assert [p["id"] for p in written] == [
+        "workA.0001",
+        "workA.0002",
+        "workB.0001",
+        "workB.0002",
+    ]
+
+
+# --- graceful stop on signal ---
+
+
+def test_main_stops_cleanly_after_current_work(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    # simulate a signal arriving while the first work is being processed:
+    # request a stop after workA is handled, so workB is never started
+    def stop_after_first(work_id, pages, image_dir, tar):
+        if work_id == "workA":
+            dataset_prep._request_stop(signal.SIGTERM, None)
+        yield from pages
+
+    argv = ["dataset_prep.py", str(corpus_input), str(image_dir), str(output_dir)]
+    with (
+        patch("sys.argv", argv),
+        patch(
+            "corppa.utils.dataset_prep.process_work",
+            side_effect=stop_after_first,
+        ),
+    ):
+        main()
+
+    # only the completed work (workA) is written; workB is skipped entirely
+    written = list(orjsonl.stream(output_dir / "ppa_pages.jsonl"))
+    assert [p["id"] for p in written] == ["workA.0001", "workA.0002"]
+
+
+def test_main_stop_flag_reset_between_runs(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    # leave the module flag set from a prior run; main() should reset it so
+    # this run completes normally
+    dataset_prep._stop_requested = True
+
+    _run_main(corpus_input, image_dir, output_dir)
+
+    assert dataset_prep._stop_requested is False
+    written = list(orjsonl.stream(output_dir / "ppa_pages.jsonl"))
     assert [p["id"] for p in written] == [
         "workA.0001",
         "workA.0002",
