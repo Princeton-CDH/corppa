@@ -49,8 +49,10 @@ OUTPUT_DIR=/scratch/network/<USER>/corppa/dataset
 
 # run in the foreground as the final command so slurm's early-warning SIGTERM
 # is delivered to the python process, whose handler stops at a work boundary.
+# --no-progress suppresses the tqdm bar in the non-interactive batch log;
 # add --continue to resume a previously interrupted run.
 python -m corppa.utils.dataset_prep \
+    --no-progress \
     --log-level info \
     --log-file "dataset_prep_${SLURM_JOB_ID}.log" \
     "$INPUT" "$IMAGE_DIR" "$OUTPUT_DIR"

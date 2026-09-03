@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import orjsonl
 import polars as pl
 import pytest
+from tqdm import tqdm
 
 import corppa.utils.dataset_prep as dataset_prep
 from corppa.utils.dataset_prep import (
@@ -485,6 +486,29 @@ def corpus_input(tmp_path):
         ],
     )
     return input_path
+
+
+def test_main_progress_bar_enabled_by_default(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    with patch("corppa.utils.dataset_prep.tqdm", wraps=tqdm) as mock_tqdm:
+        _run_main(corpus_input, image_dir, output_dir)
+
+    # progress bar is shown (not disabled) unless --no-progress is passed
+    assert mock_tqdm.call_args.kwargs["disable"] is False
+
+
+def test_main_no_progress_disables_bar(tmp_path, corpus_input):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    with patch("corppa.utils.dataset_prep.tqdm", wraps=tqdm) as mock_tqdm:
+        _run_main(corpus_input, image_dir, output_dir, extra_args=["--no-progress"])
+
+    assert mock_tqdm.call_args.kwargs["disable"] is True
 
 
 def test_main_writes_all_works(tmp_path, corpus_input):

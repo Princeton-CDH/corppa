@@ -443,6 +443,12 @@ def main():
         "skip works already present in the output JSONL",
     )
     parser.add_argument(
+        "--progress",
+        help="Show progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         type=str.lower,
@@ -542,6 +548,7 @@ def main():
             desc="Reading pages",
             total=total_pages,
             unit_scale=True,
+            disable=not args.progress,
         ):
             work_id = page["work_id"]
             # when work id changes, process the previous work pages and reset for the next
