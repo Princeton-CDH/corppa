@@ -138,16 +138,19 @@ def align_shifted_pages(pages_df: pl.DataFrame, zip_pages_df: pl.DataFrame):
     zip_orders = zip_pages_df["order"].to_numpy()
     long_orders = long_pages_df["order"].to_numpy()
 
-    # best match per long page, plus the runner-up for the ambiguity guard
-    # - get index of best match for each long page
-    best_idx = scores.argmax(axis=1)
+    # best match per long page, plus the runner-up for the ambiguity guard.
+    # argpartition on the last two positions gathers each row's two largest
+    # scores (unordered between themselves) in one pass; take their max/min to
+    # get the best and runner-up, and the argpartition index for the best.
     row_idx = np.arange(scores.shape[0])
-    # - get the best score for each long page
-    best_score = scores[row_idx, best_idx]
     if scores.shape[1] >= 2:
-        # second-highest score in each row (np.partition puts the 2nd-largest
-        # at position -2); used to reject near-ties
-        second_score = np.partition(scores, -2, axis=1)[:, -2]
+        top2_idx = np.argpartition(scores, -2, axis=1)[:, -2:]
+        top2 = scores[row_idx[:, None], top2_idx]
+        # the larger of the two is the best match; the other is the runner-up
+        best_pos = top2.argmax(axis=1)
+        best_idx = top2_idx[row_idx, best_pos]
+        best_score = top2.max(axis=1)
+        second_score = top2.min(axis=1)
     else:
         # only one zip page: no runner-up to compare against
         second_score = np.zeros_like(best_score)
