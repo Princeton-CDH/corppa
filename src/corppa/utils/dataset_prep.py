@@ -328,13 +328,22 @@ def process_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
     # generic process work method, which calls appropriate source-specific method
-    match get_ppa_source(work_id):
+    source = get_ppa_source(work_id)
+    match source:
         case "Gale":
             yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
             yield from process_ht_work(work_id, pages, image_dir, tar)
-        case "ECCO":
+        case "EEBO-TCP":
             yield from pages  # no images
+        case _:
+            # unknown source: don't silently drop pages, yield them unchanged
+            logger.warning(
+                "unknown source %r for work %s; yielding pages without images",
+                source,
+                work_id,
+            )
+            yield from pages
 
 
 def process_gale_work(

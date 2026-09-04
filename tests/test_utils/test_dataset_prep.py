@@ -21,6 +21,7 @@ from corppa.utils.dataset_prep import (
     main,
     process_gale_work,
     process_ht_work,
+    process_work,
 )
 
 WORK_ID = "htid:test.12345678"
@@ -363,6 +364,85 @@ def test_process_ht_work_no_mapping_yields_pages_unchanged(tmp_path):
             result = list(process_ht_work(work_id, pages, tmp_path, tar))
     assert [p["id"] for p in result] == [p["id"] for p in pages]
     assert all("image_path" not in p for p in result)
+
+
+# --- process_work (dispatch) ---
+
+
+def test_process_work_gale_dispatch(tmp_path):
+    # a Gale work id (CB0.../CW0...) dispatches to process_gale_work
+    work_id = "CB0127060085"
+    pages = [{"work_id": work_id, "id": f"{work_id}.0001", "text": "p1"}]
+    with (
+        patch(
+            "corppa.utils.dataset_prep.process_gale_work",
+            return_value=iter(pages),
+        ) as mock_gale,
+        patch("corppa.utils.dataset_prep.process_ht_work") as mock_ht,
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_work(work_id, pages, tmp_path, tar))
+    mock_gale.assert_called_once_with(work_id, pages, tmp_path, tar)
+    mock_ht.assert_not_called()
+    assert result == pages
+
+
+def test_process_work_hathitrust_dispatch(tmp_path):
+    # a HathiTrust work id (contains ".") dispatches to process_ht_work
+    work_id = "test.12345678"
+    pages = [{"work_id": work_id, "id": f"{work_id}.0001", "text": "p1"}]
+    with (
+        patch(
+            "corppa.utils.dataset_prep.process_ht_work",
+            return_value=iter(pages),
+        ) as mock_ht,
+        patch("corppa.utils.dataset_prep.process_gale_work") as mock_gale,
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_work(work_id, pages, tmp_path, tar))
+    mock_ht.assert_called_once_with(work_id, pages, tmp_path, tar)
+    mock_gale.assert_not_called()
+    assert result == pages
+
+
+def test_process_work_eebo_yields_pages_without_images(tmp_path):
+    # an EEBO-TCP work id (begins with "A") has no images; pages pass through
+    work_id = "A12345"
+    pages = [{"work_id": work_id, "id": f"{work_id}.0001", "text": "p1"}]
+    with (
+        patch("corppa.utils.dataset_prep.process_gale_work") as mock_gale,
+        patch("corppa.utils.dataset_prep.process_ht_work") as mock_ht,
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_work(work_id, pages, tmp_path, tar))
+    mock_gale.assert_not_called()
+    mock_ht.assert_not_called()
+    # pages are yielded unchanged, with no image paths added
+    assert result == pages
+    assert all("image_path" not in p for p in result)
+
+
+def test_process_work_unknown_source_warns_and_yields(tmp_path, caplog):
+    # get_ppa_source raises for unrecognized ids; patch it to return an
+    # unexpected source so we exercise the default branch
+    work_id = "mystery-work"
+    pages = [{"work_id": work_id, "id": f"{work_id}.0001", "text": "p1"}]
+    with (
+        patch(
+            "corppa.utils.dataset_prep.get_ppa_source",
+            return_value="SomethingElse",
+        ),
+        patch("corppa.utils.dataset_prep.process_gale_work") as mock_gale,
+        patch("corppa.utils.dataset_prep.process_ht_work") as mock_ht,
+        caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"),
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_work(work_id, pages, tmp_path, tar))
+    mock_gale.assert_not_called()
+    mock_ht.assert_not_called()
+    # pages are not dropped, and the unknown source is surfaced as a warning
+    assert result == pages
+    assert "unknown source 'SomethingElse'" in caplog.text
 
 
 # --- align_shifted_pages ---
