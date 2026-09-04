@@ -33,7 +33,11 @@ import orjsonl
 from tqdm import tqdm
 from xopen import xopen
 
-from corppa.utils.path_utils import encode_htid, get_stub_dir
+from corppa.utils.path_utils import (
+    encode_htid,
+    get_gale_image_name,
+    get_stub_dir,
+)
 
 
 def extract_page_numbers(page_url_list):
@@ -49,7 +53,7 @@ def get_page_image_path(page_record):
     page_num = page_record["order"]
     if source == "Gale":
         vol_dir = f"Gale/{stub_dir}/{vol_id}"
-        image_name = f"{vol_id}_{page_num:04d}0.TIF"
+        image_name = get_gale_image_name(vol_id, page_num)
         return f"{vol_dir}/{image_name}"
     elif source == "HathiTrust":
         vol_id = encode_htid(vol_id)

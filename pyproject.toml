@@ -14,7 +14,7 @@ license = {text = "Apache-2"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",    
+    "Programming Language :: Python :: 3.13",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
@@ -25,12 +25,15 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
   "ftfy",
-	"intspan",
-	"orjsonl",
-	"tqdm",
+  "intspan",
+  "orjsonl",
+  "tqdm",
   "biopython>=1.86",
   "pyyaml",
   "polars",
+  "polars-ds>=0.12.1",
+  "rapidfuzz",
+  "numpy"
 ]
 
 [project.optional-dependencies]
@@ -69,7 +72,7 @@ test = [
   "pytest-cov",
   "corppa[poem_id]",
   "corppa[chadwyck_healey]",
-  "corppa[notebooks]",  
+  "corppa[notebooks]",
 ]
 
 [project.scripts]
