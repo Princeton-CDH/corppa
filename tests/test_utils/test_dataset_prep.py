@@ -881,3 +881,109 @@ def test_main_stop_flag_reset_between_runs(tmp_path, corpus_input):
         "workB.0001",
         "workB.0002",
     ]
+
+
+# --- run summary reporting ---
+
+
+def test_main_reports_finished_counts(tmp_path, corpus_input, caplog):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    with caplog.at_level("INFO", logger="corppa.utils.dataset_prep"):
+        _run_main(corpus_input, image_dir, output_dir)
+
+    # two works, two pages each, no images added by the stand-in process_work
+    assert (
+        "finished: 2 works processed (4 pages, 0 page images), "
+        "0 works skipped (0 pages)" in caplog.text
+    )
+
+
+def test_main_reports_page_image_counts(tmp_path, corpus_input, caplog):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    # simulate process_work adding an image path to one page per work
+    def add_one_image(work_id, pages, image_dir, tar):
+        for i, page in enumerate(pages):
+            if i == 0:
+                page["image_path"] = f"{work_id}/{page['id']}.jpg"
+            yield page
+
+    argv = ["dataset_prep.py", str(corpus_input), str(image_dir), str(output_dir)]
+    with (
+        patch("sys.argv", argv),
+        patch(
+            "corppa.utils.dataset_prep.process_work",
+            side_effect=add_one_image,
+        ),
+        caplog.at_level("INFO", logger="corppa.utils.dataset_prep"),
+    ):
+        main()
+
+    # one image per work = two page images across the two works
+    assert (
+        "finished: 2 works processed (4 pages, 2 page images), "
+        "0 works skipped (0 pages)" in caplog.text
+    )
+
+
+def test_main_reports_skipped_counts_on_continue(tmp_path, corpus_input, caplog):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    output_tar = output_dir / "ppa_images.tar"
+    # simulate a previous run that already completed workA
+    _write_corpus(
+        output_pages,
+        [
+            {"work_id": "workA", "id": "workA.0001", "text": "a1"},
+            {"work_id": "workA", "id": "workA.0002", "text": "a2"},
+        ],
+    )
+    with tarfile.open(output_tar, "w"):
+        pass
+
+    with caplog.at_level("INFO", logger="corppa.utils.dataset_prep"):
+        _run_main(corpus_input, image_dir, output_dir, extra_args=["--continue"])
+
+    # workA is skipped (2 pages), workB is processed (2 pages)
+    assert (
+        "finished: 1 works processed (2 pages, 0 page images), "
+        "1 works skipped (2 pages)" in caplog.text
+    )
+
+
+def test_main_reports_interrupted_counts(tmp_path, corpus_input, caplog):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+
+    # request a stop after workA so workB is never processed
+    def stop_after_first(work_id, pages, image_dir, tar):
+        if work_id == "workA":
+            dataset_prep._request_stop(signal.SIGTERM, None)
+        yield from pages
+
+    argv = ["dataset_prep.py", str(corpus_input), str(image_dir), str(output_dir)]
+    with (
+        patch("sys.argv", argv),
+        patch(
+            "corppa.utils.dataset_prep.process_work",
+            side_effect=stop_after_first,
+        ),
+        caplog.at_level("INFO", logger="corppa.utils.dataset_prep"),
+    ):
+        main()
+
+    # only workA is processed before the stop; report reads "interrupted"
+    assert (
+        "interrupted: 1 works processed (2 pages, 0 page images), "
+        "0 works skipped (0 pages)" in caplog.text
+    )

@@ -3,6 +3,7 @@ import argparse
 import logging
 import signal
 import tarfile
+from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 from time import mktime, perf_counter
@@ -84,7 +85,7 @@ def get_zip_imgexts(zipfile: ZipFile) -> list[str]:
 
 
 # minimum text length (in characters) for a page to be matched against zip pages
-MIN_MATCH_TEXT_LEN = 450
+MIN_MATCH_TEXT_LEN = 600
 # minimum similarity (0-100) for a page match to be considered;
 # uses rapidfuzz.fuzz.ratio, which returns normalized Indel similarity
 MATCH_SCORE_CUTOFF = 85
@@ -550,6 +551,9 @@ def main():
     signal.signal(signal.SIGTERM, _request_stop)
     # Stream pages one at a time; corpus is sorted by work+page so we can
     # process pages by work as the work_id changes.
+    # tally works, pages, and page images handled so we can report totals when
+    # the run finishes or is interrupted
+    counts: defaultdict[str, int] = defaultdict(int)
     with tarfile.open(output_archive_path, tar_mode) as tar:
         prev_work_id: Optional[str] = None
         pages: list[dict] = []
@@ -565,9 +569,19 @@ def main():
             work_id = page["work_id"]
             # when work id changes, process the previous work pages and reset for the next
             if work_id != prev_work_id:
-                if prev_work_id is not None and not skip_work:
-                    pages = process_work(prev_work_id, pages, args.image_dir, tar)
-                    orjsonl.extend(output_pages_path, list(pages))
+                if prev_work_id is not None:
+                    if skip_work:
+                        counts["works_skipped"] += 1
+                    else:
+                        pages = list(
+                            process_work(prev_work_id, pages, args.image_dir, tar)
+                        )
+                        orjsonl.extend(output_pages_path, pages)
+                        counts["works_processed"] += 1
+                        counts["pages_processed"] += len(pages)
+                        counts["page_images"] += sum(
+                            1 for p in pages if p.get("image_path")
+                        )
                 # stop here (at a work boundary) if a signal was received, so we
                 # never interrupt a work's tar/jsonl writes partway through; the
                 # tar is still closed cleanly by the context manager
@@ -578,14 +592,34 @@ def main():
                 pages = []
                 # skip this work if it is already present in the output
                 skip_work = work_id in completed_work_ids
-            if not skip_work:
+            if skip_work:
+                counts["pages_skipped"] += 1
+            else:
                 pages.append(page)
 
         # handle the pages for the last work at end of loop, unless we broke out
         # early on a stop signal (that work was already written before the break)
-        if prev_work_id is not None and not skip_work and not _stop_requested:
-            pages = process_work(prev_work_id, pages, args.image_dir, tar)
-            orjsonl.extend(output_pages_path, list(pages))
+        if prev_work_id is not None and not _stop_requested:
+            if skip_work:
+                counts["works_skipped"] += 1
+            else:
+                pages = list(process_work(prev_work_id, pages, args.image_dir, tar))
+                orjsonl.extend(output_pages_path, pages)
+                counts["works_processed"] += 1
+                counts["pages_processed"] += len(pages)
+                counts["page_images"] += sum(1 for p in pages if p.get("image_path"))
+
+    # report totals whether the run finished normally or stopped early
+    logger.info(
+        "%s: %s works processed (%s pages, %s page images), "
+        "%s works skipped (%s pages)",
+        "interrupted" if _stop_requested else "finished",
+        f"{counts['works_processed']:,}",
+        f"{counts['pages_processed']:,}",
+        f"{counts['page_images']:,}",
+        f"{counts['works_skipped']:,}",
+        f"{counts['pages_skipped']:,}",
+    )
 
 
 if __name__ == "__main__":
