@@ -366,6 +366,66 @@ def test_process_ht_work_no_mapping_yields_pages_unchanged(tmp_path):
     assert all("image_path" not in p for p in result)
 
 
+def test_process_ht_work_missing_image_warns_for_page_with_text(tmp_path, caplog):
+    # page is aligned to a zip filename, but adding the image raises KeyError
+    # (image absent from the zip); a page with text should warn and be yielded
+    # without an image_path -- it must not be dropped
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS, with_images=True)
+    pages = [
+        {"work_id": work_id, "id": f"{work_id}.{pid}", "text": text}
+        for pid, text in PAGE_TEXTS.items()
+    ]
+    with (
+        patch(
+            "corppa.utils.dataset_prep.align_pages",
+            return_value={f"{work_id}.{pid}": pid for pid in PAGE_TEXTS},
+        ),
+        patch(
+            "corppa.utils.dataset_prep.add_zip_file_to_tar",
+            side_effect=KeyError("missing"),
+        ),
+        caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"),
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_ht_work(work_id, pages, tmp_path, tar))
+
+    # every page is still yielded, none get an image_path
+    assert [p["id"] for p in result] == [p["id"] for p in pages]
+    assert all("image_path" not in p for p in result)
+    # pages with text warn about the missing image
+    assert "not found in zipfile but page has text; skipping" in caplog.text
+
+
+def test_process_ht_work_missing_image_no_warn_for_empty_page(tmp_path, caplog):
+    # when add_zip_file_to_tar raises KeyError for a page with no text,
+    # the page is yielded without an image_path and without a warning
+    htid_suffix = "12345678"
+    work_id = f"test.{htid_suffix}"
+    _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS, with_images=True)
+    # single page with only whitespace text
+    pages = [{"work_id": work_id, "id": f"{work_id}.00000001", "text": "   "}]
+    with (
+        patch(
+            "corppa.utils.dataset_prep.align_pages",
+            return_value={f"{work_id}.00000001": "00000001"},
+        ),
+        patch(
+            "corppa.utils.dataset_prep.add_zip_file_to_tar",
+            side_effect=KeyError("missing"),
+        ),
+        caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"),
+    ):
+        with tarfile.open(tmp_path / "out.tar", "w") as tar:
+            result = list(process_ht_work(work_id, pages, tmp_path, tar))
+
+    assert [p["id"] for p in result] == [p["id"] for p in pages]
+    assert "image_path" not in result[0]
+    # no warning for a blank page missing its image
+    assert "not found in zipfile but page has text" not in caplog.text
+
+
 # --- process_work (dispatch) ---
 
 
@@ -850,6 +910,46 @@ def test_main_continue_skips_completed_works(tmp_path, corpus_input):
     ]
 
 
+def test_main_continue_skips_completed_last_work(tmp_path, corpus_input, caplog):
+    # when the LAST work in the corpus is already completed, the end-of-loop
+    # handler must count it as skipped (not reprocess it)
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_pages = output_dir / "ppa_pages.jsonl"
+    output_tar = output_dir / "ppa_images.tar"
+    # simulate a previous run that already completed workB (the last work)
+    _write_corpus(
+        output_pages,
+        [
+            {"work_id": "workB", "id": "workB.0001", "text": "b1"},
+            {"work_id": "workB", "id": "workB.0002", "text": "b2"},
+        ],
+    )
+    with tarfile.open(output_tar, "w"):
+        pass
+
+    with caplog.at_level("INFO", logger="corppa.utils.dataset_prep"):
+        _run_main(corpus_input, image_dir, output_dir, extra_args=["--continue"])
+
+    # workA is appended; workB (already present, and the last work) is not
+    # duplicated
+    written = list(orjsonl.stream(output_pages))
+    assert [p["id"] for p in written] == [
+        "workB.0001",
+        "workB.0002",
+        "workA.0001",
+        "workA.0002",
+    ]
+    # the last work being skipped is reflected in the summary counts
+    assert (
+        "finished: 1 works processed (2 pages, 0 page images), "
+        "1 works skipped (2 pages)" in caplog.text
+    )
+
+
 def test_main_continue_does_not_rename_existing_output(tmp_path, corpus_input):
     image_dir = tmp_path / "images"
     image_dir.mkdir()
@@ -910,6 +1010,31 @@ def test_main_without_continue_renames_existing_output(tmp_path, corpus_input):
         "workB.0001",
         "workB.0002",
     ]
+
+
+def test_main_without_continue_warns_and_overwrites_existing_archive(
+    tmp_path, corpus_input, caplog
+):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    output_tar = output_dir / "ppa_images.tar"
+    # a leftover archive from a prior run, with a stale member to prove it is
+    # overwritten (mode "w") rather than appended to
+    with tarfile.open(output_tar, "w") as tar:
+        info = tarfile.TarInfo(name="stale.txt")
+        info.size = 0
+        tar.addfile(info)
+
+    with caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"):
+        _run_main(corpus_input, image_dir, output_dir)
+
+    # existing archive is flagged and overwritten (no stale member remains)
+    assert "already exists, overwriting" in caplog.text
+    with tarfile.open(output_tar, "r") as tar:
+        assert "stale.txt" not in tar.getnames()
 
 
 # --- graceful stop on signal ---
