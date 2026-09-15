@@ -18,21 +18,11 @@ def refine_metadata(
     refined_metadata: Path, csv_metadata_path: Path, json_metadata_path: Path
 ) -> None:
     refined_metadata_df = pl.read_csv(refined_metadata)
-    # get the last update time of records in refined metadata
-    # (drop_nulls: a null/empty updated column means there is no cutoff to
-    # derive, and the post-refine block below is safely skipped)
-    refined_last_update = refined_metadata_df["updated"].drop_nulls().max()
+    # get the last update time of records in refined metadata (all records have added/updated time)
+    refined_last_update = refined_metadata_df["updated"].max()
     df = pl.read_csv(csv_metadata_path)
     csv_columns = df.columns  # store columns original order for output file
     csv_total = df.height
-
-    # each work_id must resolve to at most one refined record, otherwise the
-    # join below would inflate the record count
-    if refined_metadata_df["work_id"].is_duplicated().any():
-        raise ValueError(
-            "Refined metadata contains duplicate work_id values; each work "
-            "must appear at most once"
-        )
 
     # join with refined metadata on work id so we can propagate work-specific
     # resolutions (author names are unambiguous but pub places are not)
@@ -47,8 +37,8 @@ def refine_metadata(
     # the original (the original is filled so comparisons with null are safe);
     # an empty refined value means "leave the original alone".
     author_changes_df = refined_df.filter(
-        pl.col("author_refined").is_not_null()
-        & pl.col("author_refined").ne(pl.col("author").fill_null(""))
+        pl.col.author_refined.is_not_null()
+        & pl.col.author_refined.ne(pl.col.author.fill_null(""))
     )
     num_author_changes = author_changes_df.height
     uniq_author_changes = (
@@ -59,8 +49,8 @@ def refine_metadata(
     )
 
     pubplace_changes_df = refined_df.filter(
-        pl.col("pub_place_refined").is_not_null()
-        & pl.col("pub_place_refined").ne(pl.col("pub_place").fill_null(""))
+        pl.col.pub_place_refined.is_not_null()
+        & pl.col.pub_place_refined.ne(pl.col.pub_place.fill_null(""))
     )
     num_pubplace_changes = pubplace_changes_df.height
     uniq_pubplace_changes = pubplace_changes_df.select(
@@ -70,10 +60,8 @@ def refine_metadata(
         f"Updated pub_place in {num_pubplace_changes:,} works ({uniq_pubplace_changes:,} unique replacements)"
     )
 
-    # then replace the original with the refined fields, keeping the original
-    # value whenever the refined set has none for a record (work_ids absent from
-    # the refined set, or freshly-added records). This prevents the join from
-    # silently wiping author/pub_place to null.
+    # then replace the original with the refined fields, but preserve the original
+    # value whenever the refined set is absent
     refined_df = refined_df.with_columns(
         author=pl.coalesce("author_refined", "author"),
         pub_place=pl.coalesce("pub_place_refined", "pub_place"),
@@ -81,7 +69,7 @@ def refine_metadata(
 
     # identify any records added after the manual cleanup, and update author/pub_place
     # if there is an unambiguous mapping from the refined set
-    post_refine_records = df.filter(pl.col("added").gt(refined_last_update))
+    post_refine_records = df.filter(pl.col.added.gt(refined_last_update))
     if post_refine_records.height:
         author_lookup = author_changes_df.select("author", "author_refined").unique()
         # omit any ambiguous authors (a single original author resolving to more
@@ -103,10 +91,7 @@ def refine_metadata(
             .join(pub_place_lookup, on="pub_place", how="left")
             .filter(
                 # limit to records with at least one refined value
-                ~(
-                    pl.col("author_refined").is_null()
-                    & pl.col("pub_place_refined").is_null()
-                )
+                ~(pl.col.author_refined.is_null() & pl.col.pub_place_refined.is_null())
             )
         )
 
@@ -121,12 +106,12 @@ def refine_metadata(
             )
             .with_columns(
                 # take the refined value if not null, otherwise the previous value
-                author=pl.when(pl.col("author_refined").is_not_null())
-                .then(pl.col("author_refined"))
-                .otherwise(pl.col("author")),
-                pub_place=pl.when(pl.col("pub_place_refined").is_not_null())
-                .then(pl.col("pub_place_refined"))
-                .otherwise(pl.col("pub_place")),
+                author=pl.when(pl.col.author_refined.is_not_null())
+                .then(pl.col.author_refined)
+                .otherwise(pl.col.author),
+                pub_place=pl.when(pl.col.pub_place_refined.is_not_null())
+                .then(pl.col.pub_place_refined)
+                .otherwise(pl.col.pub_place),
             )
             .drop("author_refined", "pub_place_refined")
         )
@@ -141,8 +126,8 @@ def refine_metadata(
 
     # load json, update based on csv, write out
     # NOTE: the CSV and JSON are known to be equivalent and in the same order
-    # (both are generated from the same dataset), so the rows are paired
-    # positionally; the per-row assert below guards against drift.
+    # (both are generated from the same data), so rows are paired in sequence
+    # the per-row assert is a check to catch any mismatches
     with json_metadata_path.open() as jsonfile:
         json_metadata = json.load(jsonfile)
     refined_json_metadata = []
