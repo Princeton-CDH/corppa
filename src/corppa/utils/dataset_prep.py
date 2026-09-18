@@ -1,4 +1,24 @@
-# prep ppa text+image dataset for publication
+"""
+This is a utility scripto help prep the PPA metadata/text/image dataset for publication.
+
+It should be used to align page images with text to create a page_image.tar file
+and update the ppa_pages.jsonl file with image paths and optionally old text, when OCR has changed.
+
+Handles the following formats:
+    - HathiTrust dataset zip files
+    - HathiTrust manually downloaded zip files (full or excerpted) for 1930s content
+    - Gale/ECCO image directory, using existing corppa path utils and naming conventions
+
+For HathiTrust dataset zip files, the script checks for page alignment; if average text similarity is
+below our trusted threshold, does a best-effort alignment based on high-confidence, unambiguous page matches
+which are used to infer matches for neighboring pages.
+
+For convenience, a slurm sbatch file is provided in scripts/dataset_prep.sbatch
+
+Supports interruption and continuing partial work, so that alignment can be completed in multiple passes.
+
+"""
+
 import argparse
 import bisect
 import logging
