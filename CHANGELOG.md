@@ -1,31 +1,19 @@
 # CHANGELOG
 
-<!-- DRAFT — please review before merging; generated from git log and closed GitHub issues/PRs. -->
 ## [0.6] 2026-09-18
 
-Updates to support improved corpus preparation, page alignment, and poetry
-detection evaluation.
+Improve poetry detection span evaluation and add scripts to prepare PPA metadata/text/image dataset
+for publication (page alignment and metadata refinement).
 
 ### Poetry Detection
 - Added page-level F1-score evaluation for detected spans.
-- Improved dataset preparation and metadata handling for compiling publishable
-  found-poems data.
 
 ### Metadata, Text, and Image Dataset Publication Prep
-- Added utilities and a script for refining and propagating metadata in
-  dataset CSV and JSON files.
-- Added support for HathiTrust 1930 image zipfiles and packaging page images
-  into the dataset.
-- Added page alignment between OCR versions, including sequential matching,
-  page-shift reporting, and handling for missing or reordered pages.
-- Improved source-specific page processing for Gale, EEBO-TCP, and HathiTrust
-  data, with clearer reporting and logging.
-- Updated OCR processing to preserve older text when new OCR differs.
-
-### Misc
-- Added a `continue` option and signal handling for long-running dataset
-  preparation jobs.
-- Added tests and review notebooks for page alignment and dataset refinement.
+- Added utility script (`corppa/utils/dataset_refine.py`) to propagating manually cleaned metadata 
+  (via OpenRefine or similar) to an updated version of metadata (applies changes to CSV and JSON files both; only handles `author` and `pub_year` fields).
+- Added a utility script (`corppa/utils/dataset_prep.py`) to align page images with text to create
+  page image tar file and update page JSONL data in prepataion for dataset publication. 
+- Includes notebooks to review page alignment logic 
 
 ## [0.5] 2026-05-12
 
@@ -131,3 +119,4 @@ Updates to support publication of PPA found poems v0.5 dataset
 [0.3]: https://github.com/Princeton-CDH/corppa/releases/tag/0.3
 [0.4]: https://github.com/Princeton-CDH/corppa/releases/tag/0.4
 [0.5]: https://github.com/Princeton-CDH/corppa/releases/tag/0.5
+[0.6]: https://github.com/Princeton-CDH/corppa/releases/tag/0.6
