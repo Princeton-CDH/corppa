@@ -1,11 +1,31 @@
 # CHANGELOG
 
-## 0.6
+<!-- DRAFT — please review before merging; generated from git log and closed GitHub issues/PRs. -->
+## [0.6] 2026-09-18
+
+Updates to support improved corpus preparation, page alignment, and poetry
+detection evaluation.
 
 ### Poetry Detection
-- Update evaluation code
-  - Now include page-level F1 scores
-  - Updated edge cases for precision and recall, returns 1 when denominator is 0
+- Added page-level F1-score evaluation for detected spans.
+- Improved dataset preparation and metadata handling for compiling publishable
+  found-poems data.
+
+### Metadata, Text, and Image Dataset Publication Prep
+- Added utilities and a script for refining and propagating metadata in
+  dataset CSV and JSON files.
+- Added support for HathiTrust 1930 image zipfiles and packaging page images
+  into the dataset.
+- Added page alignment between OCR versions, including sequential matching,
+  page-shift reporting, and handling for missing or reordered pages.
+- Improved source-specific page processing for Gale, EEBO-TCP, and HathiTrust
+  data, with clearer reporting and logging.
+- Updated OCR processing to preserve older text when new OCR differs.
+
+### Misc
+- Added a `continue` option and signal handling for long-running dataset
+  preparation jobs.
+- Added tests and review notebooks for page alignment and dataset refinement.
 
 ## [0.5] 2026-05-12
 
