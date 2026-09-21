@@ -11,6 +11,7 @@ from corppa.utils.path_utils import (
     decode_htid,
     encode_htid,
     find_relative_paths,
+    get_gale_image_name,
     get_image_relpath,
     get_page_number,
     get_ppa_source,
@@ -113,6 +114,12 @@ def test_page_number():
     # raise not implemented error if source id is not Gale/ECCO
     with pytest.raises(NotImplementedError):
         assert get_page_number(Path("uva.x002075945_00180.txt")) == "0018"
+
+
+def test_get_gale_image_name():
+    assert get_gale_image_name("CB0127060085", 5) == "CB0127060085_00050.TIF"
+    assert get_gale_image_name("vol_id", 4) == "vol_id_00040.TIF"
+    assert get_gale_image_name("vol_id", 100) == "vol_id_01000.TIF"
 
 
 @patch("corppa.utils.path_utils.get_volume_id", return_value="vol_id")
