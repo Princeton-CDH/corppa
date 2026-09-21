@@ -79,12 +79,14 @@ def get_zip_textfiles(zipfile: ZipFile) -> Iterator[tuple[str, str]]:
 
 def get_zipfile_pages(zipfile) -> pl.DataFrame:
     """Load text files from a HathiTrust zipfile into a polars dataframe.
+
     Returned dataframe has the following columns:
-        - page_filename
-        - text : full text contents of the page
-        - page_id : numeric portion extracted from page_filename
-        - order : numeric version of `page_id`
-        - text_len : number of characters in `text`
+
+    * ``page_filename``
+    * ``text``: full text contents of the page
+    * ``page_id``: numeric portion extracted from ``page_filename``
+    * ``order``: numeric version of ``page_id``
+    * ``text_len``: number of characters in ``text``
     """
     return (
         pl.DataFrame(
@@ -855,6 +857,7 @@ def process_work(
     tar: tarfile.TarFile,
     ht1930_work_ids: Optional[dict[str, Optional[str]]] = None,
 ) -> Iterator[dict]:
+    """Process one work using the source-specific image handling strategy."""
     # generic process work method, which calls appropriate source-specific method
     ht1930_work_ids = ht1930_work_ids or {}
     source = get_ppa_source(work_id)
@@ -890,6 +893,7 @@ def process_work(
 def process_gale_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
+    """Add available Gale page images to a work and yield its page records."""
     vol_id = get_volume_id(work_id)
     vol_img_dir = image_dir / get_vol_dir(vol_id)
     if vol_img_dir.is_dir():
@@ -936,6 +940,7 @@ def open_ht_zipfile(zipfile_path: Optional[Path]) -> Iterator[Optional[ZipFile]]
 def process_ht_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
+    """Align HathiTrust pages with images and yield the resulting page records."""
     htid = get_volume_id(work_id)
     # a work is an excerpt if its work_id includes with -p; excerpts are not expected to use all pages from the zip file
     is_excerpt = "-p" in work_id
@@ -1196,6 +1201,7 @@ def _tally_processed_work(
 
 
 def main():
+    """Parse command-line arguments and prepare a full-text dataset."""
     global _stop_requested
     _stop_requested = False
 
