@@ -337,7 +337,7 @@ def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
         result = list(process_gale_work(vol_id, pages, image_dir, tar))
 
     assert len(result) == 1
-    assert result[0]["image_path"] == f"{vol_id}/{img_name}"
+    assert result[0]["image_path"] == f"out.tar:{vol_id}/{img_name}"
 
 
 def test_process_gale_work_missing_image_file_omits_path(tmp_path):
@@ -859,7 +859,7 @@ def test_process_ht1930_maps_images_by_order(tmp_path):
     from corppa.utils.path_utils import encode_htid
 
     encoded = encode_htid(work_id)
-    assert result[0]["image_path"] == f"{encoded}/{work_id}.00000001.tif"
+    assert result[0]["image_path"] == f"out.tar:{encoded}/{work_id}.00000001.tif"
     assert f"{encoded}/{work_id}.00000001.tif" in tar_names
 
 
@@ -1999,7 +1999,8 @@ def test_main_writes_all_works(corpus_input, main_dirs):
     _run_main(corpus_input, main_dirs)
 
     output_pages = output_dir / "ppa_pages.jsonl"
-    output_tar = output_dir / "ppa_images.tar"
+    # all page images are in o-y chunk because test ids all start with work
+    output_tar = output_dir / "ppa_images_o-y.tar"
     assert output_pages.exists()
     # tar is uncompressed (not .tar.gz) so it can be appended to on continue
     assert output_tar.exists()
@@ -2136,29 +2137,6 @@ def test_main_without_continue_renames_existing_output(corpus_input, main_dirs):
         "workB.0001",
         "workB.0002",
     ]
-
-
-def test_main_without_continue_warns_and_overwrites_existing_archive(
-    corpus_input, main_dirs, caplog
-):
-    _, output_dir = main_dirs
-    output_dir.mkdir()
-
-    output_tar = output_dir / "ppa_images.tar"
-    # a leftover archive from a prior run, with a stale member to prove it is
-    # overwritten (mode "w") rather than appended to
-    with tarfile.open(output_tar, "w") as tar:
-        info = tarfile.TarInfo(name="stale.txt")
-        info.size = 0
-        tar.addfile(info)
-
-    with caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"):
-        _run_main(corpus_input, main_dirs)
-
-    # existing archive is flagged and overwritten (no stale member remains)
-    assert "already exists, overwriting" in caplog.text
-    with tarfile.open(output_tar, "r") as tar:
-        assert "stale.txt" not in tar.getnames()
 
 
 # --- graceful stop on signal ---

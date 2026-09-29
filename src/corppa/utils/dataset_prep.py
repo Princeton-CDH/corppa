@@ -862,7 +862,7 @@ def process_work(
         case _:
             # unknown source: don't silently drop pages, yield them unchanged
             logger.warning(
-                "unknown source %s for work %s; yielding pages without images",
+                "unknown source %r for work %s; yielding pages without images",
                 source,
                 work_id,
             )
@@ -924,6 +924,9 @@ def process_ht_work(
     # a work is an excerpt if its work_id includes with -p; excerpts are not expected to use all pages from the zip file
     is_excerpt = "-p" in work_id
     zipfile_path = get_ht_zipfile_path(work_id, image_dir)
+    # get the base name of the tarfile, to include in image path field
+    tar_filename = Path(str(tar.name)).name
+
     with open_ht_zipfile(zipfile_path) as ht_zip:
         if ht_zip is None:
             # zipfile does not exist; yield pages without image paths
@@ -969,7 +972,7 @@ def process_ht_work(
                     img_ext = Path(zip_image_path).suffix
                     tar_image_path = f"{encoded_htid}/{page_id}{img_ext}"
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
-                    page["image_path"] = tar_image_path
+                    page["image_path"] = f"{tar_filename}:{tar_image_path}"
                     # if new text is set, move old ocr to text and use new ocr as primary text
                     if new_ocr_text is not None:
                         page["old_text"] = page["text"]
@@ -1060,6 +1063,8 @@ def process_ht1930_work(
     #   excerpt:   mdp-39015002669052-338-339-1788473798.zip
     #              (htid, first page, last page, HT id)
     htid_prefix = htid.replace(".", "-").replace("$", "-")
+    # get the base name of the tarfile, to include in image path field
+    tar_filename = Path(str(tar.name)).name
 
     # Since we don't know the timestamp a priori, match based on htid and
     # first digital page number if specified.
@@ -1126,8 +1131,8 @@ def process_ht1930_work(
                 tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
                 try:
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
-                    # if adding succeeded, include the image path in the output page data
-                    page["image_path"] = tar_image_path
+                    # if adding succeeded, include the tar file name and image path in the output page data
+                    page["image_path"] = f"{tar_filename}:{tar_image_path}"
                     matched_count += 1
                 except KeyError:
                     logger.warning(
