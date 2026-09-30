@@ -1188,7 +1188,7 @@ def _tally_processed_work(
 tar_file_chunks = {
     "CB-CW": ["C"],
     "a-k": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"],
-    "l-0m": ["l", "m"],
+    "l-m": ["l", "m"],
     "n": ["n"],
     "o-y": ["o", "p", "t", "u", "w", "y"],
 }
