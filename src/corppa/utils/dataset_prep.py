@@ -887,7 +887,8 @@ def process_gale_work(
                 tar_image_path = f"{work_id}/{image_path.name}"
                 tar.add(image_path, arcname=tar_image_path)
                 # add the tar file name and image path to the page data
-                page["image_path"] = f"{tar_filename}:{tar_image_path}"
+                page["image_file"] = tar_filename
+                page["image_path"] = tar_image_path
             # yield page data either way (with or without image path)
             yield page
     else:
@@ -972,7 +973,8 @@ def process_ht_work(
                     img_ext = Path(zip_image_path).suffix
                     tar_image_path = f"{encoded_htid}/{page_id}{img_ext}"
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
-                    page["image_path"] = f"{tar_filename}:{tar_image_path}"
+                    page["image_file"] = tar_filename
+                    page["image_path"] = tar_image_path
                     # if new text is set, move old ocr to text and use new ocr as primary text
                     if new_ocr_text is not None:
                         page["old_text"] = page["text"]
@@ -1132,7 +1134,8 @@ def process_ht1930_work(
                 try:
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
                     # if adding succeeded, include the tar file name and image path in the output page data
-                    page["image_path"] = f"{tar_filename}:{tar_image_path}"
+                    page["image_file"] = tar_filename
+                    page["image_path"] = tar_image_path
                     matched_count += 1
                 except KeyError:
                     logger.warning(

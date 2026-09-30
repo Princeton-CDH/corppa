@@ -337,7 +337,8 @@ def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
         result = list(process_gale_work(vol_id, pages, image_dir, tar))
 
     assert len(result) == 1
-    assert result[0]["image_path"] == f"out.tar:{vol_id}/{img_name}"
+    assert result[0]["image_file"] == "out.tar"
+    assert result[0]["image_path"] == f"{vol_id}/{img_name}"
 
 
 def test_process_gale_work_missing_image_file_omits_path(tmp_path):
@@ -859,7 +860,8 @@ def test_process_ht1930_maps_images_by_order(tmp_path):
     from corppa.utils.path_utils import encode_htid
 
     encoded = encode_htid(work_id)
-    assert result[0]["image_path"] == f"out.tar:{encoded}/{work_id}.00000001.tif"
+    assert result[0]["image_file"] == "out.tar"
+    assert result[0]["image_path"] == f"{encoded}/{work_id}.00000001.tif"
     assert f"{encoded}/{work_id}.00000001.tif" in tar_names
 
 
