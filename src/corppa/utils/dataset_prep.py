@@ -1,6 +1,7 @@
 # prep ppa text+image dataset for publication
 import argparse
 import bisect
+import json
 import logging
 import signal
 import sys
@@ -1213,6 +1214,61 @@ def get_tarfile_group(work_id: str) -> str | None:
     return None
 
 
+def add_image_paths_to_metadata(corpus_dir: Path, output_dir: Path) -> None:
+    """
+    Update metadata with image_file and image_path fields for works with images.
+    """
+    logger.info("Adding image filenames and paths to output metadata")
+    work_image_paths = defaultdict(dict)
+    csv_metadata_path = corpus_dir / "ppa_metadata.csv"
+    if not csv_metadata_path.exists():
+        logger.warning(
+            "ppa_metadata.csv not found in %s; skipping image path update", corpus_dir
+        )
+        return
+    df = pl.read_csv(csv_metadata_path)
+    for work_id, source in df.select("work_id", "source").iter_rows():
+        image_chunk_id = get_tarfile_group(work_id)
+        if image_chunk_id is not None:
+            if source == "HathiTrust":
+                image_path = f"{encode_htid(work_id)}/"
+            else:
+                image_path = f"{work_id}/"
+            work_image_paths[work_id] = {
+                "work_id": work_id,  # include so we can create a dataframe from list of dicts
+                "image_path": image_path,
+                "image_file": f"ppa_images_{image_chunk_id}.tar",
+            }
+
+    # convert to dataframe so fields can be combined and written out to CSV
+    img_path_df = pl.from_dicts(list(work_image_paths.values())).select(
+        "work_id",
+        "image_file",
+        "image_path",  # order fields logically
+    )
+    df = df.join(img_path_df, on="work_id", how="left")
+    df.write_csv(output_dir / "ppa_metadata.csv")
+
+    # now update the JSON metadata with the same information
+    json_metadata_path = corpus_dir / "ppa_metadata.json"
+    if not json_metadata_path.exists():
+        logger.warning(
+            "ppa_metadata.json not found in %s; skipping image path update", corpus_dir
+        )
+        return
+    # load json, update based on work image info dict, write to output dir
+    with json_metadata_path.open() as jsonfile:
+        json_metadata = json.load(jsonfile)
+    updated_json_metadata = []
+    for row in json_metadata:
+        work_id = row["work_id"]
+        if work_id in work_image_paths:
+            row.update(work_image_paths[work_id])
+        updated_json_metadata.append(row)
+    with (output_dir / "ppa_metadata.json").open("w") as outfile:
+        json.dump(updated_json_metadata, outfile, indent=2)
+
+
 def main():
     global _stop_requested
     _stop_requested = False
@@ -1334,6 +1390,8 @@ def main():
                 old_output_pages,
             )
 
+    add_image_paths_to_metadata(args.corpus_dir, args.output_dir)
+
     # use a polars lazy frame to calculate the total so tqdm can estimate completion
     start_time = perf_counter()
     total_pages = pl.scan_ndjson(input_pages_path).select(pl.len()).collect().item()
@@ -1372,6 +1430,7 @@ def main():
     skip_work = False
     tar: tarfile.TarFile | None = None
     tar_mode_verb = {"a": "Updating", "w": "Creating"}
+
     try:
         for page in tqdm(
             page_stream,

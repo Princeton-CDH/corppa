@@ -1,6 +1,8 @@
 # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+import csv
+import json
 import re
 import signal
 import tarfile
@@ -17,12 +19,14 @@ from tqdm import tqdm
 
 import corppa.utils.dataset_prep as dataset_prep
 from corppa.utils.dataset_prep import (
+    add_image_paths_to_metadata,
     add_zip_file_to_tar,
     align_pages,
     align_shifted_pages,
     find_corpus_file,
     get_ht1930_work_ids,
     get_ht_zipfile_path,
+    get_tarfile_group,
     get_zip_textfiles,
     get_zipfile_pages,
     longest_increasing_subseq,
@@ -36,6 +40,7 @@ from corppa.utils.dataset_prep import (
     review_alignment,
     zip_image_filenames,
 )
+from corppa.utils.path_utils import encode_htid
 
 WORK_ID = "htid:test.12345678"
 
@@ -1073,6 +1078,64 @@ def test_get_ht1930_work_ids_unsupported_format(tmp_path):
     meta.write_text("work_id,pub_year,source,pages_digital\nht.new,1930,HathiTrust,\n")
     with pytest.raises(ValueError, match="Unsupported metadata format"):
         get_ht1930_work_ids(meta)
+
+
+# --- update metadata with image paths ---
+
+
+def test_add_image_paths_to_metadata(tmp_path: Path):
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    meta_csv = input_dir / "ppa_metadata.csv"
+    meta_json = input_dir / "ppa_metadata.json"
+
+    # write out a subset of records to both
+    metadata = [
+        {"work_id": "dul1.ark:/123/t0x3t2", "pub_year": 1850, "source": "HathiTrust"},
+        {"work_id": "CB1234", "pub_year": 1832, "source": "Gale"},
+        {"work_id": "A01234", "pub_year": 1922, "source": "EEBO-TCP"},
+    ]
+    meta_csv.open("w", encoding="utf-8").write(
+        "work_id,pub_year,source\n"
+        + "\n".join(f"{m['work_id']},{m['pub_year']},{m['source']}" for m in metadata),
+    )
+    with meta_json.open("w") as outfile:
+        json.dump(metadata, outfile)
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    add_image_paths_to_metadata(input_dir, output_dir)
+    # output files should exist and contain the same number of records
+    output_csv = output_dir / "ppa_metadata.csv"
+    output_json = output_dir / "ppa_metadata.json"
+    assert output_csv.exists()
+    assert output_json.exists()
+    # check that the image_path column was added to the CSV
+    with output_csv.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        assert "image_file" in reader.fieldnames
+        assert "image_path" in reader.fieldnames
+        assert len(rows) == len(metadata)
+    # check that the image_path key was added to the JSON
+    with output_json.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+        # no rows lost
+        assert len(data) == len(metadata)
+        for row in data:
+            if row["source"] == "EEBO-TCP":
+                assert "image_file" not in row
+                assert "image_path" not in row
+            else:
+                assert (
+                    row["image_file"]
+                    == f"ppa_images_{get_tarfile_group(row['work_id'])}.tar"
+                )
+
+                if row["source"] == "HathiTrust":
+                    assert row["image_path"] == f"{encode_htid(row['work_id'])}/"
+                elif row["source"] == "Gale":
+                    assert row["image_path"] == f"{row['work_id']}/"
 
 
 # --- longest_increasing_subseq ---
