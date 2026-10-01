@@ -543,19 +543,25 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile) -> dict:
         logger.info(
             f"{work_id: <30} {pages_df.height:> 5,} pages; average indel similarity score: {avg:.3f}"
         )
+
+    # set new_ocr to zip text when content differs; otherwise set to null
+    page_mapping_df = pages_join_df.with_columns(
+        new_ocr=pl.when(pl.col.text_match.ne(1.0))
+        .then(pl.col.text_right)
+        .otherwise(pl.lit(None))
+    )
     # at least one 0.87 is visibly correct alignment; use same cutoff as for the
     # shift alignment, but adjust for the 0-1 score rather than 1-100 like cdist
-    if avg is not None and (avg * 100) > MATCH_SCORE_CUTOFF:
-        # set new_ocr to zip text when content differs; otherwise set to null
-        page_mapping_df = pages_join_df.with_columns(
-            new_ocr=pl.when(pl.col.text_match.ne(1.0))
-            .then(pl.col.text_right)
-            .otherwise(pl.lit(None))
-        )
-    else:
-        page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
-        if page_mapping_df.is_empty():
-            return {}
+    if avg is None or (avg * 100) < MATCH_SCORE_CUTOFF:
+        # if no or low score, try to determine shifted alignment
+        shifted_page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
+        # if a mapping is returned, use it
+        if not shifted_page_mapping_df.is_empty():
+            page_mapping_df = shifted_page_mapping_df
+        else:
+            # if not, use the sequence-based alignment as a fallback
+            # (accurate for most of the excerpts and should be useful for the full-works)
+            logger.info("Falling back to sequence-based page mapping")
 
     # construct and return a dictionary mapping original page id to corresponding filename in the zipfile
     # and optionally new ocr, when aligned page ocr differs

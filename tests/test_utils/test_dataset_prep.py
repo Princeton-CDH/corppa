@@ -186,24 +186,33 @@ def test_align_pages_good_match_returns_mapping(pages_df, aligned_zip):
     }
 
 
-def test_align_pages_low_match_falls_through_to_shifted(tmp_path):
-    # Content differs entirely -> avg score is low -> falls through to
-    # align_shifted_pages, which finds no matches and returns an empty
-    # mapping, so align_pages returns None.
-    # align_shifted_pages needs an `order` column and long-enough texts.
+def test_align_pages_no_match_falls_back_to_sequential(tmp_path):
+    # when content differs enough and average score is bellow the threshold,
+    # align_pages calls align_shifted_pages; if no high-confidence
+    # matches are found and it returns an empty mapping,
+    # the low-similarity sequential mapping is returned instead
+    work_ids = ["work.00000001", "work.00000002", "work.00000003"]
     pages_df = pl.DataFrame(
         {
-            "id": ["work.00000001", "work.00000002", "work.00000003"],
+            "id": work_ids,
             "order": [1, 2, 3],
             "text": [_long_text(f"alpha-{i}") for i in range(3)],
         }
     )
-    zip_path = make_zip(
-        tmp_path,
-        {f"0000000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)},
-    )
+    zip_pages = {f"000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)}
+    zip_path = make_zip(tmp_path, zip_pages)
     with ZipFile(zip_path) as zf:
-        assert align_pages(WORK_ID, pages_df, zf) == {}
+        page_mapping = align_pages(WORK_ID, pages_df, zf)
+        assert list(page_mapping.keys()) == work_ids
+        for page_filename, page_text in zip_pages.items():
+            page_basename = page_filename.split(".")[
+                0
+            ]  # mapping returns basename without extension
+            page_index = int(page_basename)  # convert to numeric index
+            assert page_mapping[f"work.0000000{page_index}"] == (
+                page_basename,
+                page_text,
+            )
 
 
 def test_align_pages_join_mismatch_returns_partial(tmp_path, pages_df):
