@@ -1,6 +1,8 @@
 # Copyright (c) 2024-2026, Center for Digital Humanities, Princeton University
 # SPDX-License-Identifier: Apache-2.0
 
+import csv
+import json
 import re
 import signal
 import tarfile
@@ -17,12 +19,14 @@ from tqdm import tqdm
 
 import corppa.utils.dataset_prep as dataset_prep
 from corppa.utils.dataset_prep import (
+    add_image_paths_to_metadata,
     add_zip_file_to_tar,
     align_pages,
     align_shifted_pages,
     find_corpus_file,
     get_ht1930_work_ids,
     get_ht_zipfile_path,
+    get_tarfile_group,
     get_zip_textfiles,
     get_zipfile_pages,
     longest_increasing_subseq,
@@ -36,6 +40,7 @@ from corppa.utils.dataset_prep import (
     review_alignment,
     zip_image_filenames,
 )
+from corppa.utils.path_utils import encode_htid
 
 WORK_ID = "htid:test.12345678"
 
@@ -186,24 +191,33 @@ def test_align_pages_good_match_returns_mapping(pages_df, aligned_zip):
     }
 
 
-def test_align_pages_low_match_falls_through_to_shifted(tmp_path):
-    # Content differs entirely -> avg score is low -> falls through to
-    # align_shifted_pages, which finds no matches and returns an empty
-    # mapping, so align_pages returns None.
-    # align_shifted_pages needs an `order` column and long-enough texts.
+def test_align_pages_no_match_falls_back_to_sequential(tmp_path):
+    # when content differs enough and average score is bellow the threshold,
+    # align_pages calls align_shifted_pages; if no high-confidence
+    # matches are found and it returns an empty mapping,
+    # the low-similarity sequential mapping is returned instead
+    work_ids = ["work.00000001", "work.00000002", "work.00000003"]
     pages_df = pl.DataFrame(
         {
-            "id": ["work.00000001", "work.00000002", "work.00000003"],
+            "id": work_ids,
             "order": [1, 2, 3],
             "text": [_long_text(f"alpha-{i}") for i in range(3)],
         }
     )
-    zip_path = make_zip(
-        tmp_path,
-        {f"0000000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)},
-    )
+    zip_pages = {f"000{i + 1}.txt": _long_text(f"zzzzz-{i}-qqqqq") for i in range(3)}
+    zip_path = make_zip(tmp_path, zip_pages)
     with ZipFile(zip_path) as zf:
-        assert align_pages(WORK_ID, pages_df, zf) == {}
+        page_mapping = align_pages(WORK_ID, pages_df, zf)
+        assert list(page_mapping.keys()) == work_ids
+        for page_filename, page_text in zip_pages.items():
+            page_basename = page_filename.split(".")[
+                0
+            ]  # mapping returns basename without extension
+            page_index = int(page_basename)  # convert to numeric index
+            assert page_mapping[f"work.0000000{page_index}"] == (
+                page_basename,
+                page_text,
+            )
 
 
 def test_align_pages_join_mismatch_returns_partial(tmp_path, pages_df):
@@ -337,6 +351,7 @@ def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
         result = list(process_gale_work(vol_id, pages, image_dir, tar))
 
     assert len(result) == 1
+    assert result[0]["image_file"] == "out.tar"
     assert result[0]["image_path"] == f"{vol_id}/{img_name}"
 
 
@@ -859,6 +874,7 @@ def test_process_ht1930_maps_images_by_order(tmp_path):
     from corppa.utils.path_utils import encode_htid
 
     encoded = encode_htid(work_id)
+    assert result[0]["image_file"] == "out.tar"
     assert result[0]["image_path"] == f"{encoded}/{work_id}.00000001.tif"
     assert f"{encoded}/{work_id}.00000001.tif" in tar_names
 
@@ -1062,6 +1078,64 @@ def test_get_ht1930_work_ids_unsupported_format(tmp_path):
     meta.write_text("work_id,pub_year,source,pages_digital\nht.new,1930,HathiTrust,\n")
     with pytest.raises(ValueError, match="Unsupported metadata format"):
         get_ht1930_work_ids(meta)
+
+
+# --- update metadata with image paths ---
+
+
+def test_add_image_paths_to_metadata(tmp_path: Path):
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    meta_csv = input_dir / "ppa_metadata.csv"
+    meta_json = input_dir / "ppa_metadata.json"
+
+    # write out a subset of records to both
+    metadata = [
+        {"work_id": "dul1.ark:/123/t0x3t2", "pub_year": 1850, "source": "HathiTrust"},
+        {"work_id": "CB1234", "pub_year": 1832, "source": "Gale"},
+        {"work_id": "A01234", "pub_year": 1922, "source": "EEBO-TCP"},
+    ]
+    meta_csv.open("w", encoding="utf-8").write(
+        "work_id,pub_year,source\n"
+        + "\n".join(f"{m['work_id']},{m['pub_year']},{m['source']}" for m in metadata),
+    )
+    with meta_json.open("w") as outfile:
+        json.dump(metadata, outfile)
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    add_image_paths_to_metadata(input_dir, output_dir)
+    # output files should exist and contain the same number of records
+    output_csv = output_dir / "ppa_metadata.csv"
+    output_json = output_dir / "ppa_metadata.json"
+    assert output_csv.exists()
+    assert output_json.exists()
+    # check that the image_path column was added to the CSV
+    with output_csv.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        assert "image_file" in reader.fieldnames
+        assert "image_path" in reader.fieldnames
+        assert len(rows) == len(metadata)
+    # check that the image_path key was added to the JSON
+    with output_json.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+        # no rows lost
+        assert len(data) == len(metadata)
+        for row in data:
+            if row["source"] == "EEBO-TCP":
+                assert "image_file" not in row
+                assert "image_path" not in row
+            else:
+                assert (
+                    row["image_file"]
+                    == f"ppa_images_{get_tarfile_group(row['work_id'])}.tar"
+                )
+
+                if row["source"] == "HathiTrust":
+                    assert row["image_path"] == f"{encode_htid(row['work_id'])}/"
+                elif row["source"] == "Gale":
+                    assert row["image_path"] == f"{row['work_id']}/"
 
 
 # --- longest_increasing_subseq ---
@@ -1999,7 +2073,8 @@ def test_main_writes_all_works(corpus_input, main_dirs):
     _run_main(corpus_input, main_dirs)
 
     output_pages = output_dir / "ppa_pages.jsonl"
-    output_tar = output_dir / "ppa_images.tar"
+    # all page images are in o-y chunk because test ids all start with work
+    output_tar = output_dir / "ppa_images_o-y.tar"
     assert output_pages.exists()
     # tar is uncompressed (not .tar.gz) so it can be appended to on continue
     assert output_tar.exists()
@@ -2136,29 +2211,6 @@ def test_main_without_continue_renames_existing_output(corpus_input, main_dirs):
         "workB.0001",
         "workB.0002",
     ]
-
-
-def test_main_without_continue_warns_and_overwrites_existing_archive(
-    corpus_input, main_dirs, caplog
-):
-    _, output_dir = main_dirs
-    output_dir.mkdir()
-
-    output_tar = output_dir / "ppa_images.tar"
-    # a leftover archive from a prior run, with a stale member to prove it is
-    # overwritten (mode "w") rather than appended to
-    with tarfile.open(output_tar, "w") as tar:
-        info = tarfile.TarInfo(name="stale.txt")
-        info.size = 0
-        tar.addfile(info)
-
-    with caplog.at_level("WARNING", logger="corppa.utils.dataset_prep"):
-        _run_main(corpus_input, main_dirs)
-
-    # existing archive is flagged and overwritten (no stale member remains)
-    assert "already exists, overwriting" in caplog.text
-    with tarfile.open(output_tar, "r") as tar:
-        assert "stale.txt" not in tar.getnames()
 
 
 # --- graceful stop on signal ---
