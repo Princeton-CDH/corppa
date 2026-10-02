@@ -9,7 +9,7 @@
 
 import marimo
 
-__generated_with = "0.24.0"
+__generated_with = "0.25.1"
 app = marimo.App(width="medium")
 
 
@@ -20,7 +20,7 @@ def _(mo):
 
     Review the image/text alignment produced by
     `corppa.utils.dataset_prep`. Point this notebook at the output
-    directory (containing `ppa_pages.jsonl` and `ppa_images.tar`),
+    directory (containing `ppa_pages.jsonl` and one or more `ppa_images_##.tar` files),
     optionally filter by work id, then sample random pages and view
     the image + text pairs side by side.
 
@@ -34,7 +34,6 @@ def _():
     import io
     import random
     import tarfile
-    from pathlib import Path
 
     import polars as pl
     from PIL import Image
@@ -49,99 +48,130 @@ def _():
         _loads = json.loads
 
     def load_pages(pages_path):
-        """Read the pages JSONL, keeping only the scalar fields the notebook
-        needs (work_id, id, text, image_path).
+        # use the compiled dataset with image paths and new ocr
+        return pl.read_ndjson(
+            pages_path,
+            schema={
+                "id": pl.String,
+                "work_id": pl.String,
+                "label": pl.String,
+                "order": pl.Int64,
+                "text": pl.String,
+                "tags": pl.List(pl.String),
+                "image_path": pl.String,
+                "image_file": pl.String,
+                "old_text": pl.String,
+            },
+        )
 
-        We parse the JSON line-by-line and pull out just these fields rather
-        than using polars' JSONL reader. polars infers one schema across the
-        whole file, which fails on ragged nested fields -- e.g. a field that
-        is a struct in some records and a list[struct] in others
-        (``failed to determine supertype of list[struct[..]] and struct[..]``).
-        Ignoring those nested fields entirely avoids the conflict."""
-        wanted = ["work_id", "id", "text", "image_path"]
-        records = []
-        with open(pages_path, "rb") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                obj = _loads(line)
-                records.append({k: obj.get(k) for k in wanted})
-        # force all columns to string so empty/missing values stay consistent
-        return pl.DataFrame(records, schema={k: pl.String for k in wanted})
-
-    return Image, Path, io, load_pages, pl, random, tarfile
+    return Image, io, load_pages, pl, random, tarfile
 
 
 @app.cell
 def _(mo):
     # inputs: output directory (or explicit jsonl + tar), sample size
-    data_dir_ui = mo.ui.text(
-        value="",
-        label="Output directory (contains ppa_pages.jsonl + ppa_images.tar)",
-        full_width=True,
+
+    data_dir_ui = mo.ui.file_browser(
+        initial_path=".",
+        selection_mode="directory",
+        multiple=False,
+        label="Select PPA dataset folder with pages.jsonl and image tar files.",
+        restrict_navigation=False,
     )
+
     sample_size_ui = mo.ui.slider(
-        start=1, stop=20, value=5, step=1, label="Sample size", include_input=True
+        start=1,
+        stop=20,
+        value=5,
+        step=1,
+        label="Sample size",
+        include_input=True,
     )
     mo.vstack([data_dir_ui, sample_size_ui])
     return data_dir_ui, sample_size_ui
 
 
 @app.cell
-def _(Path, data_dir_ui, load_pages, mo, pl):
+def _(data_dir_ui, load_pages, mo, pl):
     # load pages jsonl and resolve tar path from the output directory
     mo.stop(
-        not data_dir_ui.value.strip(),
-        mo.md("_Enter an output directory above to begin._"),
+        not data_dir_ui.value,
+        mo.md("_Select the data directory._"),
     )
 
-    _data_dir = Path(data_dir_ui.value.strip()).expanduser()
+    _data_dir = data_dir_ui.value[0].path.expanduser()
     pages_path = _data_dir / "ppa_pages.jsonl"
-    tar_path = _data_dir / "ppa_images.tar"
+    tar_paths = list(_data_dir.glob("ppa_images_*.tar"))
 
     mo.stop(
         not pages_path.exists(),
         mo.md(f"**Pages file not found:** `{pages_path}`"),
     )
     mo.stop(
-        not tar_path.exists(),
-        mo.md(f"**Image archive not found:** `{tar_path}`"),
+        not len(tar_paths),
+        mo.md(f"No image archive files found in `{_data_dir}`"),
     )
+    mo.md(f"{len(tar_paths)} image archive file(s) found in `{_data_dir}`")
 
     # only pages that actually got an aligned image are useful for review
     pages_df = load_pages(pages_path)
     has_image = "image_path" in pages_df.columns
     if has_image:
-        pages_df = pages_df.filter(pl.col("image_path").is_not_null())
+        pages_df = pages_df.filter(pl.col.image_path.is_not_null())
+        # then limit to the image tar files available locally
+        image_tar_files = [p.name for p in tar_paths]
+        pages_df = pages_df.filter(pl.col.image_file.is_in(image_tar_files))
 
     mo.stop(
         not has_image or pages_df.is_empty(),
         mo.md("**No pages with `image_path` found in the pages file.**"),
     )
-    return pages_df, tar_path
+    return image_tar_files, pages_df
 
 
 @app.cell
-def _(mo, pages_df):
+def _(image_tar_files, mo):
+    # limit to a single image tar file at a time
+    tar_file_select = mo.ui.multiselect(
+        options=image_tar_files,
+        max_selections=1,
+        label="Select an image tar file",
+    )
+    tar_file_select
+    return (tar_file_select,)
+
+
+@app.cell
+def _(mo, pages_df, pl, tar_file_select):
     # optional work id filter; helps target known realigned texts
-    work_ids = sorted(pages_df.get_column("work_id").unique().to_list())
+
+    mo.stop(not tar_file_select.value, mo.md("**Select an image tar file.**"))
+
+    filtered_pages_df = pages_df.filter(pl.col.image_file.eq(tar_file_select.value[0]))
+
+    work_ids = sorted(
+        # limit to the selected image file
+        filtered_pages_df.get_column("work_id").unique().to_list()
+    )
     work_filter_ui = mo.ui.multiselect(
         options=work_ids,
-        label=f"Filter by work id (optional; {len(work_ids):,} works)",
+        label=f"Optionally select specific work ids ({len(work_ids):,} works)",
         full_width=True,
     )
+
     work_filter_ui
-    return (work_filter_ui,)
+    return filtered_pages_df, work_filter_ui
 
 
 @app.cell
-def _(pages_df, pl, work_filter_ui):
+def _(filtered_pages_df, pl, work_filter_ui):
     # apply the work-id filter (if any selected)
     if work_filter_ui.value:
-        filtered_df = pages_df.filter(pl.col("work_id").is_in(work_filter_ui.value))
+        filtered_df = filtered_pages_df.filter(
+            pl.col("work_id").is_in(work_filter_ui.value)
+        )
     else:
-        filtered_df = pages_df
+        filtered_df = filtered_pages_df
     return (filtered_df,)
 
 
@@ -170,7 +200,7 @@ def _(filtered_df, mo, random, resample_button, sample_size_ui):
 
 
 @app.cell
-def _(Image, io, mo, sample_df, tar_path, tarfile):
+def _(Image, data_dir_ui, io, mo, sample_df, tar_file_select, tarfile):
     # read the sampled images out of the tar and build image+text pairs
     def _load_image(tar, image_path, max_size=(400, 550)):
         try:
@@ -201,7 +231,8 @@ def _(Image, io, mo, sample_df, tar_path, tarfile):
         )
 
     pairs = []
-    with tarfile.open(tar_path) as tar:
+    _current_tar_path = data_dir_ui.value[0].path / tar_file_select.value[0]
+    with tarfile.open(_current_tar_path) as tar:
         for row in sample_df.iter_rows(named=True):
             header = mo.md(f"**{row['id']}** — `{row['image_path']}`")
             pair = mo.hstack(

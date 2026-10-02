@@ -21,6 +21,7 @@ Supports interruption and continuing partial work, so that alignment can be comp
 
 import argparse
 import bisect
+import json
 import logging
 import signal
 import sys
@@ -565,19 +566,25 @@ def align_pages(work_id: str, pages_df: pl.DataFrame, zipfile: ZipFile) -> dict:
         logger.info(
             f"{work_id: <30} {pages_df.height:> 5,} pages; average indel similarity score: {avg:.3f}"
         )
+
+    # set new_ocr to zip text when content differs; otherwise set to null
+    page_mapping_df = pages_join_df.with_columns(
+        new_ocr=pl.when(pl.col.text_match.ne(1.0))
+        .then(pl.col.text_right)
+        .otherwise(pl.lit(None))
+    )
     # at least one 0.87 is visibly correct alignment; use same cutoff as for the
     # shift alignment, but adjust for the 0-1 score rather than 1-100 like cdist
-    if avg is not None and (avg * 100) > MATCH_SCORE_CUTOFF:
-        # set new_ocr to zip text when content differs; otherwise set to null
-        page_mapping_df = pages_join_df.with_columns(
-            new_ocr=pl.when(pl.col.text_match.ne(1.0))
-            .then(pl.col.text_right)
-            .otherwise(pl.lit(None))
-        )
-    else:
-        page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
-        if page_mapping_df.is_empty():
-            return {}
+    if avg is None or (avg * 100) < MATCH_SCORE_CUTOFF:
+        # if no or low score, try to determine shifted alignment
+        shifted_page_mapping_df = align_shifted_pages(pages_df, zip_pages_df)
+        # if a mapping is returned, use it
+        if not shifted_page_mapping_df.is_empty():
+            page_mapping_df = shifted_page_mapping_df
+        else:
+            # if not, use the sequence-based alignment as a fallback
+            # (accurate for most of the excerpts and should be useful for the full-works)
+            logger.info("Falling back to sequence-based page mapping")
 
     # construct and return a dictionary mapping original page id to corresponding filename in the zipfile
     # and optionally new ocr, when aligned page ocr differs
@@ -854,7 +861,7 @@ def process_work(
     work_id: str,
     pages: list[dict],
     image_dir: Path,
-    tar: tarfile.TarFile,
+    tar: tarfile.TarFile | None,
     ht1930_work_ids: Optional[dict[str, Optional[str]]] = None,
 ) -> Iterator[dict]:
     """Process one work using the source-specific image handling strategy."""
@@ -863,8 +870,10 @@ def process_work(
     source = get_ppa_source(work_id)
     match source:
         case "Gale":
+            assert tar is not None  # tar is not optional for Gale works
             yield from process_gale_work(work_id, pages, image_dir, tar)
         case "HathiTrust":
+            assert tar is not None  # tar is not optional for HT works
             # a small subset of (1930s) HathiTrust volumes have image-only zip
             # files that cannot be text-aligned; map images to pages by digital
             # page sequence (order) instead
@@ -896,6 +905,8 @@ def process_gale_work(
     """Add available Gale page images to a work and yield its page records."""
     vol_id = get_volume_id(work_id)
     vol_img_dir = image_dir / get_vol_dir(vol_id)
+    # get the base name of the tarfile, to include in image path field
+    tar_filename = Path(str(tar.name)).name
     if vol_img_dir.is_dir():
         logging.debug("%s : %s : %d pages", work_id, vol_img_dir, len(pages))
         for page in pages:
@@ -906,7 +917,8 @@ def process_gale_work(
             if image_path.is_file():
                 tar_image_path = f"{work_id}/{image_path.name}"
                 tar.add(image_path, arcname=tar_image_path)
-                # add the image path in the tar file to the page data
+                # add the tar file name and image path to the page data
+                page["image_file"] = tar_filename
                 page["image_path"] = tar_image_path
             # yield page data either way (with or without image path)
             yield page
@@ -945,6 +957,9 @@ def process_ht_work(
     # a work is an excerpt if its work_id includes with -p; excerpts are not expected to use all pages from the zip file
     is_excerpt = "-p" in work_id
     zipfile_path = get_ht_zipfile_path(work_id, image_dir)
+    # get the base name of the tarfile, to include in image path field
+    tar_filename = Path(str(tar.name)).name
+
     with open_ht_zipfile(zipfile_path) as ht_zip:
         if ht_zip is None:
             # zipfile does not exist; yield pages without image paths
@@ -990,6 +1005,7 @@ def process_ht_work(
                     img_ext = Path(zip_image_path).suffix
                     tar_image_path = f"{encoded_htid}/{page_id}{img_ext}"
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
+                    page["image_file"] = tar_filename
                     page["image_path"] = tar_image_path
                     # if new text is set, move old ocr to text and use new ocr as primary text
                     if new_ocr_text is not None:
@@ -1081,6 +1097,8 @@ def process_ht1930_work(
     #   excerpt:   mdp-39015002669052-338-339-1788473798.zip
     #              (htid, first page, last page, HT id)
     htid_prefix = htid.replace(".", "-").replace("$", "-")
+    # get the base name of the tarfile, to include in image path field
+    tar_filename = Path(str(tar.name)).name
 
     # Since we don't know the timestamp a priori, match based on htid and
     # first digital page number if specified.
@@ -1147,7 +1165,8 @@ def process_ht1930_work(
                 tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
                 try:
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
-                    # if adding succeeded, include the image path in the output page data
+                    # if adding succeeded, include the tar file name and image path in the output page data
+                    page["image_file"] = tar_filename
                     page["image_path"] = tar_image_path
                     matched_count += 1
                 except KeyError:
@@ -1198,6 +1217,81 @@ def _tally_processed_work(
             counts["gale_missing_image"] += missing_images
         elif source == "HathiTrust":
             counts["ht_missing_image"] += missing_images
+
+
+# image tar files chunking based on first letter of work id
+tar_file_chunks = {
+    "CB-CW": ["C"],
+    "a-k": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"],
+    "l-m": ["l", "m"],
+    "n": ["n"],
+    "o-y": ["o", "p", "t", "u", "w", "y"],
+}
+
+
+def get_tarfile_group(work_id: str) -> str | None:
+    # given a ppa work id, determine the tar file based on groups defined above
+    first_letter = work_id[0]
+    for group, letters in tar_file_chunks.items():
+        if first_letter in letters:
+            return group
+    # if not found (i.e., eebo-tcp), return None
+    return None
+
+
+def add_image_paths_to_metadata(corpus_dir: Path, output_dir: Path) -> None:
+    """
+    Update metadata with image_file and image_path fields for works with images.
+    """
+    logger.info("Adding image filenames and paths to output metadata")
+    work_image_paths = defaultdict(dict)
+    csv_metadata_path = corpus_dir / "ppa_metadata.csv"
+    if not csv_metadata_path.exists():
+        logger.warning(
+            "ppa_metadata.csv not found in %s; skipping image path update", corpus_dir
+        )
+        return
+    df = pl.read_csv(csv_metadata_path)
+    for work_id, source in df.select("work_id", "source").iter_rows():
+        image_chunk_id = get_tarfile_group(work_id)
+        if image_chunk_id is not None:
+            if source == "HathiTrust":
+                image_path = f"{encode_htid(work_id)}/"
+            else:
+                image_path = f"{work_id}/"
+            work_image_paths[work_id] = {
+                "work_id": work_id,  # include so we can create a dataframe from list of dicts
+                "image_path": image_path,
+                "image_file": f"ppa_images_{image_chunk_id}.tar",
+            }
+
+    # convert to dataframe so fields can be combined and written out to CSV
+    img_path_df = pl.from_dicts(list(work_image_paths.values())).select(
+        "work_id",
+        "image_file",
+        "image_path",  # order fields logically
+    )
+    df = df.join(img_path_df, on="work_id", how="left")
+    df.write_csv(output_dir / "ppa_metadata.csv")
+
+    # now update the JSON metadata with the same information
+    json_metadata_path = corpus_dir / "ppa_metadata.json"
+    if not json_metadata_path.exists():
+        logger.warning(
+            "ppa_metadata.json not found in %s; skipping image path update", corpus_dir
+        )
+        return
+    # load json, update based on work image info dict, write to output dir
+    with json_metadata_path.open() as jsonfile:
+        json_metadata = json.load(jsonfile)
+    updated_json_metadata = []
+    for row in json_metadata:
+        work_id = row["work_id"]
+        if work_id in work_image_paths:
+            row.update(work_image_paths[work_id])
+        updated_json_metadata.append(row)
+    with (output_dir / "ppa_metadata.json").open("w") as outfile:
+        json.dump(updated_json_metadata, outfile, indent=2)
 
 
 def main():
@@ -1286,8 +1380,6 @@ def main():
     output_pages_path = (
         args.output_dir / "ppa_pages.jsonl"
     )  # .gz # disable compression for now, for testing
-    # uncompressed tar so it can be reopened in append mode when continuing
-    output_archive_path = args.output_dir / "ppa_images.tar"
 
     # set of work ids already present in the output; populated when continuing
     completed_work_ids: set[str] = set()
@@ -1313,10 +1405,7 @@ def main():
                 "--continue set but output file %s does not exist; starting fresh",
                 output_pages_path,
             )
-        # append to the tar if it exists, otherwise create it
-        tar_mode = "a" if output_archive_path.exists() else "w"
     else:
-        tar_mode = "w"
         if output_pages_path.exists():
             # because we extend, we need to rename any existing output file
             old_output_pages = output_pages_path.with_suffix(".jsonl.bak")
@@ -1326,10 +1415,8 @@ def main():
                 output_pages_path,
                 old_output_pages,
             )
-        if output_archive_path.exists():
-            logger.warning(
-                "output file %s already exists, overwriting", output_archive_path
-            )
+
+    add_image_paths_to_metadata(args.corpus_dir, args.output_dir)
 
     # use a polars lazy frame to calculate the total so tqdm can estimate completion
     start_time = perf_counter()
@@ -1361,81 +1448,107 @@ def main():
     # BrokenPipeError/OSError. Closing it in a finally (and swallowing that
     # shutdown-only error) keeps a clean ctrl-c stop from surfacing a traceback.
     page_stream = orjsonl.stream(input_pages_path)
-    with tarfile.open(output_archive_path, tar_mode) as tar:
-        prev_work_id: Optional[str] = None
-        pages: list[dict] = []
-        # whether the current work should be skipped (already in output)
-        skip_work = False
-        try:
-            for page in tqdm(
-                page_stream,
-                desc="Reading pages",
-                total=total_pages,
-                unit_scale=True,
-                disable=not args.progress,
-            ):
-                work_id = page["work_id"]
-                # when work id changes, process the previous work pages and reset for the next
-                if work_id != prev_work_id:
-                    if prev_work_id is not None:
-                        if skip_work:
-                            counts["works_skipped"] += 1
-                        else:
-                            pages = list(
-                                process_work(
-                                    prev_work_id,
-                                    pages,
-                                    args.image_dir,
-                                    tar,
-                                    ht1930_work_ids,
-                                )
-                            )
-                            orjsonl.extend(output_pages_path, pages)
-                            _tally_processed_work(prev_work_id, pages, counts)
-                    # stop here (at a work boundary) if a signal was received, so we
-                    # never interrupt a work's tar/jsonl writes partway through; the
-                    # tar is still closed cleanly by the context manager
-                    if _stop_requested:
-                        logger.warning("stopping cleanly after work %s", prev_work_id)
-                        break
-                    prev_work_id = work_id
-                    pages = []
-                    # skip this work if it is already present in the output
-                    skip_work = work_id in completed_work_ids
-                if skip_work:
-                    counts["pages_skipped"] += 1
-                else:
-                    pages.append(page)
+    # identifier for the current page image tar file
+    tarfile_chunk_id = None
+    prev_work_id: Optional[str] = None
+    pages: list[dict] = []
+    # whether the current work should be skipped (already in output)
+    skip_work = False
+    tar: tarfile.TarFile | None = None
+    tar_mode_verb = {"a": "Updating", "w": "Creating"}
 
-            # handle the pages for the last work at end of loop, unless we broke
-            # out early on a stop signal (that work was already written before
-            # the break)
-            if prev_work_id is not None and not _stop_requested:
-                if skip_work:
-                    counts["works_skipped"] += 1
-                else:
-                    pages = list(
-                        process_work(
-                            prev_work_id,
-                            pages,
-                            args.image_dir,
-                            tar,
-                            ht1930_work_ids,
+    try:
+        for page in tqdm(
+            page_stream,
+            desc="Reading pages",
+            total=total_pages,
+            unit_scale=True,
+            disable=not args.progress,
+        ):
+            work_id = page["work_id"]
+            current_chunk_id = get_tarfile_group(work_id)
+            # chunk id of None is expected for eebo-tcp work ids, since they have no page images
+            if current_chunk_id is not None and current_chunk_id != tarfile_chunk_id:
+                if tar is not None:
+                    # close previous tar file if one was open
+                    tar.close()
+                # use the chunk id to determine filename; used for output and page image filename in jsonl
+                img_output_path = args.output_dir / f"ppa_images_{current_chunk_id}.tar"
+                # open the new tar file
+                # append to the tar if it exists and continue was requested, otherwise overwiret
+                tar_mode = (
+                    "a" if args.continue_run and img_output_path.exists() else "w"
+                )
+                logger.info("%s %s", tar_mode_verb[tar_mode], img_output_path)
+                tar = tarfile.open(img_output_path, tar_mode)
+                # update active chunk id
+                tarfile_chunk_id = current_chunk_id
+
+            # when work id changes, process the previous work pages and reset for the next
+            if work_id != prev_work_id:
+                if prev_work_id is not None:
+                    if skip_work:
+                        counts["works_skipped"] += 1
+                    else:
+                        pages = list(
+                            process_work(
+                                prev_work_id,
+                                pages,
+                                args.image_dir,
+                                tar,
+                                ht1930_work_ids,
+                            )
                         )
+                        orjsonl.extend(output_pages_path, pages)
+                        _tally_processed_work(prev_work_id, pages, counts)
+                # stop here (at a work boundary) if a signal was received, so we
+                # never interrupt a work's tar/jsonl writes partway through; the
+                # tar is still closed cleanly by the context manager
+                if _stop_requested:
+                    logger.warning("stopping cleanly after work %s", prev_work_id)
+                    break
+                prev_work_id = work_id
+                pages = []
+                # skip this work if it is already present in the output
+                skip_work = work_id in completed_work_ids
+            if skip_work:
+                counts["pages_skipped"] += 1
+            else:
+                pages.append(page)
+
+        # handle the pages for the last work at end of loop, unless we broke
+        # out early on a stop signal (that work was already written before
+        # the break)
+        if prev_work_id is not None and not _stop_requested and tar is not None:
+            if skip_work:
+                counts["works_skipped"] += 1
+            else:
+                pages = list(
+                    process_work(
+                        prev_work_id,
+                        pages,
+                        args.image_dir,
+                        tar,
+                        ht1930_work_ids,
                     )
-                    orjsonl.extend(output_pages_path, pages)
-                    _tally_processed_work(prev_work_id, pages, counts)
-        finally:
-            # Close the input stream explicitly. When stopping on ctrl-c, the
-            # decompression subprocess spawned by orjsonl/xopen was already killed
-            # by the same SIGINT, so closing the generator can raise a spurious
-            # BrokenPipeError/OSError during its teardown. That only reflects the
-            # in-progress shutdown, so suppress it rather than let it mask the
-            # clean stop.
-            try:
-                page_stream.close()
-            except (BrokenPipeError, OSError):
-                logger.debug("ignoring input stream close error during shutdown")
+                )
+                orjsonl.extend(output_pages_path, pages)
+                _tally_processed_work(prev_work_id, pages, counts)
+    finally:
+        # Close the input stream explicitly. When stopping on ctrl-c, the
+        # decompression subprocess spawned by orjsonl/xopen was already killed
+        # by the same SIGINT, so closing the generator can raise a spurious
+        # BrokenPipeError/OSError during its teardown. That only reflects the
+        # in-progress shutdown, so suppress it rather than let it mask the
+        # clean stop.
+        try:
+            page_stream.close()
+        except (BrokenPipeError, OSError):
+            logger.debug("ignoring input stream close error during shutdown")
+
+        # close tar file if open so it is written out properly
+        if tar is not None:
+            tar.close()
 
     # report totals whether the run finished normally or stopped early
     logger.info(
