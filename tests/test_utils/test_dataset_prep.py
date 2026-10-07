@@ -339,7 +339,8 @@ def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
     from corppa.utils.path_utils import get_gale_image_name, get_vol_dir
 
     vol_id = "CB0127060085"
-    pages = [{"work_id": vol_id, "id": f"{vol_id}.0001", "text": "one"}]
+    work_id = f"{vol_id}-p42"
+    pages = [{"work_id": work_id, "id": f"{work_id}.0001", "text": "one"}]
     image_dir = tmp_path / "images"
     vol_img_dir = image_dir / get_vol_dir(vol_id)
     vol_img_dir.mkdir(parents=True)
@@ -348,11 +349,11 @@ def test_process_gale_work_adds_image_path_when_image_present(tmp_path):
     (vol_img_dir / img_name).write_bytes(b"fake image data")
 
     with tarfile.open(tmp_path / "out.tar", "w") as tar:
-        result = list(process_gale_work(vol_id, pages, image_dir, tar))
+        result = list(process_gale_work(work_id, pages, image_dir, tar))
 
     assert len(result) == 1
     assert result[0]["image_file"] == "out.tar"
-    assert result[0]["image_path"] == f"{vol_id}/{img_name}"
+    assert result[0]["image_path"] == f"{work_id}/{img_name}"
 
 
 def test_process_gale_work_missing_image_file_omits_path(tmp_path):
@@ -426,7 +427,9 @@ def test_process_ht_work_no_zip_yields_pages_unchanged(tmp_path):
 
 def test_process_ht_work_aligned_pages_get_image_paths(tmp_path):
     htid_suffix = "12345678"
-    work_id = f"test.{htid_suffix}"
+    work_id = (
+        f"test.{htid_suffix}-p5"  # test that excerpt is used rather than base work id
+    )
     _make_ht_zip(tmp_path, htid_suffix, PAGE_TEXTS)
     pages = [
         {"work_id": work_id, "id": f"{work_id}.{pid}", "text": text}
@@ -436,7 +439,12 @@ def test_process_ht_work_aligned_pages_get_image_paths(tmp_path):
         result = list(process_ht_work(work_id, pages, tmp_path, tar))
     # all pages returned, each with an image path in the tar
     assert len(result) == len(pages)
+    for p in result:
+        print(p["id"], p.get("image_path"))
     assert all("image_path" in p for p in result)
+    # image path in the tar file should be based ok
+    for p in result:
+        assert p["image_path"].startswith(f"{encode_htid(work_id)}/")
 
 
 def test_process_ht_work_aligned_pages_new_ocr(tmp_path):
@@ -860,7 +868,7 @@ def test_process_ht1930_no_zip_yields_pages_unchanged(tmp_path, caplog):
 
 
 def test_process_ht1930_maps_images_by_order(tmp_path):
-    work_id = "test.12345678"
+    work_id = "test.12345678-p13"  # test excerpt id is used rather than base work id
     # full-work zip names are "{htid-dashes}-{HT id}.zip" (trailing number is an
     # unrelated HT-assigned id), matched by a wildcard on the htid prefix
     _make_ht1930_zip(tmp_path, "test-12345678-1788450816.zip", [1, 2, 3])

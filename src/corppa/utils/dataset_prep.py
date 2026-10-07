@@ -891,6 +891,7 @@ def process_gale_work(
             page_num = int(page["id"].rsplit(".", 1)[-1])
             image_path = vol_img_dir / get_gale_image_name(vol_id, page_num)
             if image_path.is_file():
+                # use work id for output path, so excerpts get their own folder in the tar file
                 tar_image_path = f"{work_id}/{image_path.name}"
                 tar.add(image_path, arcname=tar_image_path)
                 # add the tar file name and image path to the page data
@@ -928,7 +929,6 @@ def open_ht_zipfile(zipfile_path: Optional[Path]) -> Iterator[Optional[ZipFile]]
 def process_ht_work(
     work_id: str, pages: list[dict], image_dir: Path, tar: tarfile.TarFile
 ) -> Iterator[dict]:
-    htid = get_volume_id(work_id)
     # a work is an excerpt if its work_id includes with -p; excerpts are not expected to use all pages from the zip file
     is_excerpt = "-p" in work_id
     zipfile_path = get_ht_zipfile_path(work_id, image_dir)
@@ -953,7 +953,8 @@ def process_ht_work(
 
         # when image mapping was returned, add images to tar file and image paths to page data
         zip_image_filenames = get_zip_image_names(ht_zip)
-        encoded_htid = encode_htid(htid)
+        # use work id rather than htid so that each excerpt gets its own folder in the tar file
+        encoded_workid = encode_htid(work_id)
         for page in pages:
             page_id = page["id"]
             # get the corresponding image from the zip, add to the tar file with appropriate name,
@@ -978,7 +979,7 @@ def process_ht_work(
                 # the appropriate path for this page in the tarfile
                 if zip_image_path is not None:
                     img_ext = Path(zip_image_path).suffix
-                    tar_image_path = f"{encoded_htid}/{page_id}{img_ext}"
+                    tar_image_path = f"{encoded_workid}/{page_id}{img_ext}"
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
                     page["image_file"] = tar_filename
                     page["image_path"] = tar_image_path
@@ -1007,7 +1008,7 @@ def process_ht_work(
                 zip_image_path = Path(zip_image_name)
                 img_ext = zip_image_path.suffix
                 basename = zip_image_path.stem
-                tar_image_path = f"{encoded_htid}/unmatched/{basename}{img_ext}"
+                tar_image_path = f"{encoded_workid}/unmatched/{basename}{img_ext}"
                 add_zip_file_to_tar(ht_zip, zip_image_name, tar, tar_image_path)
 
             logger.info(
@@ -1136,8 +1137,8 @@ def process_ht1930_work(
             zip_image_path = image_map.get(page_order)
             if zip_image_path is not None:
                 img_ext = Path(zip_image_path).suffix
-                # set destination name based on volume and page id, but preserve existing extension
-                tar_image_path = f"{encode_htid(htid)}/{page_id}{img_ext}"
+                # set destination name based on work id and page id, but preserve existing image extension
+                tar_image_path = f"{encode_htid(work_id)}/{page_id}{img_ext}"
                 try:
                     add_zip_file_to_tar(ht_zip, zip_image_path, tar, tar_image_path)
                     # if adding succeeded, include the tar file name and image path in the output page data
