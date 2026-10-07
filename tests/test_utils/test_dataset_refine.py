@@ -31,21 +31,25 @@ def _json_rows(corpus_dir: Path) -> list[dict]:
         return json.load(f)
 
 
+test_rows = [
+    {
+        "work_id": "w1",
+        "author": "Alice A.",
+        "pub_place": "Cambridge",
+        "publisher": "Clarendon Press",
+        "added": "2024-01-01",
+    },
+    {
+        "work_id": "w2",
+        "author": "Bob B.",
+        "pub_place": "Oxford",
+        "publisher": "Oxford University Press",
+        "added": "2024-01-01",
+    },
+]
+
+
 def test_propagates_refined_author_and_pub_place(tmp_path):
-    rows = [
-        {
-            "work_id": "w1",
-            "author": "Alice A.",
-            "pub_place": "Cambridge",
-            "added": "2024-01-01",
-        },
-        {
-            "work_id": "w2",
-            "author": "Bob B.",
-            "pub_place": "Oxford",
-            "added": "2024-01-01",
-        },
-    ]
     refined_rows = [
         {
             "work_id": "w1",
@@ -60,7 +64,7 @@ def test_propagates_refined_author_and_pub_place(tmp_path):
             "updated": "2024-02-01",
         },
     ]
-    corpus_dir, refined = _make_corpus(tmp_path, rows, refined_rows)
+    corpus_dir, refined = _make_corpus(tmp_path, test_rows, refined_rows)
 
     dataset_refine.refine_metadata(
         refined, corpus_dir / "ppa_metadata.csv", corpus_dir / "ppa_metadata.json"
@@ -78,20 +82,7 @@ def test_propagates_refined_author_and_pub_place(tmp_path):
 def test_unmatched_record_keeps_original_values(tmp_path):
     # a work absent from the refined set must not have its author/pub_place
     # wiped to null
-    rows = [
-        {
-            "work_id": "w1",
-            "author": "Alice A.",
-            "pub_place": "Cambridge",
-            "added": "2024-01-01",
-        },
-        {
-            "work_id": "w2",
-            "author": "Bob B.",
-            "pub_place": "Oxford",
-            "added": "2024-01-01",
-        },
-    ]
+
     refined_rows = [
         {
             "work_id": "w1",
@@ -100,7 +91,7 @@ def test_unmatched_record_keeps_original_values(tmp_path):
             "updated": "2024-02-01",
         },
     ]
-    corpus_dir, refined = _make_corpus(tmp_path, rows, refined_rows)
+    corpus_dir, refined = _make_corpus(tmp_path, test_rows, refined_rows)
 
     dataset_refine.refine_metadata(
         refined, corpus_dir / "ppa_metadata.csv", corpus_dir / "ppa_metadata.json"
@@ -115,7 +106,13 @@ def test_unmatched_record_keeps_original_values(tmp_path):
 
 def test_fills_null_original_author_from_refined(tmp_path):
     rows = [
-        {"work_id": "w1", "author": None, "pub_place": "Boston", "added": "2024-01-01"}
+        {
+            "work_id": "w1",
+            "author": None,
+            "pub_place": "Boston",
+            "added": "2024-01-01",
+            "publisher": "UP",
+        }
     ]
     refined_rows = [
         {
@@ -140,12 +137,14 @@ def test_post_refine_records_updated_via_unambiguous_lookup(tmp_path):
             "work_id": "w1",
             "author": "Doe",
             "pub_place": "Cambridge",
+            "publisher": "CUP",
             "added": "2024-01-01",
         },
         {
             "work_id": "w2",
             "author": "Doe",
             "pub_place": "Cambridge",
+            "publisher": "CUP",
             "added": "2024-07-01",
         },
     ]
@@ -172,7 +171,13 @@ def test_ambiguous_author_lookup_is_not_applied(tmp_path):
     # "Doe" resolves to two different refined authors, so a post-refine record
     # with author "Doe" cannot be updated automatically and keeps its value
     rows = [
-        {"work_id": "w1", "author": "Doe", "pub_place": "X", "added": "2024-01-01"},
+        {
+            "work_id": "w1",
+            "author": "Doe",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        },
         {"work_id": "w2", "author": "Doe", "pub_place": "Y", "added": "2024-01-01"},
         {"work_id": "w3", "author": "Doe", "pub_place": "Z", "added": "2024-07-01"},
     ]
@@ -210,6 +215,7 @@ def test_ambiguous_pub_place_lookup_is_not_applied(tmp_path):
             "work_id": "w1",
             "author": "A",
             "pub_place": "Cambridge",
+            "publisher": "P1",
             "added": "2024-01-01",
         },
         {
@@ -250,10 +256,50 @@ def test_ambiguous_pub_place_lookup_is_not_applied(tmp_path):
     assert len(out["pub_place"]) == 3
 
 
+def test_unrefined_whitespace_cleaned(tmp_path):
+    rows = [
+        {
+            "work_id": "w1",
+            "author": "  B ",
+            "pub_place": "Boston ",
+            "publisher": "P2 ",
+            "added": "2024-01-01",
+        },
+    ]
+    refined_rows = [
+        {
+            "work_id": "w2",
+            "author": "A",
+            "pub_place": "Cambridge (US)",
+            "updated": "2024-06-01",
+        },
+    ]
+    corpus_dir, refined = _make_corpus(tmp_path, rows, refined_rows)
+
+    dataset_refine.refine_metadata(
+        refined, corpus_dir / "ppa_metadata.csv", corpus_dir / "ppa_metadata.json"
+    )
+
+    out = _csv_columns(corpus_dir)
+    print(out)
+    # trailing whitespace should be removed even if no refined value is applied
+    assert out["pub_place"] == ["Boston"]
+    assert out["author"] == ["B"]
+    assert out["publisher"] == ["P2"]
+
+
 def test_duplicate_work_id_in_refined_raises(tmp_path):
     # a duplicated work_id in the refined set inflates the join and trips the
     # no-records-lost assertion
-    rows = [{"work_id": "w1", "author": "A", "pub_place": "X", "added": "2024-01-01"}]
+    rows = [
+        {
+            "work_id": "w1",
+            "author": "A",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        }
+    ]
     refined_rows = [
         {"work_id": "w1", "author": "B", "pub_place": "X", "updated": "2024-02-01"},
         {"work_id": "w1", "author": "C", "pub_place": "X", "updated": "2024-02-01"},
@@ -267,7 +313,15 @@ def test_duplicate_work_id_in_refined_raises(tmp_path):
 
 
 def test_backup_files_created(tmp_path):
-    rows = [{"work_id": "w1", "author": "A", "pub_place": "X", "added": "2024-01-01"}]
+    rows = [
+        {
+            "work_id": "w1",
+            "author": "A",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        }
+    ]
     refined_rows = [
         {"work_id": "w1", "author": "B", "pub_place": "Y", "updated": "2024-02-01"}
     ]
@@ -290,6 +344,7 @@ def test_column_order_and_row_count_preserved(tmp_path):
             "title": "T1",
             "author": "A",
             "pub_place": "X",
+            "publisher": "P1",
             "added": "2024-01-01",
         },
         {
@@ -316,7 +371,13 @@ def test_column_order_and_row_count_preserved(tmp_path):
 
 def test_json_row_without_author_pub_place_keys_unchanged(tmp_path):
     rows = [
-        {"work_id": "w1", "author": "A", "pub_place": "X", "added": "2024-01-01"},
+        {
+            "work_id": "w1",
+            "author": "A",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        },
         {"work_id": "w2", "title": "no author field", "added": "2024-01-01"},
     ]
     refined_rows = [
@@ -338,7 +399,13 @@ def test_json_row_without_author_pub_place_keys_unchanged(tmp_path):
 
 def test_json_order_mismatch_raises(tmp_path):
     rows = [
-        {"work_id": "w1", "author": "A", "pub_place": "X", "added": "2024-01-01"},
+        {
+            "work_id": "w1",
+            "author": "A",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        },
         {"work_id": "w2", "author": "B", "pub_place": "Y", "added": "2024-01-01"},
     ]
     refined_rows = [
@@ -386,7 +453,15 @@ def test_main_missing_csv_exits(tmp_path, monkeypatch):
 
 
 def test_main_full_run_exits_zero(tmp_path, monkeypatch, capsys):
-    rows = [{"work_id": "w1", "author": "A", "pub_place": "X", "added": "2024-01-01"}]
+    rows = [
+        {
+            "work_id": "w1",
+            "author": "A",
+            "pub_place": "X",
+            "added": "2024-01-01",
+            "publisher": "P1",
+        }
+    ]
     refined_rows = [
         {"work_id": "w1", "author": "B", "pub_place": "Y", "updated": "2024-02-01"}
     ]
