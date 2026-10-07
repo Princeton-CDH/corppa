@@ -2157,6 +2157,31 @@ def test_main_continue_skips_completed_last_work(corpus_input, main_dirs, caplog
     )
 
 
+def test_main_last_work_in_chunk_uses_its_own_tar(tmp_path, main_dirs):
+    # when the work id crosses a tar chunk boundary, the previous (last) work
+    # in the old chunk must be processed with the old chunk's tar, not the
+    # tar opened for the next chunk
+    corpus_dir = _make_corpus_dir(
+        tmp_path / "corpus",
+        [
+            {"work_id": "abc.1", "id": "abc.1.0001", "text": "a1"},  # a-k chunk
+            {"work_id": "work.B", "id": "workB.0001", "text": "b1"},  # o-y chunk
+        ],
+    )
+    tar_used = {}
+
+    def record_tar(work_id, pages, image_dir, tar, ht1930_work_ids=None):
+        tar_used[work_id] = Path(tar.name).name
+        yield from pages
+
+    _run_main(corpus_dir, main_dirs, process_side_effect=record_tar)
+
+    assert tar_used == {
+        "abc.1": "ppa_images_a-k.tar",
+        "work.B": "ppa_images_o-y.tar",
+    }
+
+
 def test_main_continue_does_not_rename_existing_output(corpus_input, main_dirs):
     _, output_dir = main_dirs
     output_dir.mkdir()
