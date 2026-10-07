@@ -29,6 +29,7 @@ import tarfile
 from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from time import mktime, perf_counter
 from typing import Optional
@@ -833,25 +834,40 @@ def find_corpus_file(corpus_dir: Path, filenames: list[str]) -> Path:
 def get_ht1930_work_ids(metadata_path: Path) -> dict[str, Optional[str]]:
     """Load work-level metadata and return a dictionary of ``work_id`` values for
     HathiTrust volumes published in 1930, with their corresponding
-    digital page range (excerpts only).
+    digital page range (excerpts only), OR any other volumes that were added
+    to PPA after the text/image dataset was requested.
 
     These volumes have zip files with different naming convention and structure
     and must be handled differently.
     """
+    schema_override = {
+        "added": pl.Datetime,
+    }
     if metadata_path.suffix == ".csv":
-        meta_df = pl.read_csv(metadata_path)
-    elif metadata_path.suffix == ".json":
-        meta_df = pl.read_json(metadata_path)
+        meta_df = pl.read_csv(metadata_path, schema_overrides=schema_override)
     else:
         raise ValueError(
-            f"Unsupported metadata format {metadata_path.suffix!r}; expected .csv or .json"
+            f"Unsupported metadata format {metadata_path.suffix!r}; expected .csv"
         )
+
+    # get current date for filtering
+    post_hathi_dataset = pl.datetime(2025, 3, 1)
+    today = date.today()
 
     return {
         row["work_id"]: row["pages_digital"]
-        for row in meta_df.select("work_id", "pub_year", "source", "pages_digital")
-        .filter(pl.col.source.eq("HathiTrust"))
-        .filter(pl.col("pub_year").cast(pl.Int64, strict=False).eq(1930))
+        for row in meta_df.select(
+            "work_id", "pub_year", "source", "pages_digital", "added"
+        )
+        .filter(
+            pl.col.source.eq("HathiTrust"),
+        )
+        .filter(
+            pl.col.added.is_between(
+                post_hathi_dataset,
+                pl.datetime(today.year, today.month, today.day),
+            )
+        )
         .select("work_id", "pages_digital")
         .iter_rows(named=True)
     }
