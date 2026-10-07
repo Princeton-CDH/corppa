@@ -1440,25 +1440,8 @@ def main():
             disable=not args.progress,
         ):
             work_id = page["work_id"]
-            current_chunk_id = get_tarfile_group(work_id)
-            # chunk id of None is expected for eebo-tcp work ids, since they have no page images
-            if current_chunk_id is not None and current_chunk_id != tarfile_chunk_id:
-                if tar is not None:
-                    # close previous tar file if one was open
-                    tar.close()
-                # use the chunk id to determine filename; used for output and page image filename in jsonl
-                img_output_path = args.output_dir / f"ppa_images_{current_chunk_id}.tar"
-                # open the new tar file
-                # append to the tar if it exists and continue was requested, otherwise overwiret
-                tar_mode = (
-                    "a" if args.continue_run and img_output_path.exists() else "w"
-                )
-                logger.info("%s %s", tar_mode_verb[tar_mode], img_output_path)
-                tar = tarfile.open(img_output_path, tar_mode)
-                # update active chunk id
-                tarfile_chunk_id = current_chunk_id
-
             # when work id changes, process the previous work pages and reset for the next
+            # NOTE: must process previous work before closing out tar file when work id and tar chunk changes
             if work_id != prev_work_id:
                 if prev_work_id is not None:
                     if skip_work:
@@ -1489,6 +1472,24 @@ def main():
                 counts["pages_skipped"] += 1
             else:
                 pages.append(page)
+
+            current_chunk_id = get_tarfile_group(work_id)
+            # chunk id of None is expected for eebo-tcp work ids, since they have no page images
+            if current_chunk_id is not None and current_chunk_id != tarfile_chunk_id:
+                if tar is not None:
+                    # close previous tar file if one was open
+                    tar.close()
+                # use the chunk id to determine filename; used for output and page image filename in jsonl
+                img_output_path = args.output_dir / f"ppa_images_{current_chunk_id}.tar"
+                # open the new tar file
+                # append to the tar if it exists and continue was requested, otherwise overwiret
+                tar_mode = (
+                    "a" if args.continue_run and img_output_path.exists() else "w"
+                )
+                logger.info("%s %s", tar_mode_verb[tar_mode], img_output_path)
+                tar = tarfile.open(img_output_path, tar_mode)
+                # update active chunk id
+                tarfile_chunk_id = current_chunk_id
 
         # handle the pages for the last work at end of loop, unless we broke
         # out early on a stop signal (that work was already written before
