@@ -116,6 +116,13 @@ def refine_metadata(
             )
             .drop("author_refined", "pub_place_refined")
         )
+    # clean whitespace for all author, pub_place, and publishers, regardless of refinement,
+    # since unrefined values may have trailing whitespace
+    refined_df = refined_df.with_columns(
+        author=pl.col.author.str.strip_chars(),
+        pub_place=pl.col.pub_place.str.strip_chars(),
+        publisher=pl.col.publisher.str.strip_chars(),
+    )
 
     # replace refined fields with unrefined and save the file
     assert refined_df.height == csv_total  # no records lost
